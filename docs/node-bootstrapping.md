@@ -10,7 +10,7 @@ This document details the configuration of the GCE `startup-script` metadata, se
 
 ## 1. Startup Script Injection (`startup-script`)
 
-When `spec.bootstrapKubernetes: true`, the controller injects a bash script into the Managed Instance Group's (MIG) `allInstancesConfig` metadata under the key `startup-script`.
+When `spec.bootstrapKubernetes.enabled: true`, the controller injects a bash script into the Managed Instance Group's (MIG) `allInstancesConfig` metadata under the key `startup-script`.
 
 By injecting the script at the MIG level rather than modifying the Instance Template, the controller ensures that it never alters a user's reusable, corporate-standard Instance Template, while still providing managed bootstrapping exclusively for this TPU Node Group.
 

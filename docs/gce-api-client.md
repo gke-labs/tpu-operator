@@ -27,14 +27,14 @@ The implementation utilizes a generic `doRequest(method, url, body)` function th
 
 ## 1. Instance Templates
 
-If the user does not provide an existing template, the controller constructs and POSTs a new one to the global API.
+If the user does not provide an existing template, the controller constructs and POSTs a new one to the same region as the node group (infered from the zone field).
 
 ### Check Existence
-*   **Method/URL:** `GET {BaseURL}/v1/projects/{project}/global/instanceTemplates/{templateName}`
+*   **Method/URL:** `GET {BaseURL}/v1/projects/{project}/regions/{region}/instanceTemplates/{templateName}`
 *   **Action:** If `200 OK`, the template exists; proceed. If `404 Not Found`, proceed to creation.
 
 ### Creation Payload
-*   **Method/URL:** `POST {BaseURL}/v1/projects/{project}/global/instanceTemplates`
+*   **Method/URL:** `POST {BaseURL}/v1/projects/{project}/regions/{region}/instanceTemplates`
 *   **JSON Payload Structure:**
     ```json
     {
@@ -68,7 +68,6 @@ If the user does not provide an existing template, the controller constructs and
       }
     }
     ```
-    *(Note: If `spec.image` is omitted in the CRD, `{CRD_IMAGE_URI_OR_DEFAULT}` defaults to `projects/ml-images/global/images/family/tpu-ubuntu2204-base`)*
 
 #### Reservation Binding
 If `provisioningModel` is `reservation-bound`, mutate the `scheduling` block before sending the POST request:
@@ -126,7 +125,7 @@ Required for multi-host static slices to define the physical accelerator topolog
     {
       "name": "tpunodegroup-{CRD_NAME}-mig",
       "baseInstanceName": "tpunodegroup-{CRD_NAME}-mig",
-      "instanceTemplate": "https://compute.googleapis.com/compute/beta/projects/{project}/global/instanceTemplates/{TEMPLATE_NAME}",
+      "instanceTemplate": "https://compute.googleapis.com/compute/beta/projects/{project}/regions/{region}/instanceTemplates/{TEMPLATE_NAME}",
       "targetSize": {CRD_NODE_COUNT},
       "zone": "{CRD_ZONE}",
       "allInstancesConfig": {
@@ -142,7 +141,11 @@ Required for multi-host static slices to define the physical accelerator topolog
                 "value": "{CRD_MACHINE_TYPE}"
               },
               {
-                "key": "cloud.google.com/gk8s-tpu-slice-{CRD_TOPOLOGY}-id",
+                "key": "cloud.google.com/gk8s-accelerator-count",
+                "value": "{CRD_ACCELERATOR_COUNT}"
+              },
+              {
+                "key": "cloud.google.com/gk8s-tpu-slice-id",
                 "value": "{UNIQUE_SLICE_UUID}"
               },
               {
@@ -161,7 +164,7 @@ Required for multi-host static slices to define the physical accelerator topolog
       }
     }
     ```
-    *(Note 2: The `startup-script` item in `allInstancesConfig` is only injected if `spec.bootstrapKubernetes: true`)*
+    *(Note 2: The `startup-script` item in `allInstancesConfig` is only injected if `spec.bootstrapKubernetes.enabled: true`)*
 
 #### Workload Policy Attachment
 If a Workload Policy was created (multi-host slice), append it to the MIG payload:
