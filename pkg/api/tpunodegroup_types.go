@@ -107,7 +107,28 @@ type BootstrapConfig struct {
 
 // TPUNodeGroupStatus defines the observed state of a TPUNodeGroup
 type TPUNodeGroupStatus struct {
-	// TODO: Add conditions and node summary as per design
+	// Conditions represent the latest available observations of an object's current state.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// NodeSummary provides a high-level count of nodes in various states.
+	// +optional
+	NodeSummary *NodeSummary `json:"nodeSummary,omitempty"`
+}
+
+// NodeSummary tracks the count of nodes in different states.
+type NodeSummary struct {
+	// Total is the total number of nodes requested.
+	Total int32 `json:"total"`
+
+	// Ready is the number of nodes that are ready and registered in the cluster.
+	Ready int32 `json:"ready"`
+
+	// Reconciling is the number of nodes currently being reconciled.
+	Reconciling int32 `json:"reconciling"`
+
+	// Failed is the number of nodes that failed to provision or join.
+	Failed int32 `json:"failed"`
 }
 
 // +kubebuilder:object:root=true
