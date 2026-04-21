@@ -99,6 +99,11 @@ example:
 Bug: b/234567
 ```
 
+## References
+
+*   See [DOCS.md](DOCS.md) for key design documents.
+*   **Important**: Before reading any Google Doc, you MUST ask the user for explicit approval.
+
 [go-style]: https://g3doc.corp.google.com/go/g3doc/style/index.md
 [g3doc-style]: https://g3doc.corp.google.com/corp/g3doc/docs/reference/style.md
 [mdformat]: https://g3doc.corp.google.com/devtools/markdown/mdformat/g3doc/index.md
