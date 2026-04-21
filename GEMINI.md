@@ -4,11 +4,7 @@ The TPU Node Group Controller is a Kubernetes operator that manages the lifecycl
 
 ## Code Organization
 
-*   `/docs`: Contains the documentation for the project.
-
-## Guidelines
-
-*   Make sure the documentation in `docs/` is always up to date with the implementation.
+*   pkg/api: Custom Resource Definitions (CRDs) for TPUNodeGroup.
 
 ## Source Code
 
