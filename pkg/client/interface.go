@@ -4,16 +4,16 @@ import (
 	"context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	api "gke-internal.googlesource.com/tpu-node-group/pkg/api"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/api"
 )
 
 // Interface is the minimal clientset interface needed for informers.
 type Interface interface {
-	TpuV1alpha1() TpuV1alpha1Interface
+	TPUV1alpha1() TPUV1alpha1Interface
 }
 
-// TpuV1alpha1Interface provides access to TPUNodeGroups.
-type TpuV1alpha1Interface interface {
+// TPUV1alpha1Interface provides access to TPUNodeGroups.
+type TPUV1alpha1Interface interface {
 	TPUNodeGroups(namespace string) TPUNodeGroupInterface
 }
 
