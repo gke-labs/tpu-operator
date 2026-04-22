@@ -8,9 +8,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/cache"
-	api "gke-internal.googlesource.com/tpu-node-group/pkg/api"
-	client "gke-internal.googlesource.com/tpu-node-group/pkg/client"
-	listers "gke-internal.googlesource.com/tpu-node-group/pkg/listers"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/api"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/client"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/listers"
 )
 
 // TPUNodeGroupInformer provides access to a shared informer and lister for TPUNodeGroups.
@@ -31,10 +31,10 @@ type tpuNodeGroupInformer struct {
 func NewTPUNodeGroupInformer(client client.Interface, namespace string, resyncPeriod time.Duration, indexers cache.Indexers) TPUNodeGroupInformer {
 	lw := &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			return client.TpuV1alpha1().TPUNodeGroups(namespace).List(context.Background(), opts)
+			return client.TPUV1alpha1().TPUNodeGroups(namespace).List(context.Background(), opts)
 		},
 		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			return client.TpuV1alpha1().TPUNodeGroups(namespace).Watch(context.Background(), opts)
+			return client.TPUV1alpha1().TPUNodeGroups(namespace).Watch(context.Background(), opts)
 		},
 	}
 
@@ -49,10 +49,10 @@ func NewTPUNodeGroupInformer(client client.Interface, namespace string, resyncPe
 	}
 }
 
-func (f *tpuNodeGroupInformer) Informer() cache.SharedIndexInformer {
-	return f.informer
+func (i *tpuNodeGroupInformer) Informer() cache.SharedIndexInformer {
+	return i.informer
 }
 
-func (f *tpuNodeGroupInformer) Lister() listers.TPUNodeGroupLister {
-	return listers.NewTPUNodeGroupLister(f.informer.GetIndexer())
+func (i *tpuNodeGroupInformer) Lister() listers.TPUNodeGroupLister {
+	return listers.NewTPUNodeGroupLister(i.informer.GetIndexer())
 }

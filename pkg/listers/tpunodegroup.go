@@ -1,11 +1,11 @@
 package listers
 
 import (
-	labels "k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	listers "k8s.io/client-go/listers"
-	cache "k8s.io/client-go/tools/cache"
-	api "gke-internal.googlesource.com/tpu-node-group/pkg/api"
+	"k8s.io/client-go/listers"
+	"k8s.io/client-go/tools/cache"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/api"
 )
 
 // TPUNodeGroupLister helps list TPUNodeGroups.
@@ -30,8 +30,8 @@ func NewTPUNodeGroupLister(indexer cache.Indexer) TPUNodeGroupLister {
 }
 
 // TPUNodeGroups returns an object that can list and get TPUNodeGroups.
-func (s *tpuNodeGroupLister) TPUNodeGroups(namespace string) TPUNodeGroupNamespaceLister {
-	return tpuNodeGroupNamespaceLister{listers.NewNamespaced[*api.TPUNodeGroup](s.ResourceIndexer, namespace)}
+func (l *tpuNodeGroupLister) TPUNodeGroups(namespace string) TPUNodeGroupNamespaceLister {
+	return tpuNodeGroupNamespaceLister{listers.NewNamespaced[*api.TPUNodeGroup](l.ResourceIndexer, namespace)}
 }
 
 // TPUNodeGroupNamespaceLister helps list and get TPUNodeGroups.
