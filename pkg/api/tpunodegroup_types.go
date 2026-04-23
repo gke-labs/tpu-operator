@@ -14,13 +14,13 @@ type TPUNodeGroupSpec struct {
 	// +required
 	NodeLocation string `json:"nodeLocation"`
 
-	// InstanceTemplate is the full URI of a user-provided instance template.
+	// InstanceTemplateURI is the full URI of a user-provided instance template.
 	// Cannot be set if InstanceConfig is provided.
 	// +optional
-	InstanceTemplate *string `json:"instanceTemplate,omitempty"`
+	InstanceTemplateURI *string `json:"instanceTemplateURI,omitempty"`
 
 	// InstanceConfig allows the controller to generate an instance template.
-	// Cannot be set if InstanceTemplate is provided.
+	// Cannot be set if InstanceTemplateURI is provided.
 	// +optional
 	InstanceConfig *InstanceConfig `json:"instanceConfig,omitempty"`
 

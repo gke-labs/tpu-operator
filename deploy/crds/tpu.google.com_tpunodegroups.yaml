@@ -60,7 +60,7 @@ spec:
               instanceConfig:
                 description: |-
                   InstanceConfig allows the controller to generate an instance template.
-                  Cannot be set if InstanceTemplate is provided.
+                  Cannot be set if InstanceTemplateURI is provided.
                 properties:
                   bootDiskSizeGB:
                     description: BootDiskSizeGB is the size of the boot disk in GB.
@@ -108,9 +108,9 @@ spec:
                 required:
                 - machineType
                 type: object
-              instanceTemplate:
+              instanceTemplateURI:
                 description: |-
-                  InstanceTemplate is the full URI of a user-provided instance template.
+                  InstanceTemplateURI is the full URI of a user-provided instance template.
                   Cannot be set if InstanceConfig is provided.
                 type: string
               minNodeCount:
