@@ -1,0 +1,98 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.20.1
+  name: instancetemplates.tpu.google.com
+spec:
+  group: tpu.google.com
+  names:
+    kind: InstanceTemplate
+    listKind: InstanceTemplateList
+    plural: instancetemplates
+    singular: instancetemplate
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: InstanceTemplate is the Schema for the instancetemplates API
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: InstanceTemplateSpec defines the desired state of an InstanceTemplate
+            properties:
+              bootDiskSizeGB:
+                description: BootDiskSizeGB is the size of the boot disk in GB.
+                format: int32
+                type: integer
+              diskType:
+                description: DiskType specifies the type of the boot disk (e.g., "pd-ssd",
+                  "pd-balanced").
+                type: string
+              image:
+                description: Image is the boot disk image URI.
+                type: string
+              machineType:
+                description: MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
+                type: string
+              maintenancePolicy:
+                default: TERMINATE
+                description: |-
+                  MaintenancePolicy specifies the behavior of the VMs when their host machines undergo maintenance.
+                  For TPU instance templates, this must always be set to TERMINATE.
+                enum:
+                - TERMINATE
+                type: string
+              metadata:
+                additionalProperties:
+                  type: string
+                description: Metadata allows setting custom GCE metadata.
+                type: object
+              networkTags:
+                description: NetworkTags are used to apply GCP firewall rules to the
+                  TPU nodes.
+                items:
+                  type: string
+                type: array
+              provisioningModel:
+                description: |-
+                  ProvisioningModel specifies spot, reservation-bound
+                  Defaults to reservation-bound if the reservation field is specified.
+                  Defaults to on-demand if this field nor the reservation field is specified.
+                type: string
+              reservation:
+                description: |-
+                  Reservation is the name of the reservation to consume.
+                  Required if ProvisioningModel is "reservation-bound.
+                type: string
+              serviceAccount:
+                description: ServiceAccount is the GCP service account attached to
+                  the VMs.
+                type: string
+              subnetwork:
+                description: Subnetwork is the VPC subnetwork URI.
+                type: string
+            required:
+            - machineType
+            type: object
+        type: object
+    served: true
+    storage: true
