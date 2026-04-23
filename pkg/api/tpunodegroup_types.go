@@ -4,6 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:validation:XValidation:rule="has(self.instanceTemplateURI) != has(self.instanceConfig)",message="Exactly one of instanceTemplateURI or instanceConfig must be specified"
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
