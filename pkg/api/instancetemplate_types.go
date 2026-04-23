@@ -4,6 +4,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// MaintenancePolicyTerminate specifies that the VMs should be terminated during maintenance.
+	MaintenancePolicyTerminate = "TERMINATE"
+)
+
 // InstanceTemplateSpec defines the desired state of an InstanceTemplate
 type InstanceTemplateSpec struct {
 	// Reusing InstanceConfig fields at top level.
