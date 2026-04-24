@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/api"
+	api "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )

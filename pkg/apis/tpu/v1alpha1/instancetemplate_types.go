@@ -1,4 +1,4 @@
-package api
+package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +22,7 @@ type InstanceTemplateSpec struct {
 	MaintenancePolicy *string `json:"maintenancePolicy,omitempty"`
 }
 
+// +genclient
 // +kubebuilder:object:root=true
 
 // InstanceTemplate is the Schema for the instancetemplates API
