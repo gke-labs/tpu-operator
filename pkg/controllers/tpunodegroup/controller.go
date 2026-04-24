@@ -7,7 +7,6 @@ import (
 
 	"golang.org/x/time/rate"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
@@ -34,6 +33,9 @@ type Controller struct {
 
 	// workqueue is a rate limited work queue.
 	workqueue workqueue.TypedRateLimitingInterface[cache.ObjectName]
+
+	// reconciler handles the business logic of reconciliation
+	reconciler *TPUNodeGroupReconciler
 }
 
 // NewController returns a new tpunodegroup controller
@@ -55,6 +57,7 @@ func NewController(
 		tpuNodeGroupsLister: tpuNodeGroupInformer.Lister(),
 		tpuNodeGroupsSynced: tpuNodeGroupInformer.Informer().HasSynced,
 		workqueue:           workqueue.NewTypedRateLimitingQueue(ratelimiter),
+		reconciler:          NewReconciler(tpuclientset, tpuNodeGroupInformer.Lister()),
 	}
 
 	logger.Info("Setting up event handlers")
@@ -130,24 +133,8 @@ func (c *Controller) processNextWorkItem(ctx context.Context) bool {
 // syncHandler compares the actual state with the desired, and attempts to
 // converge the two.
 func (c *Controller) syncHandler(ctx context.Context, objectRef cache.ObjectName) error {
-	logger := klog.LoggerWithValues(klog.FromContext(ctx), "objectRef", objectRef)
-
-	// Get the TPUNodeGroup resource with this namespace/name
-	tpuNodeGroup, err := c.tpuNodeGroupsLister.TPUNodeGroups(objectRef.Namespace).Get(objectRef.Name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			utilruntime.HandleErrorWithContext(ctx, err, "TPUNodeGroup referenced by item in work queue no longer exists", "objectReference", objectRef)
-			return nil
-		}
-		return err
-	}
-
-	logger.Info("Syncing TPUNodeGroup", "name", tpuNodeGroup.Name)
-
-	// TODO: Implement actual reconciliation logic here.
-	// For now, just log the object.
-
-	return nil
+	// Delegate the work to the reconciler
+	return c.reconciler.Reconcile(ctx, objectRef)
 }
 
 // enqueueTPUNodeGroup takes a TPUNodeGroup resource and converts it into a namespace/name
