@@ -35,7 +35,7 @@ type Controller struct {
 	workqueue workqueue.TypedRateLimitingInterface[cache.ObjectName]
 
 	// reconciler handles the business logic of reconciliation
-	reconciler *TPUNodeGroupReconciler
+	reconciler *Reconciler
 }
 
 // NewController returns a new tpunodegroup controller

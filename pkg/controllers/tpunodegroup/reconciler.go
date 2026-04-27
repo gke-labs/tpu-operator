@@ -13,22 +13,22 @@ import (
 	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
 )
 
-// TPUNodeGroupReconciler handles the business logic of converging desired state to actual state.
-type TPUNodeGroupReconciler struct {
+// Reconciler handles the business logic of converging desired state to actual state.
+type Reconciler struct {
 	tpuClientset       clientset.Interface
 	tpuNodeGroupLister listers.TPUNodeGroupLister
 }
 
-// NewReconciler returns a new TPUNodeGroupReconciler.
-func NewReconciler(tpuClientset clientset.Interface, tpuNodeGroupLister listers.TPUNodeGroupLister) *TPUNodeGroupReconciler {
-	return &TPUNodeGroupReconciler{
+// NewReconciler returns a new Reconciler.
+func NewReconciler(tpuClientset clientset.Interface, tpuNodeGroupLister listers.TPUNodeGroupLister) *Reconciler {
+	return &Reconciler{
 		tpuClientset:       tpuClientset,
 		tpuNodeGroupLister: tpuNodeGroupLister,
 	}
 }
 
 // Reconcile is the main entry point for reconciling a TPUNodeGroup.
-func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, objectRef cache.ObjectName) error {
+func (r *Reconciler) Reconcile(ctx context.Context, objectRef cache.ObjectName) error {
 	logger := klog.LoggerWithValues(klog.FromContext(ctx), "objectRef", objectRef)
 
 	// 1. Fetch the TPUNodeGroup resource
@@ -66,25 +66,25 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, objectRef cache.
 	return nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileResourcePolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *Reconciler) reconcileResourcePolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
 	// TODO: Implement ResourcePolicy reconciliation (Composite Pattern).
 	// Check if multi-host and if policy exists, create if not.
 	return nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *Reconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
 	// TODO: Implement InstanceTemplate reconciliation.
 	// Check if user provided or if we need to create one.
 	return nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *Reconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
 	// TODO: Implement MIG reconciliation.
 	// Create MIG in bulk mode referencing policy and template.
 	return nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *Reconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
 	// TODO: Implement Node Bootstrapping check.
 	// Watch nodes, check for ready status, and update TPUNodeGroup status.
 	return nil
