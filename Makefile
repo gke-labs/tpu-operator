@@ -15,7 +15,7 @@ generate:
 .PHONY: codegen-client
 codegen-client:
 	@echo "Generating client, informers, and listers..."
-	@CODEGEN_PKG=$$(go list -m -f '{{.Dir}}' k8s.io/code-generator); \
+	@CODEGEN_PKG=$$(go list -mod=mod -m -f '{{.Dir}}' k8s.io/code-generator); \
 	source "$$CODEGEN_PKG/kube_codegen.sh"; \
 	kube::codegen::gen_client \
 		--with-watch \

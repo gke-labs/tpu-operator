@@ -98,10 +98,30 @@ spec:
                       Reservation is the name of the reservation to consume.
                       Required if ProvisioningModel is "reservation-bound.
                     type: string
-                  serviceAccount:
-                    description: ServiceAccount is the GCP service account attached
-                      to the VMs.
-                    type: string
+                  serviceAccounts:
+                    description: |-
+                      ServiceAccounts is a list of service accounts and their scopes.
+                      Note: GCE currently only supports at most ONE service account per instance.
+                    items:
+                      description: ServiceAccount defines the service account and
+                        scopes for the VM.
+                      properties:
+                        email:
+                          description: Email is the service account email. Use "default"
+                            to use the default compute service account.
+                          type: string
+                        scopes:
+                          description: Scopes is a list of OAuth scopes for the service
+                            account.
+                          items:
+                            type: string
+                          type: array
+                      required:
+                      - email
+                      - scopes
+                      type: object
+                    maxItems: 1
+                    type: array
                   subnetwork:
                     description: Subnetwork is the VPC subnetwork URI.
                     type: string

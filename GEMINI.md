@@ -42,6 +42,7 @@ tpu-node-group/
   external repository labels (like `"@com_google_protobuf//:any_proto"`) if you can find examples using the
   same label elsewhere in this codebase.
 * The importpath for code in this repository starts with `gke-internal.googlesource.com`
+* **Adding Dependencies**: You can add new dependencies by importing them in your code, then running `go mod tidy` to update `go.mod`, and `go mod vendor` to update the `vendor/` directory.
 
 ## Code Generation
 
