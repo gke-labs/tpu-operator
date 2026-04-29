@@ -78,11 +78,16 @@ func (b *InstanceTemplateSpecApplyConfiguration) WithSubnetwork(value string) *I
 	return b
 }
 
-// WithServiceAccount sets the ServiceAccount field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ServiceAccount field is set to the value of the last call.
-func (b *InstanceTemplateSpecApplyConfiguration) WithServiceAccount(value string) *InstanceTemplateSpecApplyConfiguration {
-	b.InstanceConfigApplyConfiguration.ServiceAccount = &value
+// WithServiceAccounts adds the given value to the ServiceAccounts field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the ServiceAccounts field.
+func (b *InstanceTemplateSpecApplyConfiguration) WithServiceAccounts(values ...*ServiceAccountApplyConfiguration) *InstanceTemplateSpecApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithServiceAccounts")
+		}
+		b.InstanceConfigApplyConfiguration.ServiceAccounts = append(b.InstanceConfigApplyConfiguration.ServiceAccounts, *values[i])
+	}
 	return b
 }
 

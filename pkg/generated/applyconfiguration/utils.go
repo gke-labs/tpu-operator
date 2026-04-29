@@ -28,6 +28,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &tpuv1alpha1.InstanceTemplateSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("NodeSummary"):
 		return &tpuv1alpha1.NodeSummaryApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServiceAccount"):
+		return &tpuv1alpha1.ServiceAccountApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("TPUNodeGroup"):
 		return &tpuv1alpha1.TPUNodeGroupApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("TPUNodeGroupSpec"):

@@ -26,8 +26,9 @@ type InstanceConfigApplyConfiguration struct {
 	DiskType *string `json:"diskType,omitempty"`
 	// Subnetwork is the VPC subnetwork URI.
 	Subnetwork *string `json:"subnetwork,omitempty"`
-	// ServiceAccount is the GCP service account attached to the VMs.
-	ServiceAccount *string `json:"serviceAccount,omitempty"`
+	// ServiceAccounts is a list of service accounts and their scopes.
+	// Note: GCE currently only supports at most ONE service account per instance.
+	ServiceAccounts []ServiceAccountApplyConfiguration `json:"serviceAccounts,omitempty"`
 	// NetworkTags are used to apply GCP firewall rules to the TPU nodes.
 	NetworkTags []string `json:"networkTags,omitempty"`
 	// Metadata allows setting custom GCE metadata.
@@ -96,11 +97,16 @@ func (b *InstanceConfigApplyConfiguration) WithSubnetwork(value string) *Instanc
 	return b
 }
 
-// WithServiceAccount sets the ServiceAccount field in the declarative configuration to the given value
-// and returns the receiver, so that objects can be built by chaining "With" function invocations.
-// If called multiple times, the ServiceAccount field is set to the value of the last call.
-func (b *InstanceConfigApplyConfiguration) WithServiceAccount(value string) *InstanceConfigApplyConfiguration {
-	b.ServiceAccount = &value
+// WithServiceAccounts adds the given value to the ServiceAccounts field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the ServiceAccounts field.
+func (b *InstanceConfigApplyConfiguration) WithServiceAccounts(values ...*ServiceAccountApplyConfiguration) *InstanceConfigApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithServiceAccounts")
+		}
+		b.ServiceAccounts = append(b.ServiceAccounts, *values[i])
+	}
 	return b
 }
 

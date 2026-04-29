@@ -48,6 +48,17 @@ type TPUNodeGroupSpec struct {
 	BootstrapKubernetes *BootstrapConfig `json:"bootstrapKubernetes,omitempty"`
 }
 
+// ServiceAccount defines the service account and scopes for the VM.
+type ServiceAccount struct {
+	// Email is the service account email. Use "default" to use the default compute service account.
+	// +required
+	Email string `json:"email"`
+
+	// Scopes is a list of OAuth scopes for the service account.
+	// +required
+	Scopes []string `json:"scopes"`
+}
+
 // InstanceConfig defines the GCE VM configuration for the nodes
 type InstanceConfig struct {
 	// MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
@@ -81,9 +92,11 @@ type InstanceConfig struct {
 	// +optional
 	Subnetwork *string `json:"subnetwork,omitempty"`
 
-	// ServiceAccount is the GCP service account attached to the VMs.
+	// ServiceAccounts is a list of service accounts and their scopes.
+	// Note: GCE currently only supports at most ONE service account per instance.
 	// +optional
-	ServiceAccount *string `json:"serviceAccount,omitempty"`
+	// +kubebuilder:validation:MaxItems=1
+	ServiceAccounts []ServiceAccount `json:"serviceAccounts,omitempty"`
 
 	// NetworkTags are used to apply GCP firewall rules to the TPU nodes.
 	// +optional
