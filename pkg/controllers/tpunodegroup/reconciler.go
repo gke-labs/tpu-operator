@@ -5,23 +5,27 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup/deviceplugin"
 	clientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned"
 	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
 )
 
 // Reconciler handles the business logic of converging desired state to actual state.
 type Reconciler struct {
+	kubeClientset      kubernetes.Interface
 	tpuClientset       clientset.Interface
 	tpuNodeGroupLister listers.TPUNodeGroupLister
 }
 
 // NewReconciler returns a new Reconciler.
-func NewReconciler(tpuClientset clientset.Interface, tpuNodeGroupLister listers.TPUNodeGroupLister) *Reconciler {
+func NewReconciler(kubeClientset kubernetes.Interface, tpuClientset clientset.Interface, tpuNodeGroupLister listers.TPUNodeGroupLister) *Reconciler {
 	return &Reconciler{
+		kubeClientset:      kubeClientset,
 		tpuClientset:       tpuClientset,
 		tpuNodeGroupLister: tpuNodeGroupLister,
 	}
@@ -63,6 +67,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, objectRef cache.ObjectName) 
 		return fmt.Errorf("failed to reconcile node bootstrapping: %w", err)
 	}
 
+	// Step 5: Reconcile Device Plugin
+	if err := deviceplugin.Reconcile(ctx, r.kubeClientset, tpuNodeGroup); err != nil {
+		return fmt.Errorf("failed to reconcile device plugin: %w", err)
+	}
+
 	return nil
 }
 
@@ -89,3 +98,5 @@ func (r *Reconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpua
 	// Watch nodes, check for ready status, and update TPUNodeGroup status.
 	return nil
 }
+
+

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned/fake"
@@ -36,7 +37,8 @@ func TestReconcile(t *testing.T) {
 	store.Add(tpuNodeGroup)
 
 	// 4. Instantiate the reconciler
-	r := NewReconciler(fakeClient, lister)
+	k8sFakeClient := k8sfake.NewSimpleClientset()
+	r := NewReconciler(k8sFakeClient, fakeClient, lister)
 
 	// 5. Call Reconcile
 	objectRef := cache.ObjectName{Namespace: "default", Name: "test-tpu"}
@@ -55,7 +57,8 @@ func TestReconcile_NotFound(t *testing.T) {
 	store := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
 	lister := listers.NewTPUNodeGroupLister(store)
 
-	r := NewReconciler(fakeClient, lister)
+	k8sFakeClient := k8sfake.NewSimpleClientset()
+	r := NewReconciler(k8sFakeClient, fakeClient, lister)
 
 	objectRef := cache.ObjectName{Namespace: "default", Name: "non-existent"}
 	err := r.Reconcile(context.Background(), objectRef)
@@ -64,3 +67,44 @@ func TestReconcile_NotFound(t *testing.T) {
 		t.Fatalf("Expected no error for NotFound case, got %v", err)
 	}
 }
+
+func TestReconcile_DevicePlugin(t *testing.T) {
+	fakeClient := fake.NewClientset()
+	store := cache.NewIndexer(cache.DeletionHandlingMetaNamespaceKeyFunc, cache.Indexers{})
+	lister := listers.NewTPUNodeGroupLister(store)
+
+	tpuNodeGroup := &tpuapi.TPUNodeGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-tpu",
+			Namespace: "default",
+		},
+		Spec: tpuapi.TPUNodeGroupSpec{
+			Project:      "test-project",
+			NodeLocation: "us-central1-a",
+			NodeCount:    1,
+		},
+	}
+	store.Add(tpuNodeGroup)
+
+	k8sFakeClient := k8sfake.NewSimpleClientset()
+	r := NewReconciler(k8sFakeClient, fakeClient, lister)
+
+	objectRef := cache.ObjectName{Namespace: "default", Name: "test-tpu"}
+	err := r.Reconcile(context.Background(), objectRef)
+
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	// Verify DaemonSet creation
+	ds, err := k8sFakeClient.AppsV1().DaemonSets("default").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected DaemonSet to be created, got error: %v", err)
+	}
+	if ds.Name != "tpu-device-plugin" {
+		t.Errorf("Expected DaemonSet name %s, got %s", "tpu-device-plugin", ds.Name)
+	}
+}
+
+
+

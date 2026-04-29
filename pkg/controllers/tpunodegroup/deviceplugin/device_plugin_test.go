@@ -1,12 +1,21 @@
 package deviceplugin
 
 import (
+	"context"
 	"testing"
+
+	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestBuildDevicePluginDaemonSet(t *testing.T) {
-	namespace := "test-namespace"
-	ds, err := BuildDevicePluginDaemonSet(namespace)
+	group := &tpuapi.TPUNodeGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "test-namespace",
+		},
+	}
+	ds, err := BuildDevicePluginDaemonSet(group)
 	if err != nil {
 		t.Fatalf("failed to build device plugin DaemonSet: %v", err)
 	}
@@ -15,8 +24,8 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 		t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
 	}
 
-	if ds.Namespace != namespace {
-		t.Errorf("expected namespace to be %s, got %s", namespace, ds.Namespace)
+	if ds.Namespace != group.Namespace {
+		t.Errorf("expected namespace to be %s, got %s", group.Namespace, ds.Namespace)
 	}
 
 	if len(ds.Spec.Template.Spec.Containers) != 1 {
@@ -48,4 +57,55 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 	if exprs[0].Key != "cloud.google.com/gk8s-tpu-accelerator" || exprs[0].Operator != "Exists" {
 		t.Errorf("unexpected match expression: %v", exprs[0])
 	}
+}
+
+func TestReconcile(t *testing.T) {
+	group := &tpuapi.TPUNodeGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-tpu",
+			Namespace: "default",
+		},
+	}
+
+	t.Run("creates DaemonSet when not exists", func(t *testing.T) {
+		k8sFakeClient := k8sfake.NewSimpleClientset()
+
+		err := Reconcile(context.Background(), k8sFakeClient, group)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		ds, err := k8sFakeClient.AppsV1().DaemonSets("default").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("failed to get DaemonSet: %v", err)
+		}
+		if ds.Name != "tpu-device-plugin" {
+			t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
+		}
+	})
+
+	t.Run("does nothing when DaemonSet already exists", func(t *testing.T) {
+		k8sFakeClient := k8sfake.NewSimpleClientset()
+
+		// Pre-create the DaemonSet
+		ds, err := BuildDevicePluginDaemonSet(group)
+		if err != nil {
+			t.Fatalf("failed to build device plugin DaemonSet: %v", err)
+		}
+		_, err = k8sFakeClient.AppsV1().DaemonSets("default").Create(context.Background(), ds, metav1.CreateOptions{})
+		if err != nil {
+			t.Fatalf("failed to pre-create DaemonSet: %v", err)
+		}
+
+		err = Reconcile(context.Background(), k8sFakeClient, group)
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		// Verify it still exists and wasn't duplicated or modified in a bad way (though our current logic doesn't update).
+		_, err = k8sFakeClient.AppsV1().DaemonSets("default").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("failed to get DaemonSet: %v", err)
+		}
+	})
 }

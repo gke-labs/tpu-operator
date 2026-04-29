@@ -57,7 +57,7 @@ func NewController(
 		tpuNodeGroupsLister: tpuNodeGroupInformer.Lister(),
 		tpuNodeGroupsSynced: tpuNodeGroupInformer.Informer().HasSynced,
 		workqueue:           workqueue.NewTypedRateLimitingQueue(ratelimiter),
-		reconciler:          NewReconciler(tpuclientset, tpuNodeGroupInformer.Lister()),
+		reconciler:          NewReconciler(kubeclientset, tpuclientset, tpuNodeGroupInformer.Lister()),
 	}
 
 	logger.Info("Setting up event handlers")
