@@ -10,6 +10,7 @@ import (
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned/fake"
 	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 )
 
 func TestReconcile(t *testing.T) {
@@ -38,7 +39,7 @@ func TestReconcile(t *testing.T) {
 
 	// 4. Instantiate the reconciler
 	k8sFakeClient := k8sfake.NewSimpleClientset()
-	r := NewReconciler(k8sFakeClient, fakeClient, lister)
+	r := NewReconciler(k8sFakeClient, fakeClient, lister, &gce.MockIGMClient{}, &gce.MockInstanceClient{})
 
 	// 5. Call Reconcile
 	objectRef := cache.ObjectName{Namespace: "default", Name: "test-tpu"}
@@ -58,7 +59,7 @@ func TestReconcile_NotFound(t *testing.T) {
 	lister := listers.NewTPUNodeGroupLister(store)
 
 	k8sFakeClient := k8sfake.NewSimpleClientset()
-	r := NewReconciler(k8sFakeClient, fakeClient, lister)
+	r := NewReconciler(k8sFakeClient, fakeClient, lister, &gce.MockIGMClient{}, &gce.MockInstanceClient{})
 
 	objectRef := cache.ObjectName{Namespace: "default", Name: "non-existent"}
 	err := r.Reconcile(context.Background(), objectRef)
@@ -87,7 +88,7 @@ func TestReconcile_DevicePlugin(t *testing.T) {
 	store.Add(tpuNodeGroup)
 
 	k8sFakeClient := k8sfake.NewSimpleClientset()
-	r := NewReconciler(k8sFakeClient, fakeClient, lister)
+	r := NewReconciler(k8sFakeClient, fakeClient, lister, &gce.MockIGMClient{}, &gce.MockInstanceClient{})
 
 	objectRef := cache.ObjectName{Namespace: "default", Name: "test-tpu"}
 	err := r.Reconcile(context.Background(), objectRef)

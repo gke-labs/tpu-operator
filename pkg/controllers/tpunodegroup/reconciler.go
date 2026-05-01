@@ -11,6 +11,7 @@ import (
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup/deviceplugin"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	clientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned"
 	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
 )
@@ -20,14 +21,18 @@ type Reconciler struct {
 	kubeClientset      kubernetes.Interface
 	tpuClientset       clientset.Interface
 	tpuNodeGroupLister listers.TPUNodeGroupLister
+	igmClient          gce.IGMClient
+	instanceClient     gce.InstanceClient
 }
 
 // NewReconciler returns a new Reconciler.
-func NewReconciler(kubeClientset kubernetes.Interface, tpuClientset clientset.Interface, tpuNodeGroupLister listers.TPUNodeGroupLister) *Reconciler {
+func NewReconciler(kubeClientset kubernetes.Interface, tpuClientset clientset.Interface, tpuNodeGroupLister listers.TPUNodeGroupLister, igmClient gce.IGMClient, instanceClient gce.InstanceClient) *Reconciler {
 	return &Reconciler{
 		kubeClientset:      kubeClientset,
 		tpuClientset:       tpuClientset,
 		tpuNodeGroupLister: tpuNodeGroupLister,
+		igmClient:          igmClient,
+		instanceClient:     instanceClient,
 	}
 }
 

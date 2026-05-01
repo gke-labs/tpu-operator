@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	fakeclientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned/fake"
 	informers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/informers/externalversions"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +30,7 @@ func TestTPUNodeGroupController(t *testing.T) {
 	tpuInformerFactory := informers.NewSharedInformerFactory(tpuClient, time.Second*30)
 	informer := tpuInformerFactory.Tpu().V1alpha1().TPUNodeGroups()
 
-	controller := NewController(ctx, kubeClient, tpuClient, informer)
+	controller := NewController(ctx, kubeClient, tpuClient, informer, &gce.MockIGMClient{}, &gce.MockInstanceClient{})
 
 	stopCh := make(chan struct{})
 	defer close(stopCh)

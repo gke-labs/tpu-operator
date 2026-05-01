@@ -14,6 +14,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 
+	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	clientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned"
 	informers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/informers/externalversions/tpu/v1alpha1"
 	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
@@ -43,7 +44,9 @@ func NewController(
 	ctx context.Context,
 	kubeclientset kubernetes.Interface,
 	tpuclientset clientset.Interface,
-	tpuNodeGroupInformer informers.TPUNodeGroupInformer) *Controller {
+	tpuNodeGroupInformer informers.TPUNodeGroupInformer,
+	igmClient gce.IGMClient,
+	instanceClient gce.InstanceClient) *Controller {
 	logger := klog.FromContext(ctx)
 
 	ratelimiter := workqueue.NewTypedMaxOfRateLimiter(
@@ -57,7 +60,7 @@ func NewController(
 		tpuNodeGroupsLister: tpuNodeGroupInformer.Lister(),
 		tpuNodeGroupsSynced: tpuNodeGroupInformer.Informer().HasSynced,
 		workqueue:           workqueue.NewTypedRateLimitingQueue(ratelimiter),
-		reconciler:          NewReconciler(kubeclientset, tpuclientset, tpuNodeGroupInformer.Lister()),
+		reconciler:          NewReconciler(kubeclientset, tpuclientset, tpuNodeGroupInformer.Lister(), igmClient, instanceClient),
 	}
 
 	logger.Info("Setting up event handlers")
