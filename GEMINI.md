@@ -57,7 +57,7 @@ This project relies on automatic code generation for Kubernetes clients to maint
 
 * Use Git for source control.
 * When amending a commit, ensure that the `Change-Id` field in the commit message is preserved to update the existing Gerrit change rather than creating a new one.
-* **Commit Messages**: Always include a bug ID in the commit description in the format `BUG=xxxxxx`. If you are unsure which bug ID to use, ask for clarification.
+
 
 ## Style Guide
 

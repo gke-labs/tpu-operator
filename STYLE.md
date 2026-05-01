@@ -64,14 +64,23 @@ the consumers of your library:
 
 ### Linking a Buganizer Issue on the Commit Message
 
-GKE Gerrit enabled go/gitwatcher, so if your commit message contains a buganizer
-issue in the form of 'b/xxxxxx', the issue will be updated once commit is
-merged. For consistency please use a git-trailer format to link the issue. For
-example:
+You MUST always include a Buganizer issue ID in the commit message. If you are unsure which bug ID to use, ask the user for clarification.
+
+GKE Gerrit enables go/gitwatcher, so if your commit message contains a buganizer issue in the form of 'b/xxxxxx', the issue will be updated once the commit is merged. For consistency, please use a git-trailer format to link the issue. For example:
 
 ```text
 Bug: b/234567
 ```
+
+## TODO Style
+
+When adding TODOs in the codebase, always include a Buganizer issue ID in the format `TODO(b/xxxxx):`. This ensures that TODOs are tracked and can be followed up on.
+
+Example:
+```go
+// TODO(b/123456): Implement this feature.
+```
+
 
 [go-style]: https://g3doc.corp.google.com/go/g3doc/style/index.md
 [g3doc-style]: https://g3doc.corp.google.com/corp/g3doc/docs/reference/style.md
