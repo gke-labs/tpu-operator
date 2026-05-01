@@ -82,6 +82,14 @@ func TestReconcile(t *testing.T) {
 		if ds.Name != "tpu-device-plugin" {
 			t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
 		}
+
+		sa, err := k8sFakeClient.CoreV1().ServiceAccounts("kube-system").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+		if err != nil {
+			t.Fatalf("failed to get ServiceAccount: %v", err)
+		}
+		if sa.Name != "tpu-device-plugin" {
+			t.Errorf("expected name to be 'tpu-device-plugin', got %s", sa.Name)
+		}
 	})
 
 	t.Run("does nothing when DaemonSet already exists", func(t *testing.T) {

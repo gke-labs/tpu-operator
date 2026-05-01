@@ -17,6 +17,8 @@ spec:
       annotations:
         seccomp.security.alpha.kubernetes.io/pod: "runtime/default"
     spec:
+      hostNetwork: true
+      serviceAccountName: tpu-device-plugin
       tolerations:
       - operator: "Exists"
         effect: "NoExecute"
@@ -59,6 +61,7 @@ spec:
             fieldRef:
               fieldPath: spec.nodeName
         securityContext:
+          privileged: true
           seccompProfile: { type: RuntimeDefault }
         volumeMounts:
         - name: device-plugin

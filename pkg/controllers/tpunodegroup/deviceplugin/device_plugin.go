@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -17,6 +18,9 @@ import (
 
 //go:embed device_plugin.yaml
 var devicePluginYAML []byte
+
+//go:embed service_account.yaml
+var serviceAccountYAML []byte
 
 // BuildDevicePluginDaemonSet builds the DaemonSet for the TPU device plugin.
 func BuildDevicePluginDaemonSet(group *tpuapi.TPUNodeGroup) (*appsv1.DaemonSet, error) {
@@ -40,12 +44,40 @@ func Reconcile(ctx context.Context, kubeClientset kubernetes.Interface, group *t
 	logger := klog.FromContext(ctx)
 	logger.Info("Reconciling TPU Device Plugin")
 
+	err := ensureServiceAccount(ctx, kubeClientset, group)
+	if err != nil {
+		return fmt.Errorf("failed to ensure service account: %w", err)
+	}
+
 	ds, err := BuildDevicePluginDaemonSet(group)
 	if err != nil {
 		return fmt.Errorf("failed to build device plugin DaemonSet: %w", err)
 	}
 
 	return ensureDaemonSet(ctx, kubeClientset, ds)
+}
+
+func ensureServiceAccount(ctx context.Context, kubeClientset kubernetes.Interface, group *tpuapi.TPUNodeGroup) error {
+	logger := klog.FromContext(ctx)
+
+	sa := &corev1.ServiceAccount{}
+	err := yaml.Unmarshal(serviceAccountYAML, sa)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal service account YAML: %w", err)
+	}
+
+	_, err = kubeClientset.CoreV1().ServiceAccounts(sa.Namespace).Get(ctx, sa.Name, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("Creating TPU Device Plugin ServiceAccount", "namespace", sa.Namespace, "name", sa.Name)
+			_, err = kubeClientset.CoreV1().ServiceAccounts(sa.Namespace).Create(ctx, sa, metav1.CreateOptions{})
+			return err
+		}
+		return fmt.Errorf("failed to get service account: %w", err)
+	}
+
+	logger.Info("TPU Device Plugin ServiceAccount already exists", "namespace", sa.Namespace, "name", sa.Name)
+	return nil
 }
 
 func ensureDaemonSet(ctx context.Context, kubeClientset kubernetes.Interface, ds *appsv1.DaemonSet) error {
