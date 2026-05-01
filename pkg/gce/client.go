@@ -19,9 +19,16 @@ type managedInstanceIterator interface {
 	Next() (*computepb.ManagedInstance, error)
 }
 
+// InstanceClient defines methods for interacting with Instances.
+type InstanceClient interface {
+	Get(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error)
+	SetMetadata(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error)
+}
+
 // Manager provides a centralized point to manage various GCE resources.
 type Manager struct {
-	igmClient *compute.InstanceGroupManagersClient
+	igmClient       *compute.InstanceGroupManagersClient
+	instancesClient *compute.InstancesClient
 }
 
 // NewManager creates and initializes the GCE clients.
@@ -30,12 +37,22 @@ func NewManager(ctx context.Context) (*Manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create InstanceGroupManagers client: %w", err)
 	}
-	return &Manager{igmClient: igmClient}, nil
+	instancesClient, err := compute.NewInstancesRESTClient(ctx)
+	if err != nil {
+		igmClient.Close()
+		return nil, fmt.Errorf("failed to create instances client: %w", err)
+	}
+	return &Manager{igmClient: igmClient, instancesClient: instancesClient}, nil
 }
 
 // IGM returns the IGMClient.
 func (m *Manager) IGM() IGMClient {
 	return &igmClientWrapper{client: m.igmClient}
+}
+
+// Instances returns the InstanceClient.
+func (m *Manager) Instances() InstanceClient {
+	return &instanceClientWrapper{client: m.instancesClient}
 }
 
 type igmClientWrapper struct {
@@ -67,10 +84,29 @@ func iterateInstances(it managedInstanceIterator) ([]*computepb.ManagedInstance,
 	return instances, nil
 }
 
+type instanceClientWrapper struct {
+	client *compute.InstancesClient
+}
+
+func (w *instanceClientWrapper) Get(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error) {
+	return w.client.Get(ctx, req)
+}
+
+func (w *instanceClientWrapper) SetMetadata(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error) {
+	return w.client.SetMetadata(ctx, req)
+}
+
 // Close closes the underlying clients.
 func (m *Manager) Close() error {
+	var errs []error
 	if err := m.igmClient.Close(); err != nil {
-		return fmt.Errorf("failed to close igm client: %w", err)
+		errs = append(errs, err)
+	}
+	if err := m.instancesClient.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing clients: %v", errs)
 	}
 	return nil
 }
