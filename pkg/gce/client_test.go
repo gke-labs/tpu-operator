@@ -149,4 +149,131 @@ func TestIterateInstances(t *testing.T) {
 	}
 }
 
+func TestInstanceClient_Get(t *testing.T) {
+	tests := []struct {
+		name         string
+		instanceName string
+		respInstance *computepb.Instance
+		wantErr      bool
+	}{
+		{
+			name:         "Success",
+			instanceName: "test-instance",
+			respInstance: &computepb.Instance{
+				Name: ptr.To("test-instance"),
+				Metadata: &computepb.Metadata{
+					Fingerprint: ptr.To("abc"),
+				},
+			},
+		},
+		{
+			name:         "Error",
+			instanceName: "test-instance",
+			wantErr:      true,
+		},
+	}
 
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.wantErr {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				data, _ := protojson.Marshal(tc.respInstance)
+				w.Write(data)
+			}))
+			defer server.Close()
+
+			ctx := context.Background()
+			instancesClient, err := compute.NewInstancesRESTClient(ctx, option.WithEndpoint(server.URL), option.WithHTTPClient(server.Client()))
+			if err != nil {
+				t.Fatalf("Failed to create instances client: %v", err)
+			}
+
+			mgr := &Manager{instancesClient: instancesClient}
+
+			req := &computepb.GetInstanceRequest{
+				Project:  "test-project",
+				Zone:     "test-zone",
+				Instance: tc.instanceName,
+			}
+			inst, err := mgr.Instances().Get(ctx, req)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("Get() error = %v, wantErr %v", err, tc.wantErr)
+			}
+
+			if !tc.wantErr && inst.GetName() != tc.instanceName {
+				t.Errorf("Expected instance name %s, got %s", tc.instanceName, inst.GetName())
+			}
+		})
+	}
+}
+
+func TestInstanceClient_SetMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		instanceName string
+		metadata     *computepb.Metadata
+		wantErr      bool
+	}{
+		{
+			name:         "Success",
+			instanceName: "test-instance",
+			metadata: &computepb.Metadata{
+				Fingerprint: ptr.To("abc"),
+				Items: []*computepb.Items{
+					{Key: ptr.To("key1"), Value: ptr.To("val1")},
+				},
+			},
+		},
+		{
+			name:         "Error",
+			instanceName: "test-instance",
+			metadata:     &computepb.Metadata{},
+			wantErr:      true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			updateCalled := false
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.wantErr {
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				updateCalled = true
+				w.Header().Set("Content-Type", "application/json")
+				status := computepb.Operation_DONE
+				data, _ := protojson.Marshal(&computepb.Operation{Status: &status})
+				w.Write(data)
+			}))
+			defer server.Close()
+
+			ctx := context.Background()
+			instancesClient, err := compute.NewInstancesRESTClient(ctx, option.WithEndpoint(server.URL), option.WithHTTPClient(server.Client()))
+			if err != nil {
+				t.Fatalf("Failed to create instances client: %v", err)
+			}
+
+			mgr := &Manager{instancesClient: instancesClient}
+
+			req := &computepb.SetMetadataInstanceRequest{
+				Project:          "test-project",
+				Zone:             "test-zone",
+				Instance:         tc.instanceName,
+				MetadataResource: tc.metadata,
+			}
+			_, err = mgr.Instances().SetMetadata(ctx, req)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("SetMetadata() error = %v, wantErr %v", err, tc.wantErr)
+			}
+
+			if !tc.wantErr && !updateCalled {
+				t.Errorf("Expected SetMetadata to be called")
+			}
+		})
+	}
+}
