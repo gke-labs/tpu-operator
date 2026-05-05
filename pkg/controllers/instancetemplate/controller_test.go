@@ -3,57 +3,84 @@ package instancetemplate
 import (
 	"context"
 	"testing"
-	"time"
 
-	api "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
-	fakeclientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned/fake"
-	informers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/informers/externalversions"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	fakekubernetes "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 )
 
-func TestInstanceTemplateController(t *testing.T) {
-	err := api.AddToScheme(scheme.Scheme)
-	if err != nil {
-		t.Fatalf("Error adding to scheme: %v", err)
-	}
+func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = tpuv1alpha1.AddToScheme(scheme)
 
-	kubeClient := fakekubernetes.NewSimpleClientset()
-	tpuClient := fakeclientset.NewSimpleClientset()
-
-	tpuInformerFactory := informers.NewSharedInformerFactory(tpuClient, time.Second*30)
-	informer := tpuInformerFactory.Tpu().V1alpha1().InstanceTemplates()
-
-	controller := NewController(kubeClient, tpuClient, informer)
-
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-	tpuInformerFactory.Start(stopCh)
-
-	it := &api.InstanceTemplate{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-template",
-			Namespace: "default",
-		},
-		Spec: api.InstanceTemplateSpec{
-			InstanceConfig: api.InstanceConfig{
-				MachineType: "tpu7x-standard-4t",
+	tests := []struct {
+		name          string
+		request       reconcile.Request
+		initialObject *tpuv1alpha1.InstanceTemplate
+		wantResult    reconcile.Result
+		wantErr       bool
+	}{
+		{
+			name: "resource_not_found",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "non-existent",
+					Namespace: "default",
+				},
 			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+		},
+		{
+			name: "resource_found",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
 		},
 	}
-	_, err = tpuClient.TpuV1alpha1().InstanceTemplates("default").Create(context.TODO(), it, metav1.CreateOptions{})
-	if err != nil {
-		t.Fatalf("Error creating instance template: %v", err)
-	}
 
-	err = informer.Informer().GetIndexer().Add(it)
-	if err != nil {
-		t.Fatalf("Error adding to informer cache: %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			objs := []client.Object{}
+			if tc.initialObject != nil {
+				objs = append(objs, tc.initialObject)
+			}
 
-	err = controller.syncHandler("default/test-template")
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+			r := &InstanceTemplateReconciler{
+				Client:   cl,
+				Scheme:   scheme,
+				Recorder: record.NewFakeRecorder(10),
+			}
+
+			gotResult, err := r.Reconcile(context.Background(), tc.request)
+
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
+			}
+
+			if diff := cmp.Diff(tc.wantResult, gotResult); diff != "" {
+				t.Errorf("Reconcile(%v) result mismatch (-want +got):\n%s", tc.request, diff)
+			}
+		})
 	}
 }

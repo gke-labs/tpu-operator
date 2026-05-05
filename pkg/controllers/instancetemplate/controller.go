@@ -1,157 +1,61 @@
 package instancetemplate
 
 import (
-	"fmt"
-	"time"
+	"context"
 
-	clientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned"
-	informers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/informers/externalversions/tpu/v1alpha1"
-	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
-	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/tools/cache"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/client-go/util/workqueue"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/klog/v2"
+
+	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 )
 
-const controllerAgentName = "instancetemplate-controller"
-
-// Controller is the controller implementation for InstanceTemplate resources
-type Controller struct {
-	kubeclientset kubernetes.Interface
-	tpuclientset  clientset.Interface
-
-	instanceTemplatesLister listers.InstanceTemplateLister
-	instanceTemplatesSynced cache.InformerSynced
-
-	workqueue workqueue.TypedRateLimitingInterface[string]
-	recorder  record.EventRecorder
+// InstanceTemplateReconciler reconciles a InstanceTemplate object
+type InstanceTemplateReconciler struct {
+	client.Client
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
-// NewController returns a new instancetemplate controller
-func NewController(kubeclientset kubernetes.Interface, tpuclientset clientset.Interface, instanceTemplateInformer informers.InstanceTemplateInformer) *Controller {
+// +kubebuilder:rbac:groups=tpu.google.com,resources=instancetemplates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tpu.google.com,resources=instancetemplates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=tpu.google.com,resources=instancetemplates/finalizers,verbs=update
 
-	klog.V(4).Info("Creating event broadcaster")
-	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartStructuredLogging(0)
-	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: kubeclientset.CoreV1().Events("")})
-	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
+func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	klog.Infof("Reconciling InstanceTemplate %s", req.NamespacedName)
 
-	controller := &Controller{
-		kubeclientset:           kubeclientset,
-		tpuclientset:           tpuclientset,
-		instanceTemplatesLister: instanceTemplateInformer.Lister(),
-		instanceTemplatesSynced: instanceTemplateInformer.Informer().HasSynced,
-		workqueue:               workqueue.NewTypedRateLimitingQueueWithConfig[string](workqueue.DefaultTypedControllerRateLimiter[string](), workqueue.TypedRateLimitingQueueConfig[string]{Name: "InstanceTemplates"}),
-		recorder:               recorder,
-	}
-
-	klog.Info("Setting up event handlers")
-	instanceTemplateInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.enqueueInstanceTemplate,
-		UpdateFunc: func(old, new interface{}) {
-			controller.enqueueInstanceTemplate(new)
-		},
-		DeleteFunc: controller.enqueueInstanceTemplate,
-	})
-
-	return controller
-}
-
-// Run will set up the event handlers for types we are interested in, as well
-// as syncing informer caches and starting workers. It will block until stopCh
-// is closed, at which point it will shutdown the workqueue and wait for
-// workers to finish processing their current work items.
-func (c *Controller) Run(workers int, stopCh <-chan struct{}) error {
-	defer utilruntime.HandleCrash()
-	defer c.workqueue.ShutDown()
-
-	klog.Info("Starting InstanceTemplate controller")
-
-	klog.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.instanceTemplatesSynced); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
-	}
-
-	klog.Info("Starting workers")
-	for i := 0; i < workers; i++ {
-		go wait.Until(c.runWorker, time.Second, stopCh)
-	}
-
-	klog.Info("Started workers")
-	<-stopCh
-	klog.Info("Shutting down workers")
-
-	return nil
-}
-
-func (c *Controller) runWorker() {
-	for c.processNextWorkItem() {
-	}
-}
-
-func (c *Controller) processNextWorkItem() bool {
-	key, shutdown := c.workqueue.Get()
-
-	if shutdown {
-		return false
-	}
-
-	err := func(key string) error {
-		defer c.workqueue.Done(key)
-		if err := c.syncHandler(key); err != nil {
-			c.workqueue.AddRateLimited(key)
-			return fmt.Errorf("error syncing %q: %s, requeuing", key, err.Error())
+	// 1. Fetch the InstanceTemplate instance
+	var instanceTemplate tpuv1alpha1.InstanceTemplate
+	if err := r.Get(ctx, req.NamespacedName, &instanceTemplate); err != nil {
+		if errors.IsNotFound(err) {
+			klog.Infof("InstanceTemplate %s not found. Ignoring since object must be deleted", req.NamespacedName)
+			return ctrl.Result{}, nil
 		}
-		c.workqueue.Forget(key)
-		klog.Infof("Successfully synced %q", key)
-		return nil
-	}(key)
-
-	if err != nil {
-		utilruntime.HandleError(err)
-		return true
+		klog.Errorf("Failed to get InstanceTemplate %s: %v", req.NamespacedName, err)
+		return ctrl.Result{}, err
 	}
 
-	return true
+	// 2. Check if the resource is being deleted
+	if !instanceTemplate.ObjectMeta.DeletionTimestamp.IsZero() {
+		klog.Infof("InstanceTemplate %s is being deleted", req.NamespacedName)
+		// TODO(b/500811406): Implement the standard finalizer pattern here to ensure clean teardown of external resources.
+		// When the resource is being deleted, we should execute cleanup logic and remove the finalizer.
+		return ctrl.Result{}, nil
+	}
+
+	// TODO: Implement actual reconciliation logic here
+
+	klog.Infof("Reconciliation finished for %s", req.NamespacedName)
+	return ctrl.Result{}, nil
 }
 
-func (c *Controller) syncHandler(key string) error {
-	namespace, name, err := cache.SplitMetaNamespaceKey(key)
-	if err != nil {
-		utilruntime.HandleError(fmt.Errorf("invalid resource key: %s", key))
-		return nil
-	}
-
-	instanceTemplate, err := c.instanceTemplatesLister.InstanceTemplates(namespace).Get(name)
-	if errors.IsNotFound(err) {
-		utilruntime.HandleError(fmt.Errorf("instancetemplate %q in workqueue no longer exists", key))
-		return nil
-	}
-
-	if err != nil {
-		return err
-	}
-
-	klog.Infof("Reconciling InstanceTemplate %s/%s", namespace, name)
-	klog.Infof("Spec: %+v", instanceTemplate.Spec)
-
-	c.recorder.Event(instanceTemplate, corev1.EventTypeNormal, "Synced", "InstanceTemplate synced successfully")
-	return nil
-}
-
-func (c *Controller) enqueueInstanceTemplate(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
-		utilruntime.HandleError(err)
-		return
-	}
-	c.workqueue.Add(key)
+// SetupWithManager sets up the controller with the Manager.
+func (r *InstanceTemplateReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("InstanceTemplateController")
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&tpuv1alpha1.InstanceTemplate{}).
+		Complete(r)
 }
