@@ -1,10 +1,11 @@
 package instancetemplate
 
 import (
-	"context"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,6 +27,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 		initialObject *tpuv1alpha1.InstanceTemplate
 		wantResult    reconcile.Result
 		wantErr       bool
+		wantFinalizers []string
 	}{
 		{
 			name: "resource_not_found",
@@ -39,7 +41,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantErr:    false,
 		},
 		{
-			name: "resource_found",
+			name: "resource_found_adds_finalizer",
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name:      "test-template",
@@ -55,6 +57,28 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: reconcile.Result{},
 			wantErr:    false,
+			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+		},
+		{
+			name: "resource_being_deleted_removes_finalizer",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-template",
+					Namespace: "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantFinalizers: []string{},
 		},
 	}
 
@@ -72,7 +96,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 				Recorder: record.NewFakeRecorder(10),
 			}
 
-			gotResult, err := r.Reconcile(context.Background(), tc.request)
+			gotResult, err := r.Reconcile(t.Context(), tc.request)
 
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
@@ -80,6 +104,29 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 
 			if diff := cmp.Diff(tc.wantResult, gotResult); diff != "" {
 				t.Errorf("Reconcile(%v) result mismatch (-want +got):\n%s", tc.request, diff)
+			}
+
+			if tc.wantFinalizers != nil {
+				var updatedObj tpuv1alpha1.InstanceTemplate
+				err := cl.Get(t.Context(), tc.request.NamespacedName, &updatedObj)
+				if err != nil {
+					if errors.IsNotFound(err) {
+						if len(tc.wantFinalizers) != 0 {
+							t.Errorf("Object not found, but wanted finalizers: %v", tc.wantFinalizers)
+						}
+						// Success: object is gone and we wanted no finalizers.
+					} else {
+						t.Errorf("Failed to get updated object: %v", err)
+					}
+				} else {
+					gotFinalizers := updatedObj.Finalizers
+					if gotFinalizers == nil {
+						gotFinalizers = []string{}
+					}
+					if diff := cmp.Diff(tc.wantFinalizers, gotFinalizers); diff != "" {
+						t.Errorf("Finalizers mismatch (-want +got):\n%s", diff)
+					}
+				}
 			}
 		})
 	}
