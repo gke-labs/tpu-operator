@@ -59,6 +59,7 @@ This project relies on automatic code generation for Kubernetes clients to maint
 
 * Use Git for source control.
 * When amending a commit, ensure that the `Change-Id` field in the commit message is preserved to update the existing Gerrit change rather than creating a new one.
+* When reading a commit or viewing diffs, ignore changes under the `vendor/` folder by default to focus on relevant code modifications (e.g., use `git show <commit> -- . ':!vendor'`).
 
 
 ## Style Guide

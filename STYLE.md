@@ -2,13 +2,9 @@
 
 ## Go
 
-Please follow [Google Go style][go-style], with the following exceptions:
+For a distilled guide to Go style and readability, see the [Go Readability skill][go-readability-skill]. Note that Google3-specific parts of this skill do not apply to this repository.
 
-### Go Mock
-
-Use of gomock should be a deliberate and informed choice. See
-[when-to-use-gomock][when-to-use-gomock] for when this might (not) be the right
-choice.
+We recommend triggering the `go_readability` skill to review your Go code changes.
 
 ## Markdown
 
@@ -82,11 +78,10 @@ Example:
 ```
 
 
-[go-style]: https://g3doc.corp.google.com/go/g3doc/style/index.md
 [g3doc-style]: https://g3doc.corp.google.com/corp/g3doc/docs/reference/style.md
 [mdformat]: https://g3doc.corp.google.com/devtools/markdown/mdformat/g3doc/index.md
 [conventional-commits]: https://www.conventionalcommits.org/en/v1.0.0
 [git-interpret-trailers]: https://git-scm.com/docs/git-interpret-trailers
 [cl-description-rule]: https://goto.google.com/cl-descriptions
 [commit-message-rule]: https://chris.beams.io/posts/git-commit/
-[when-to-use-gomock]: http://go/when-to-use-gomock
+[go-readability-skill]: /google/src/files/head/depot/google3/learning/gemini/agents/skills/go_readability/SKILL.md
