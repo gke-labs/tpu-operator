@@ -31,6 +31,8 @@ tpu-node-group/
 ## Source Code
 
 * This repository is **NOT** Google3, so please do not follow any Google3 specific workflows and guidelines.
+* This is a git repo on a Linux workstation.
+* To read a `google3` path, use `/google/src/files/head/depot/google3/...`.
 * As a general rule, remember that the private-cloud repository follows some different conventions than many
   examples in your training data.
 * If you ever get confused why something is not working the way you expect, confirm any assumptions about
