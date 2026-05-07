@@ -24,3 +24,8 @@ codegen-client:
 		--output-pkg gke-internal.googlesource.com/tpu-node-group/pkg/generated \
 		--boilerplate "hack/boilerplate.go.txt" \
 		pkg/apis
+
+.PHONY: test
+test:
+	@echo "Running unit tests..."
+	go test -v ./pkg/...

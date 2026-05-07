@@ -68,6 +68,20 @@ GKE Gerrit enables go/gitwatcher, so if your commit message contains a buganizer
 Bug: b/234567
 ```
 
+### Gerrit Footers and Agent Tracking
+
+When amending commits for Gerrit review, ensure that the `Change-Id` footer is preserved without duplication. To prevent the Gerrit `commit-msg` hook from appending a duplicate `Change-Id`, place an **empty line** immediately before the `Change-Id` line, keeping it in its own paragraph at the very end of the commit message.
+
+Additionally, if AI agents append conversation tracking IDs (`CONV=`), include only the **single most recent** `CONV=` line corresponding to the current conversation. Remove older, stacked `CONV=` entries to avoid footer clutter.
+
+Example:
+```text
+Bug: b/234567
+CONV=3480ad33-79f1-43a5-bf23-7201ad96c2d0
+
+Change-Id: I6ce475e821c12e68955a416038c7294f94edf587
+```
+
 ## TODO Style
 
 When adding TODOs in the codebase, always include a Buganizer issue ID in the format `TODO(b/xxxxx):`. This ensures that TODOs are tracked and can be followed up on.
