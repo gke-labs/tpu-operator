@@ -1,66 +1,116 @@
 package tpunodegroup
 
 import (
-	"context"
 	"testing"
-	"time"
+
+	"github.com/go-logr/logr"
+	"github.com/google/go-cmp/cmp"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
-	fakeclientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned/fake"
-	informers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/informers/externalversions"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
-	fakekubernetes "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/kubernetes/scheme"
 )
 
-func TestTPUNodeGroupController(t *testing.T) {
-	err := tpuapi.AddToScheme(scheme.Scheme)
-	if err != nil {
-		t.Fatalf("Error adding to scheme: %v", err)
+func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := tpuapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding TPU API to scheme: %v", err)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding AppsV1 to scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding CoreV1 to scheme: %v", err)
 	}
 
-	ctx := context.Background()
-	kubeClient := fakekubernetes.NewClientset()
-
-	// Use NewClientset instead of NewSimpleClientset as recommended
-	tpuClient := fakeclientset.NewClientset()
-
-	tpuInformerFactory := informers.NewSharedInformerFactory(tpuClient, time.Second*30)
-	informer := tpuInformerFactory.Tpu().V1alpha1().TPUNodeGroups()
-
-	controller := NewController(ctx, kubeClient, tpuClient, informer, &gce.MockIGMClient{}, &gce.MockInstanceClient{})
-
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-	tpuInformerFactory.Start(stopCh)
-
-	tpuNodeGroup := &tpuapi.TPUNodeGroup{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-tpu",
-			Namespace: "default",
+	tests := []struct {
+		name          string
+		request       reconcile.Request
+		initialObject *tpuapi.TPUNodeGroup
+		wantResult    reconcile.Result
+		wantErr       bool
+		wantDaemonSet bool
+	}{
+		{
+			name: "resource_not_found",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "non-existent",
+					Namespace: "default",
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
 		},
-		Spec: tpuapi.TPUNodeGroupSpec{
-			Project:      "test-project",
-			NodeLocation: "us-central1-a",
-			NodeCount:    1,
+		{
+			name: "resource_found_success",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			wantResult:    reconcile.Result{},
+			wantErr:       false,
+			wantDaemonSet: true,
 		},
 	}
 
-	err = tpuClient.Tracker().Add(tpuNodeGroup)
-	if err != nil {
-		t.Fatalf("Error adding TPUNodeGroup to tracker: %v", err)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			objs := []client.Object{}
+			if tc.initialObject != nil {
+				objs = append(objs, tc.initialObject)
+			}
 
-	err = informer.Informer().GetIndexer().Add(tpuNodeGroup)
-	if err != nil {
-		t.Fatalf("Error adding to informer cache: %v", err)
-	}
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+			k8sFakeClient := k8sfake.NewSimpleClientset()
 
-	objectRef := cache.ObjectName{Namespace: "default", Name: "test-tpu"}
-	err = controller.syncHandler(ctx, objectRef)
-	if err != nil {
-		t.Errorf("Expected no error, got %v", err)
+			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, &gce.MockIGMClient{}, &gce.MockInstanceClient{}, logr.Discard()).
+				WithRecorder(record.NewFakeRecorder(10))
+
+			gotResult, err := r.Reconcile(t.Context(), tc.request)
+
+			if gotErr := err != nil; gotErr != tc.wantErr {
+				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
+			}
+
+			if diff := cmp.Diff(tc.wantResult, gotResult); diff != "" {
+				t.Errorf("Reconcile(%v) result mismatch (-want +got):\n%s", tc.request, diff)
+			}
+
+			if tc.wantDaemonSet {
+				// Verify DaemonSet creation in the fake kubeclientset
+				_, err := k8sFakeClient.AppsV1().DaemonSets("default").Get(t.Context(), "tpu-device-plugin", metav1.GetOptions{})
+				if err != nil {
+					if errors.IsNotFound(err) {
+						t.Errorf("Expected DaemonSet 'tpu-device-plugin' to be created, but it was not found")
+					} else {
+						t.Errorf("Failed to get DaemonSet: %v", err)
+					}
+				}
+			}
+		})
 	}
 }

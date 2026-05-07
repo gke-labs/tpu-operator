@@ -119,7 +119,7 @@ func TestIterateInstances(t *testing.T) {
 			mockIt: &MockIterator{
 				err: fmt.Errorf("mock error"),
 			},
-			wantErr:       true,
+			wantErr: true,
 		},
 		{
 			name: "Empty",
