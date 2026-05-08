@@ -277,3 +277,64 @@ func TestInstanceClient_SetMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestNewManager(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("Success", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		mgr, err := NewManager(ctx, option.WithEndpoint(server.URL), option.WithHTTPClient(server.Client()))
+		if err != nil {
+			t.Fatalf("NewManager() unexpected error: %v", err)
+		}
+		if mgr == nil {
+			t.Fatalf("Expected non-nil Manager")
+		}
+
+		if err := mgr.Close(); err != nil {
+			t.Errorf("mgr.Close() unexpected error: %v", err)
+		}
+	})
+
+	t.Run("PartialFailureCleanup", func(t *testing.T) {
+		t.Parallel()
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		var closedClients []string
+		onClientCloseForTest := func(name string) {
+			closedClients = append(closedClients, name)
+		}
+
+		initIGMSuccess := func(ctx context.Context, opts ...option.ClientOption) (*compute.InstanceGroupManagersClient, error) {
+			return compute.NewInstanceGroupManagersRESTClient(ctx, append(opts, option.WithEndpoint(server.URL), option.WithHTTPClient(server.Client()))...)
+		}
+
+		initInstancesFailure := func(ctx context.Context, opts ...option.ClientOption) (*compute.InstancesClient, error) {
+			return nil, fmt.Errorf("forced instances client failure")
+		}
+
+		_, err := newManagerWithConstructors(
+			ctx,
+			initIGMSuccess,
+			initInstancesFailure,
+			onClientCloseForTest,
+		)
+
+		if err == nil {
+			t.Fatalf("Expected error due to forced failure, got nil")
+		}
+
+		// EXPLICITLY VERIFY that the first client's Close() was called properly
+		if len(closedClients) != 1 || closedClients[0] != "igm" {
+			t.Fatalf("Expected ['igm'] to be closed, got %v", closedClients)
+		}
+	})
+}

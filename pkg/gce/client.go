@@ -7,6 +7,7 @@ import (
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"google.golang.org/api/iterator"
+	"google.golang.org/api/option"
 )
 
 // IGMClient defines methods for interacting with Instance Group Managers.
@@ -32,16 +33,58 @@ type Manager struct {
 }
 
 // NewManager creates and initializes the GCE clients.
-func NewManager(ctx context.Context) (*Manager, error) {
-	igmClient, err := compute.NewInstanceGroupManagersRESTClient(ctx)
+func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, error) {
+	return newManagerWithConstructors(
+		ctx,
+		compute.NewInstanceGroupManagersRESTClient,
+		compute.NewInstancesRESTClient,
+		nil, // No observation hook needed in production
+		opts...,
+	)
+}
+
+type newIGMClientFunc func(context.Context, ...option.ClientOption) (*compute.InstanceGroupManagersClient, error)
+type newInstancesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstancesClient, error)
+
+// newManagerWithConstructors allows injecting dependencies internally for testing.
+func newManagerWithConstructors(
+	ctx context.Context,
+	newIGMClient newIGMClientFunc,
+	newInstancesClient newInstancesClientFunc,
+	onClientClose func(clientName string),
+	opts ...option.ClientOption,
+) (mgr *Manager, err error) {
+	var cleanups []func() error
+	defer func() {
+		if err != nil {
+			for i := len(cleanups) - 1; i >= 0; i-- {
+				_ = cleanups[i]()
+			}
+		}
+	}()
+
+	igmClient, err := newIGMClient(ctx, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create InstanceGroupManagers client: %w", err)
 	}
-	instancesClient, err := compute.NewInstancesRESTClient(ctx)
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("igm")
+		}
+		return igmClient.Close()
+	})
+
+	instancesClient, err := newInstancesClient(ctx, opts...)
 	if err != nil {
-		igmClient.Close()
 		return nil, fmt.Errorf("failed to create instances client: %w", err)
 	}
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("instances")
+		}
+		return instancesClient.Close()
+	})
+
 	return &Manager{igmClient: igmClient, instancesClient: instancesClient}, nil
 }
 
