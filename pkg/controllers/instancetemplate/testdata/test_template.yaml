@@ -1,0 +1,24 @@
+apiVersion: tpu.google.com/v1alpha1
+kind: InstanceTemplate
+metadata:
+  name: tpu-node-group-test-template
+  namespace: default
+spec:
+  project: gsc-nexus-xteam-shared-testing
+  machineType: tpu7x-standard-4t
+  image: projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320
+  bootDiskSizeGB: 250
+  diskType: pd-ssd
+  subnetwork: regions/us-central1/subnetworks/default
+  maintenancePolicy: TERMINATE
+  provisioningModel: SPOT
+  reservation: test-reservation
+  metadata:
+    key1: value1
+  networkTags:
+    - tag1
+    - tag2
+  serviceAccounts:
+    - email: default
+      scopes:
+        - cloud-platform

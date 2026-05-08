@@ -321,10 +321,15 @@ func TestNewManager(t *testing.T) {
 			return nil, fmt.Errorf("forced instances client failure")
 		}
 
+		initInstanceTemplatesDummy := func(ctx context.Context, opts ...option.ClientOption) (*compute.InstanceTemplatesClient, error) {
+			return nil, fmt.Errorf("should not be called")
+		}
+
 		_, err := newManagerWithConstructors(
 			ctx,
 			initIGMSuccess,
 			initInstancesFailure,
+			initInstanceTemplatesDummy,
 			onClientCloseForTest,
 		)
 

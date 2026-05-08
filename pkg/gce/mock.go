@@ -41,3 +41,34 @@ func (m *MockInstanceClient) SetMetadata(ctx context.Context, req *computepb.Set
 	}
 	return nil, nil
 }
+
+// MockInstanceTemplateClient is a mock implementation of the gce.InstanceTemplateClient.
+type MockInstanceTemplateClient struct {
+	GetFunc    func(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error)
+	InsertFunc func(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error)
+	DeleteFunc func(ctx context.Context, project, name string) (*compute.Operation, error)
+}
+
+// Get calls the mocked GetFunc.
+func (m *MockInstanceTemplateClient) Get(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, project, name)
+	}
+	return nil, nil
+}
+
+// Insert calls the mocked InsertFunc.
+func (m *MockInstanceTemplateClient) Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error) {
+	if m.InsertFunc != nil {
+		return m.InsertFunc(ctx, project, template)
+	}
+	return nil, nil
+}
+
+// Delete calls the mocked DeleteFunc.
+func (m *MockInstanceTemplateClient) Delete(ctx context.Context, project, name string) (*compute.Operation, error) {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, project, name)
+	}
+	return nil, nil
+}

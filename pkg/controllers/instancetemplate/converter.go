@@ -49,6 +49,13 @@ func ToGCEInstanceTemplate(cr *tpuv1alpha1.InstanceTemplate) *computepb.Instance
 				Subnetwork: cr.Spec.Subnetwork,
 			},
 		}
+	} else {
+		defaultNetwork := "global/networks/default"
+		properties.NetworkInterfaces = []*computepb.NetworkInterface{
+			{
+				Network: &defaultNetwork,
+			},
+		}
 	}
 
 	// Tags

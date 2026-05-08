@@ -2,10 +2,14 @@ package gce
 
 import (
 	"context"
+	"errors"
 	"fmt"
+
+	"net/http"
 
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
@@ -26,10 +30,18 @@ type InstanceClient interface {
 	SetMetadata(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error)
 }
 
+// InstanceTemplateClient defines methods for interacting with Instance Templates.
+type InstanceTemplateClient interface {
+	Get(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error)
+	Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error)
+	Delete(ctx context.Context, project, name string) (*compute.Operation, error)
+}
+
 // Manager provides a centralized point to manage various GCE resources.
 type Manager struct {
-	igmClient       *compute.InstanceGroupManagersClient
-	instancesClient *compute.InstancesClient
+	igmClient               *compute.InstanceGroupManagersClient
+	instancesClient         *compute.InstancesClient
+	instanceTemplatesClient *compute.InstanceTemplatesClient
 }
 
 // NewManager creates and initializes the GCE clients.
@@ -38,6 +50,7 @@ func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, err
 		ctx,
 		compute.NewInstanceGroupManagersRESTClient,
 		compute.NewInstancesRESTClient,
+		compute.NewInstanceTemplatesRESTClient,
 		nil, // No observation hook needed in production
 		opts...,
 	)
@@ -45,12 +58,14 @@ func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, err
 
 type newIGMClientFunc func(context.Context, ...option.ClientOption) (*compute.InstanceGroupManagersClient, error)
 type newInstancesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstancesClient, error)
+type newInstanceTemplatesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstanceTemplatesClient, error)
 
 // newManagerWithConstructors allows injecting dependencies internally for testing.
 func newManagerWithConstructors(
 	ctx context.Context,
 	newIGMClient newIGMClientFunc,
 	newInstancesClient newInstancesClientFunc,
+	newInstanceTemplatesClient newInstanceTemplatesClientFunc,
 	onClientClose func(clientName string),
 	opts ...option.ClientOption,
 ) (mgr *Manager, err error) {
@@ -85,7 +100,22 @@ func newManagerWithConstructors(
 		return instancesClient.Close()
 	})
 
-	return &Manager{igmClient: igmClient, instancesClient: instancesClient}, nil
+	instanceTemplatesClient, err := newInstanceTemplatesClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create instance templates client: %w", err)
+	}
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("instanceTemplates")
+		}
+		return instanceTemplatesClient.Close()
+	})
+
+	return &Manager{
+		igmClient:               igmClient,
+		instancesClient:         instancesClient,
+		instanceTemplatesClient: instanceTemplatesClient,
+	}, nil
 }
 
 // IGM returns the IGMClient.
@@ -96,6 +126,11 @@ func (m *Manager) IGM() IGMClient {
 // Instances returns the InstanceClient.
 func (m *Manager) Instances() InstanceClient {
 	return &instanceClientWrapper{client: m.instancesClient}
+}
+
+// InstanceTemplates returns the InstanceTemplateClient.
+func (m *Manager) InstanceTemplates() InstanceTemplateClient {
+	return &instanceTemplateClientWrapper{client: m.instanceTemplatesClient}
 }
 
 type igmClientWrapper struct {
@@ -139,6 +174,34 @@ func (w *instanceClientWrapper) SetMetadata(ctx context.Context, req *computepb.
 	return w.client.SetMetadata(ctx, req)
 }
 
+type instanceTemplateClientWrapper struct {
+	client *compute.InstanceTemplatesClient
+}
+
+func (w *instanceTemplateClientWrapper) Get(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error) {
+	req := &computepb.GetInstanceTemplateRequest{
+		Project:          project,
+		InstanceTemplate: name,
+	}
+	return w.client.Get(ctx, req)
+}
+
+func (w *instanceTemplateClientWrapper) Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error) {
+	req := &computepb.InsertInstanceTemplateRequest{
+		Project:                  project,
+		InstanceTemplateResource: template,
+	}
+	return w.client.Insert(ctx, req)
+}
+
+func (w *instanceTemplateClientWrapper) Delete(ctx context.Context, project, name string) (*compute.Operation, error) {
+	req := &computepb.DeleteInstanceTemplateRequest{
+		Project:          project,
+		InstanceTemplate: name,
+	}
+	return w.client.Delete(ctx, req)
+}
+
 // Close closes the underlying clients.
 func (m *Manager) Close() error {
 	var errs []error
@@ -148,8 +211,23 @@ func (m *Manager) Close() error {
 	if err := m.instancesClient.Close(); err != nil {
 		errs = append(errs, err)
 	}
+	if err := m.instanceTemplatesClient.Close(); err != nil {
+		errs = append(errs, err)
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("errors closing clients: %v", errs)
 	}
 	return nil
+}
+
+// IsNotFound returns true if the error is a GCE 404.
+func IsNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ae *googleapi.Error
+	if errors.As(err, &ae) {
+		return ae.Code == http.StatusNotFound
+	}
+	return false
 }

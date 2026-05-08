@@ -71,7 +71,8 @@ func main() {
 	if err = (&instancetemplate.InstanceTemplateReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Log:    ctrl.Log.WithName("controller").WithName("instancetemplate"),
+		Log: ctrl.Log.WithName("controller").WithName("instancetemplate"),
+		GCE: gceManager.InstanceTemplates(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Error setting up controller")
 		os.Exit(1)

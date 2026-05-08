@@ -5,7 +5,7 @@ import (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.instanceTemplateURI) != has(self.instanceConfig)",message="Exactly one of instanceTemplateURI or instanceConfig must be specified"
-// TPUNodeGroupSpec defines the desired state of a TPUNodeGroup
+// TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
 	// +required
@@ -59,7 +59,7 @@ type ServiceAccount struct {
 	Scopes []string `json:"scopes"`
 }
 
-// InstanceConfig defines the GCE VM configuration for the nodes
+// InstanceConfig defines the GCE VM configuration for the nodes.
 type InstanceConfig struct {
 	// MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
 	// +required
@@ -107,7 +107,7 @@ type InstanceConfig struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// BootstrapConfig defines settings for automated node bootstrapping
+// BootstrapConfig defines settings for automated node bootstrapping.
 type BootstrapConfig struct {
 	// Enabled indicates if the controller should bootstrap the nodes.
 	// If omitted, the controller will not bootstrap the nodes.
@@ -119,7 +119,7 @@ type BootstrapConfig struct {
 	Version *string `json:"version,omitempty"`
 }
 
-// TPUNodeGroupStatus defines the observed state of a TPUNodeGroup
+// TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
 type TPUNodeGroupStatus struct {
 	// Conditions represent the latest available observations of an object's current state.
 	// +optional
@@ -149,7 +149,7 @@ type NodeSummary struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 
-// TPUNodeGroup is the Schema for the tpunodegroups API
+// TPUNodeGroup is the Schema for the tpunodegroups API.
 type TPUNodeGroup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -160,7 +160,7 @@ type TPUNodeGroup struct {
 
 // +kubebuilder:object:root=true
 
-// TPUNodeGroupList contains a list of TPUNodeGroup
+// TPUNodeGroupList contains a list of TPUNodeGroup.
 type TPUNodeGroupList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
