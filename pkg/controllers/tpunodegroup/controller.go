@@ -3,150 +3,125 @@ package tpunodegroup
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"golang.org/x/time/rate"
-
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"k8s.io/apimachinery/pkg/util/wait"
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/cache"
-	"k8s.io/client-go/util/workqueue"
-	"k8s.io/klog/v2"
+	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup/deviceplugin"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
-	clientset "gke-internal.googlesource.com/tpu-node-group/pkg/generated/clientset/versioned"
-	informers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/informers/externalversions/tpu/v1alpha1"
-	listers "gke-internal.googlesource.com/tpu-node-group/pkg/generated/listers/tpu/v1alpha1"
 )
 
-const controllerAgentName = "tpunodegroup-controller"
-
-// Controller is the controller implementation for TPUNodeGroup resources
-type Controller struct {
-	// kubeclientset is a standard kubernetes clientset
-	kubeclientset kubernetes.Interface
-	// tpuclientset is a clientset for the TPUNodeGroup API
-	tpuclientset clientset.Interface
-
-	tpuNodeGroupsLister listers.TPUNodeGroupLister
-	tpuNodeGroupsSynced cache.InformerSynced
-
-	// workqueue is a rate limited work queue.
-	workqueue workqueue.TypedRateLimitingInterface[cache.ObjectName]
-
-	// reconciler handles the business logic of reconciliation
-	reconciler *Reconciler
+// TPUNodeGroupReconciler reconciles a TPUNodeGroup object.
+type TPUNodeGroupReconciler struct {
+	client.Client
+	scheme         *runtime.Scheme
+	recorder       record.EventRecorder
+	igmClient      gce.IGMClient
+	instanceClient gce.InstanceClient
+	kubeClientset  kubernetes.Interface
+	Log            logr.Logger
 }
 
-// NewController returns a new tpunodegroup controller
-func NewController(
-	ctx context.Context,
-	kubeclientset kubernetes.Interface,
-	tpuclientset clientset.Interface,
-	tpuNodeGroupInformer informers.TPUNodeGroupInformer,
-	igmClient gce.IGMClient,
-	instanceClient gce.InstanceClient) *Controller {
-	logger := klog.FromContext(ctx)
-
-	ratelimiter := workqueue.NewTypedMaxOfRateLimiter(
-		workqueue.NewTypedItemExponentialFailureRateLimiter[cache.ObjectName](5*time.Millisecond, 1000*time.Second),
-		&workqueue.TypedBucketRateLimiter[cache.ObjectName]{Limiter: rate.NewLimiter(rate.Limit(50), 300)},
-	)
-
-	controller := &Controller{
-		kubeclientset:       kubeclientset,
-		tpuclientset:        tpuclientset,
-		tpuNodeGroupsLister: tpuNodeGroupInformer.Lister(),
-		tpuNodeGroupsSynced: tpuNodeGroupInformer.Informer().HasSynced,
-		workqueue:           workqueue.NewTypedRateLimitingQueue(ratelimiter),
-		reconciler:          NewReconciler(kubeclientset, tpuclientset, tpuNodeGroupInformer.Lister(), igmClient, instanceClient),
+// NewTPUNodeGroupReconciler creates a new TPUNodeGroupReconciler.
+func NewTPUNodeGroupReconciler(client client.Client, scheme *runtime.Scheme, kubeClientset kubernetes.Interface, igmClient gce.IGMClient, instanceClient gce.InstanceClient, log logr.Logger) *TPUNodeGroupReconciler {
+	return &TPUNodeGroupReconciler{
+		Client:         client,
+		scheme:         scheme,
+		kubeClientset:  kubeClientset,
+		igmClient:      igmClient,
+		instanceClient: instanceClient,
+		Log:            log,
 	}
-
-	logger.Info("Setting up event handlers")
-	// Set up an event handler for when TPUNodeGroup resources change
-	tpuNodeGroupInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.enqueueTPUNodeGroup,
-		UpdateFunc: func(old, new interface{}) {
-			controller.enqueueTPUNodeGroup(new)
-		},
-		DeleteFunc: controller.enqueueTPUNodeGroup,
-	})
-
-	return controller
 }
 
-// Run will set up the event handlers, as well as syncing informer caches and starting workers.
-func (c *Controller) Run(ctx context.Context, workers int) error {
-	defer utilruntime.HandleCrash()
-	defer c.workqueue.ShutDown()
-	logger := klog.FromContext(ctx)
+// WithRecorder sets the event recorder for the reconciler (useful for testing).
+func (r *TPUNodeGroupReconciler) WithRecorder(recorder record.EventRecorder) *TPUNodeGroupReconciler {
+	r.recorder = recorder
+	return r
+}
 
-	logger.Info("Starting TPUNodeGroup controller")
+// +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups/finalizers,verbs=update
 
-	logger.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(ctx.Done(), c.tpuNodeGroupsSynced); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+// Reconcile is the main entry point for reconciling a TPUNodeGroup.
+func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	logger := r.Log.WithValues("req", req)
+
+	// 1. Fetch the TPUNodeGroup resource
+	var tpuNodeGroup tpuapi.TPUNodeGroup
+	if err := r.Get(ctx, req.NamespacedName, &tpuNodeGroup); err != nil {
+		if errors.IsNotFound(err) {
+			logger.Info("TPUNodeGroup no longer exists")
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
 	}
 
-	logger.Info("Starting workers", "count", workers)
-	for i := 0; i < workers; i++ {
-		go wait.UntilWithContext(ctx, c.runWorker, time.Second)
+	logger.Info("Reconciling TPUNodeGroup")
+
+	// Step 1: Reconcile Resource Policy
+	if err := r.reconcileResourcePolicy(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile resource policy: %w", err)
 	}
 
-	logger.Info("Started workers")
-	<-ctx.Done()
-	logger.Info("Shutting down workers")
+	// Step 2: Reconcile Instance Template
+	if err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
+	}
 
+	// Step 3: Reconcile Managed Instance Group
+	if err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
+	}
+
+	// Step 4: Reconcile Node Bootstrapping
+	if err := r.reconcileNodeBootstrapping(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile node bootstrapping: %w", err)
+	}
+
+	// Step 5: Reconcile Device Plugin
+	if err := deviceplugin.Reconcile(ctx, r.kubeClientset, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile device plugin: %w", err)
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *TPUNodeGroupReconciler) reconcileResourcePolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	// TODO: Implement ResourcePolicy reconciliation (Composite Pattern).
+	// Check if multi-host and if policy exists, create if not.
 	return nil
 }
 
-// runWorker is a long-running function that will continually call the
-// processNextWorkItem function in order to read and process a message on the
-// workqueue.
-func (c *Controller) runWorker(ctx context.Context) {
-	for c.processNextWorkItem(ctx) {
-	}
+func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	// TODO: Implement InstanceTemplate reconciliation.
+	// Check if user provided or if we need to create one.
+	return nil
 }
 
-// processNextWorkItem will read a single work item off the workqueue and
-// attempt to process it, by calling the syncHandler.
-func (c *Controller) processNextWorkItem(ctx context.Context) bool {
-	objRef, shutdown := c.workqueue.Get()
-	logger := klog.FromContext(ctx)
-
-	if shutdown {
-		return false
-	}
-
-	defer c.workqueue.Done(objRef)
-
-	err := c.syncHandler(ctx, objRef)
-	if err == nil {
-		c.workqueue.Forget(objRef)
-		logger.Info("Successfully synced", "objectName", objRef)
-		return true
-	}
-
-	utilruntime.HandleErrorWithContext(ctx, err, "Error syncing; requeuing for later retry", "objectReference", objRef)
-	c.workqueue.AddRateLimited(objRef)
-	return true
+func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	// TODO: Implement MIG reconciliation.
+	// Create MIG in bulk mode referencing policy and template.
+	return nil
 }
 
-// syncHandler compares the actual state with the desired, and attempts to
-// converge the two.
-func (c *Controller) syncHandler(ctx context.Context, objectRef cache.ObjectName) error {
-	// Delegate the work to the reconciler
-	return c.reconciler.Reconcile(ctx, objectRef)
+func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	// TODO: Implement Node Bootstrapping check.
+	// Watch nodes, check for ready status, and update TPUNodeGroup status.
+	return nil
 }
 
-// enqueueTPUNodeGroup takes a TPUNodeGroup resource and converts it into a namespace/name
-// string which is then put onto the work queue.
-func (c *Controller) enqueueTPUNodeGroup(obj interface{}) {
-	if objectRef, err := cache.ObjectToName(obj); err != nil {
-		utilruntime.HandleError(err)
-		return
-	} else {
-		c.workqueue.Add(objectRef)
-	}
+// SetupWithManager sets up the controller with the Manager.
+func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.recorder = mgr.GetEventRecorderFor("TPUNodeGroupController")
+	return ctrl.NewControllerManagedBy(mgr).
+		For(&tpuapi.TPUNodeGroup{}).
+		Complete(r)
 }

@@ -22,11 +22,11 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 	_ = tpuv1alpha1.AddToScheme(scheme)
 
 	tests := []struct {
-		name          string
-		request       reconcile.Request
-		initialObject *tpuv1alpha1.InstanceTemplate
-		wantResult    reconcile.Result
-		wantErr       bool
+		name           string
+		request        reconcile.Request
+		initialObject  *tpuv1alpha1.InstanceTemplate
+		wantResult     reconcile.Result
+		wantErr        bool
 		wantFinalizers []string
 	}{
 		{
@@ -55,8 +55,8 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 				},
 				Spec: tpuv1alpha1.InstanceTemplateSpec{},
 			},
-			wantResult: reconcile.Result{},
-			wantErr:    false,
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
 		},
 		{
@@ -69,15 +69,15 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			},
 			initialObject: &tpuv1alpha1.InstanceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-template",
-					Namespace: "default",
+					Name:              "test-template",
+					Namespace:         "default",
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
-					Finalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+					Finalizers:        []string{"tpu.google.com/instancetemplate-cleanup"},
 				},
 				Spec: tpuv1alpha1.InstanceTemplateSpec{},
 			},
-			wantResult: reconcile.Result{},
-			wantErr:    false,
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
 			wantFinalizers: []string{},
 		},
 	}

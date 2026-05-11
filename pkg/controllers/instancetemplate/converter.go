@@ -3,14 +3,14 @@ package instancetemplate
 import (
 	"sort"
 
-	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"k8s.io/utils/ptr"
 )
 
 const (
 	consumeReservationTypeSpecificReservation = "SPECIFIC_RESERVATION"
-	reservationNameKey                     = "compute.googleapis.com/reservation-name"
+	reservationNameKey                        = "compute.googleapis.com/reservation-name"
 )
 
 // ToGCEInstanceTemplate converts an InstanceTemplate CR to GCE API InstanceTemplate.
@@ -108,7 +108,7 @@ func buildBootDisk(image *string, bootDiskSizeGB *int32, diskType *string) []*co
 	}
 
 	disk := &computepb.AttachedDisk{
-		Boot: ptr.To(true),
+		Boot:             ptr.To(true),
 		InitializeParams: &computepb.AttachedDiskInitializeParams{},
 	}
 	if image != nil {
