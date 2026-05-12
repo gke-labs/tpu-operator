@@ -187,8 +187,8 @@ spec:
                   - type
                   type: object
                 type: array
-              templateURI:
-                description: TemplateURI is the GCE URI of the created template.
+              uri:
+                description: URI is the GCE URI of the created template.
                 type: string
             type: object
         type: object

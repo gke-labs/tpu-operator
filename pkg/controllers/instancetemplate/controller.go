@@ -111,7 +111,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// 4. Update Status
 	base := instanceTemplate.DeepCopy()
-	instanceTemplate.Status.TemplateURI = gceTemplate.GetSelfLink()
+	instanceTemplate.Status.URI = gceTemplate.GetSelfLink()
 	instanceTemplate.Status.Conditions = []metav1.Condition{
 		{
 			Type:               "Ready",

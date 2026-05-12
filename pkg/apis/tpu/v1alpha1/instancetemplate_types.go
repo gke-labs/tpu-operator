@@ -33,9 +33,9 @@ type InstanceTemplateStatus struct {
 	// Conditions represent the latest available observations of an object's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-	// TemplateURI is the GCE URI of the created template.
+	// URI is the GCE URI of the created template.
 	// +optional
-	TemplateURI string `json:"templateURI,omitempty"`
+	URI string `json:"uri,omitempty"`
 }
 
 // +genclient
