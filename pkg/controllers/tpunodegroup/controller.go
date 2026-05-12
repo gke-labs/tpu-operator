@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -126,6 +127,11 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile device plugin: %w", err)
 	}
 
+	if tpuNodeGroup.Status.NodeSummary != nil && tpuNodeGroup.Status.NodeSummary.Ready < tpuNodeGroup.Status.NodeSummary.Total {
+		logger.Info("Nodes are still joining or bootstrapping, requeuing", "ready", tpuNodeGroup.Status.NodeSummary.Ready, "total", tpuNodeGroup.Status.NodeSummary.Total)
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -212,7 +218,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 }
 
 func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	bootstrapper := NewNodeBootstrapper(r.Client, r.igmClient)
+	bootstrapper := NewNodeBootstrapper(r.Client, r.igmClient, r.instanceClient)
 	return bootstrapper.ReconcileNodeJoin(ctx, group)
 }
 

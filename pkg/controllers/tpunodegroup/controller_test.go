@@ -1,7 +1,9 @@
 package tpunodegroup
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
@@ -18,6 +20,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	compute "cloud.google.com/go/compute/apiv1"
+	"cloud.google.com/go/compute/apiv1/computepb"
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	"k8s.io/utils/ptr"
@@ -40,11 +44,13 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		request           reconcile.Request
 		initialObject     *tpuapi.TPUNodeGroup
 		additionalObjects []client.Object
+		nodes             []corev1.Node
 		wantResult        reconcile.Result
 		wantErr           bool
 		wantDaemonSet     bool
 		wantStatus        *tpuapi.NodeSummary
 		wantConditions    []metav1.Condition
+		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
 	}{
 		{
 			name: "resource_not_found",
@@ -74,6 +80,75 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Project:      "test-project",
 					NodeLocation: "us-central1-a",
 					NodeCount:    1,
+					BootstrapKubernetes: &tpuapi.BootstrapConfig{
+						Enabled:        true,
+						ControlPlaneIP: "1.2.3.4",
+					},
+				},
+			},
+			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantErr:       false,
+			wantDaemonSet: true,
+			wantStatus: &tpuapi.NodeSummary{
+				Total:       1,
+				Ready:       0,
+				Reconciling: 1,
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{
+						{
+							Instance:       ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-0"),
+							InstanceStatus: ptr.To("RUNNING"),
+						},
+					}, nil
+				}
+				inst.GetFunc = func(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error) {
+					return &computepb.Instance{
+						Name: ptr.To("test-tpu-0"),
+						Metadata: &computepb.Metadata{
+							Fingerprint: ptr.To("fingerprint"),
+							Items: []*computepb.Items{
+								{Key: ptr.To("existing-key"), Value: ptr.To("existing-value")},
+							},
+						},
+					}, nil
+				}
+				inst.SetMetadataFunc = func(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error) {
+					return &compute.Operation{}, nil
+				}
+			},
+		},
+		{
+			name: "resource_found_bootstrapping_disabled",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu-disabled",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu-disabled",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+					BootstrapKubernetes: &tpuapi.BootstrapConfig{
+						Enabled: false,
+					},
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-tpu-0"},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
 				},
 			},
 			wantResult:    reconcile.Result{},
@@ -81,8 +156,18 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantDaemonSet: true,
 			wantStatus: &tpuapi.NodeSummary{
 				Total:       1,
-				Ready:       0,
-				Reconciling: 1,
+				Ready:       1,
+				Reconciling: 0,
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{
+						{
+							Instance:       ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-0"),
+							InstanceStatus: ptr.To("RUNNING"),
+						},
+					}, nil
+				}
 			},
 		},
 		{
@@ -202,6 +287,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				objs = append(objs, tc.initialObject)
 			}
 			objs = append(objs, tc.additionalObjects...)
+			for i := range tc.nodes {
+				objs = append(objs, &tc.nodes[i])
+			}
 
 			builder := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...)
 			if tc.initialObject != nil {
@@ -210,7 +298,13 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			cl := builder.Build()
 			k8sFakeClient := k8sfake.NewSimpleClientset()
 
-			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, &gce.MockIGMClient{}, &gce.MockInstanceClient{}, logr.Discard()).
+			igm := &gce.MockIGMClient{}
+			inst := &gce.MockInstanceClient{}
+			if tc.setupMocks != nil {
+				tc.setupMocks(igm, inst)
+			}
+
+			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, igm, inst, logr.Discard()).
 				WithRecorder(record.NewFakeRecorder(10))
 
 			gotResult, err := r.Reconcile(t.Context(), tc.request)

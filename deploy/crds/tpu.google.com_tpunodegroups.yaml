@@ -48,6 +48,11 @@ spec:
                 description: BootstrapKubernetes defines if and how the controller
                   should install K8s components.
                 properties:
+                  controlPlaneIP:
+                    description: |-
+                      ControlPlaneIP is the IP address of the Kubernetes control plane.
+                      Required when Enabled is true.
+                    type: string
                   enabled:
                     description: |-
                       Enabled indicates if the controller should bootstrap the nodes.
@@ -57,6 +62,10 @@ spec:
                     description: Version is the Kubernetes version to install.
                     type: string
                 type: object
+                x-kubernetes-validations:
+                - message: controlPlaneIP is required when bootstrapping is enabled
+                  rule: '!self.enabled || (has(self.controlPlaneIP) && self.controlPlaneIP
+                    != '''')'
               instanceConfig:
                 description: |-
                   InstanceConfig allows the controller to generate an instance template.

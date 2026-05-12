@@ -109,6 +109,7 @@ type InstanceConfig struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
+// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.controlPlaneIP) && self.controlPlaneIP != '')",message="controlPlaneIP is required when bootstrapping is enabled"
 // BootstrapConfig defines settings for automated node bootstrapping.
 type BootstrapConfig struct {
 	// Enabled indicates if the controller should bootstrap the nodes.
@@ -119,6 +120,11 @@ type BootstrapConfig struct {
 	// Version is the Kubernetes version to install.
 	// +optional
 	Version *string `json:"version,omitempty"`
+
+	// ControlPlaneIP is the IP address of the Kubernetes control plane.
+	// Required when Enabled is true.
+	// +optional
+	ControlPlaneIP string `json:"controlPlaneIP,omitempty"`
 }
 
 // TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.

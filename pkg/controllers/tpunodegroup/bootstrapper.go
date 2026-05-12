@@ -10,25 +10,30 @@ import (
 	"strings"
 	"time"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // NodeBootstrapper handles node bootstrapping logic.
 type NodeBootstrapper struct {
-	client client.Client
-	igm    gce.IGMClient
+	client   client.Client
+	igm      gce.IGMClient
+	instance gce.InstanceClient
 }
 
 // NewNodeBootstrapper creates a new NodeBootstrapper.
-func NewNodeBootstrapper(client client.Client, igm gce.IGMClient) *NodeBootstrapper {
+func NewNodeBootstrapper(client client.Client, igm gce.IGMClient, instance gce.InstanceClient) *NodeBootstrapper {
 	return &NodeBootstrapper{
-		client: client,
-		igm:    igm,
+		client:   client,
+		igm:      igm,
+		instance: instance,
 	}
 }
 
@@ -152,4 +157,126 @@ func (b *NodeBootstrapper) getCAHash(ctx context.Context) (string, error) {
 
 	hash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	return fmt.Sprintf("sha256:%x", hash), nil
+}
+
+// InjectJoinTokens generates and injects join tokens into running instances.
+func (b *NodeBootstrapper) InjectJoinTokens(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	migName := group.Name // TODO(b/500810349): Get actual MIG name.
+	instances, err := b.igm.ListManagedInstances(ctx, group.Spec.Project, group.Spec.NodeLocation, migName)
+	if err != nil {
+		return fmt.Errorf("failed to list managed instances: %w", err)
+	}
+
+	cpIP := group.Spec.BootstrapKubernetes.ControlPlaneIP
+
+	caHash, err := b.getCAHash(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get CA hash: %w", err)
+	}
+
+	var errs []error
+	for _, inst := range instances {
+		if inst.InstanceStatus == nil || *inst.InstanceStatus != "RUNNING" {
+			continue
+		}
+
+		instanceName := instanceShortName(inst.GetInstance())
+		if instanceName == "" {
+			errs = append(errs, fmt.Errorf("failed to get instance name from URL: %s", inst.GetInstance()))
+			continue
+		}
+
+		// TODO(b/500810349): Calling b.instance.Get inside a loop results in O(N) GCE API calls per reconcile loop.
+		// For large node groups, this risks quota exhaustion and slow reconciliations.
+		// Consider fetching in bulk or caching.
+		req := &computepb.GetInstanceRequest{
+			Project:  group.Spec.Project,
+			Zone:     group.Spec.NodeLocation,
+			Instance: instanceName,
+		}
+		gceInst, err := b.instance.Get(ctx, req)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to get instance %s: %w", instanceName, err))
+			continue
+		}
+
+		hasToken := false
+		var existingItems []*computepb.Items
+		var fingerprint *string
+		if gceInst.Metadata != nil {
+			fingerprint = gceInst.Metadata.Fingerprint
+			existingItems = gceInst.Metadata.Items
+			for _, item := range gceInst.Metadata.Items {
+				if item.Key != nil && *item.Key == "kubeadm-join-token" {
+					hasToken = true
+					break
+				}
+			}
+		}
+
+		if hasToken {
+			continue
+		}
+
+		token, err := b.generateBootstrapToken(ctx)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to generate bootstrap token: %w", err))
+			continue
+		}
+
+		updates := map[string]string{
+			"kubeadm-join-token":       token,
+			"kubeadm-control-plane-ip": cpIP,
+			"kubeadm-ca-hash":          caHash,
+		}
+		newItems := mergeMetadataItems(existingItems, updates)
+
+		setReq := &computepb.SetMetadataInstanceRequest{
+			Project:  group.Spec.Project,
+			Zone:     group.Spec.NodeLocation,
+			Instance: instanceName,
+			MetadataResource: &computepb.Metadata{
+				Fingerprint: fingerprint,
+				Items:       newItems,
+			},
+		}
+
+		_, err = b.instance.SetMetadata(ctx, setReq)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to set metadata for instance %s: %w", instanceName, err))
+			continue
+		}
+	}
+
+	if agg := utilerrors.NewAggregate(errs); agg != nil {
+		return agg
+	}
+	return nil
+}
+
+// mergeMetadataItems merges existing metadata items with updates, overwriting existing keys if present.
+func mergeMetadataItems(existing []*computepb.Items, updates map[string]string) []*computepb.Items {
+	merged := make([]*computepb.Items, 0, len(existing)+len(updates))
+	seenUpdates := make(map[string]bool)
+
+	for _, item := range existing {
+		if item.Key == nil {
+			continue
+		}
+		key := *item.Key
+		if val, ok := updates[key]; ok {
+			merged = append(merged, &computepb.Items{Key: proto.String(key), Value: proto.String(val)})
+			seenUpdates[key] = true
+		} else {
+			merged = append(merged, item)
+		}
+	}
+
+	for key, val := range updates {
+		if !seenUpdates[key] {
+			merged = append(merged, &computepb.Items{Key: proto.String(key), Value: proto.String(val)})
+		}
+	}
+
+	return merged
 }
