@@ -2,7 +2,14 @@ package tpunodegroup
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
+	"math/big"
+	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/google/go-cmp/cmp"
@@ -153,4 +160,91 @@ func TestNodeBootstrapper_ReconcileNodeJoin(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNodeBootstrapper_generateBootstrapToken(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding CoreV1 to scheme: %v", err)
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	bootstrapper := NewNodeBootstrapper(cl, nil)
+
+	token, err := bootstrapper.generateBootstrapToken(t.Context())
+	if err != nil {
+		t.Fatalf("generateBootstrapToken() error = %v", err)
+	}
+
+	if token == "" {
+		t.Errorf("generateBootstrapToken() returned empty token")
+	}
+
+	var secretList corev1.SecretList
+	if err := cl.List(t.Context(), &secretList, client.InNamespace("kube-system")); err != nil {
+		t.Fatalf("Failed to list secrets: %v", err)
+	}
+
+	if len(secretList.Items) != 1 {
+		t.Errorf("Expected 1 secret, got %d", len(secretList.Items))
+	}
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 2 {
+		t.Errorf("Invalid token format: %s", token)
+	}
+}
+
+func TestNodeBootstrapper_getCAHash(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding CoreV1 to scheme: %v", err)
+	}
+
+	caCertPEM := generateTestCACert(t)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-root-ca.crt",
+			Namespace: "kube-system",
+		},
+		Data: map[string]string{
+			"ca.crt": caCertPEM,
+		},
+	}
+
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
+	bootstrapper := NewNodeBootstrapper(cl, nil)
+
+	hash, err := bootstrapper.getCAHash(t.Context())
+	if err != nil {
+		t.Fatalf("getCAHash() error = %v", err)
+	}
+
+	if !strings.HasPrefix(hash, "sha256:") {
+		t.Errorf("Invalid hash format: %s", hash)
+	}
+}
+
+func generateTestCACert(t *testing.T) string {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(1 * time.Hour),
+		IsCA:         true,
+		KeyUsage:     x509.KeyUsageCertSign,
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v", err)
+	}
+
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+	return string(pemBytes)
 }
