@@ -41,7 +41,7 @@ type TPUNodeGroupSpec struct {
 	// Topology specifies the physical arrangement of the TPU chips.
 	// Required for multi-host slices. If omitted, assumes single-host.
 	// +optional
-	Topology *string `json:"topology,omitempty"`
+	Topology string `json:"topology,omitempty"`
 
 	// BootstrapKubernetes defines if and how the controller should install K8s components.
 	// +optional

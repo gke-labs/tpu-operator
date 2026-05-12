@@ -33,6 +33,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&TPUNodeGroupList{},
 		&InstanceTemplate{},
 		&InstanceTemplateList{},
+		&WorkloadPolicy{},
+		&WorkloadPolicyList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
