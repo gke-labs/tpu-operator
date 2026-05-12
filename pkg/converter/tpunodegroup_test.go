@@ -1,4 +1,4 @@
-package tpunodegroup
+package converter
 
 import (
 	"testing"
@@ -9,7 +9,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func TestGenerateInstanceTemplate(t *testing.T) {
+func TestToInstanceTemplateCR(t *testing.T) {
 	tests := []struct {
 		name         string
 		tpuNodeGroup *api.TPUNodeGroup
@@ -55,7 +55,6 @@ func TestGenerateInstanceTemplate(t *testing.T) {
 					InstanceConfig: api.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
-					MaintenancePolicy: ptr.To(api.MaintenancePolicyTerminate),
 				},
 			},
 		},
@@ -63,9 +62,9 @@ func TestGenerateInstanceTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := generateInstanceTemplate(tt.tpuNodeGroup)
+			got := ToInstanceTemplateCR(tt.tpuNodeGroup)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
-				t.Errorf("generateInstanceTemplate() mismatch (-want +got):\n%s", diff)
+				t.Errorf("ToInstanceTemplateCR() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

@@ -1,4 +1,4 @@
-package instancetemplate
+package converter
 
 import (
 	"sort"
@@ -14,6 +14,8 @@ const (
 )
 
 // ToGCEInstanceTemplate converts an InstanceTemplate CR to GCE API InstanceTemplate.
+// This function should remain a pure conversion function. Defaulting logic (such as
+// populating unset fields) should be handled prior to conversion in the controller's SetDefaults phase.
 func ToGCEInstanceTemplate(cr *tpuv1alpha1.InstanceTemplate) *computepb.InstanceTemplate {
 	properties := &computepb.InstanceProperties{
 		MachineType: &cr.Spec.MachineType,
@@ -47,13 +49,6 @@ func ToGCEInstanceTemplate(cr *tpuv1alpha1.InstanceTemplate) *computepb.Instance
 		properties.NetworkInterfaces = []*computepb.NetworkInterface{
 			{
 				Subnetwork: cr.Spec.Subnetwork,
-			},
-		}
-	} else {
-		defaultNetwork := "global/networks/default"
-		properties.NetworkInterfaces = []*computepb.NetworkInterface{
-			{
-				Network: &defaultNetwork,
 			},
 		}
 	}

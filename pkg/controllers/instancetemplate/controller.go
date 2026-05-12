@@ -14,12 +14,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/converter"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 )
 
 // finalizerName is the name of the finalizer used to ensure clean teardown
 // of external resources associated with an InstanceTemplate.
 const finalizerName = "tpu.google.com/instancetemplate-cleanup"
+
 
 // InstanceTemplateReconciler reconciles a InstanceTemplate object
 type InstanceTemplateReconciler struct {
@@ -80,12 +82,13 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
+
 	// 3. Ensure GCE Instance Template exists
 	gceTemplate, err := r.GCE.Get(ctx, instanceTemplate.Spec.Project, instanceTemplate.Name)
 	if err != nil {
 		if gce.IsNotFound(err) {
 			logger.Info("Creating GCE InstanceTemplate", "name", instanceTemplate.Name)
-			template := ToGCEInstanceTemplate(&instanceTemplate)
+			template := converter.ToGCEInstanceTemplate(&instanceTemplate)
 			op, err := r.GCE.Insert(ctx, instanceTemplate.Spec.Project, template)
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("inserting GCE InstanceTemplate: %w", err)

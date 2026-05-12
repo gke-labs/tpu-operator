@@ -15,6 +15,7 @@ import (
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup/deviceplugin"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	"k8s.io/utils/ptr"
 )
 
 // TPUNodeGroupReconciler reconciles a TPUNodeGroup object.
@@ -65,6 +66,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	logger.Info("Reconciling TPUNodeGroup")
+	r.SetDefaults(&tpuNodeGroup)
 
 	// Step 1: Reconcile Resource Policy
 	if err := r.reconcileResourcePolicy(ctx, &tpuNodeGroup); err != nil {
@@ -125,3 +127,21 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&tpuapi.TPUNodeGroup{}).
 		Complete(r)
 }
+
+// SetDefaults populates default values for a TPUNodeGroup prior to reconciliation.
+func (r *TPUNodeGroupReconciler) SetDefaults(group *tpuapi.TPUNodeGroup) {
+	if group.Spec.InstanceConfig == nil {
+		return
+	}
+	if group.Spec.InstanceConfig.Subnetwork == nil {
+		group.Spec.InstanceConfig.Subnetwork = ptr.To("default")
+	}
+	if group.Spec.InstanceConfig.ProvisioningModel == nil {
+		if group.Spec.InstanceConfig.Reservation != nil {
+			group.Spec.InstanceConfig.ProvisioningModel = ptr.To("RESERVATION_BOUND")
+		} else {
+			group.Spec.InstanceConfig.ProvisioningModel = ptr.To("STANDARD")
+		}
+	}
+}
+

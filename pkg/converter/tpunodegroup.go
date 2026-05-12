@@ -1,14 +1,14 @@
-package tpunodegroup
+package converter
 
 import (
 	api "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
 
-// generateInstanceTemplate generates an InstanceTemplate from a TPUNodeGroup.
-// Returns nil if InstanceConfig is nil.
-func generateInstanceTemplate(tpuNodeGroup *api.TPUNodeGroup) *api.InstanceTemplate {
+// ToInstanceTemplateCR converts a TPUNodeGroup to an InstanceTemplate CR.
+func ToInstanceTemplateCR(tpuNodeGroup *api.TPUNodeGroup) *tpuv1alpha1.InstanceTemplate {
 	if tpuNodeGroup.Spec.InstanceConfig == nil {
 		return nil
 	}
@@ -29,8 +29,7 @@ func generateInstanceTemplate(tpuNodeGroup *api.TPUNodeGroup) *api.InstanceTempl
 			},
 		},
 		Spec: api.InstanceTemplateSpec{
-			InstanceConfig:    *tpuNodeGroup.Spec.InstanceConfig,
-			MaintenancePolicy: ptr.To(api.MaintenancePolicyTerminate),
+			InstanceConfig: *tpuNodeGroup.Spec.InstanceConfig.DeepCopy(),
 		},
 	}
 

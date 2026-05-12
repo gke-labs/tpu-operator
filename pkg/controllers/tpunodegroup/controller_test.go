@@ -19,6 +19,7 @@ import (
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	"k8s.io/utils/ptr"
 )
 
 func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
@@ -114,3 +115,96 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		})
 	}
 }
+
+func TestTPUNodeGroupReconciler_SetDefaults(t *testing.T) {
+	tests := []struct {
+		name  string
+		group *tpuapi.TPUNodeGroup
+		want  *tpuapi.TPUNodeGroup
+	}{
+		{
+			name: "nil InstanceConfig",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{},
+			},
+			want: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{},
+			},
+		},
+		{
+			name: "empty InstanceConfig defaults to STANDARD and default subnetwork",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			want: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType:       "tpu7x-standard-4t",
+						Subnetwork:        ptr.To("default"),
+						ProvisioningModel: ptr.To("STANDARD"),
+					},
+				},
+			},
+		},
+		{
+			name: "Reservation present defaults to RESERVATION_BOUND",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+						Reservation: ptr.To("my-res"),
+					},
+				},
+			},
+			want: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType:       "tpu7x-standard-4t",
+						Reservation:       ptr.To("my-res"),
+						Subnetwork:        ptr.To("default"),
+						ProvisioningModel: ptr.To("RESERVATION_BOUND"),
+					},
+				},
+			},
+		},
+		{
+			name: "fields already set are preserved",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType:       "tpu7x-standard-4t",
+						Reservation:       ptr.To("my-res"),
+						Subnetwork:        ptr.To("custom-subnet"),
+						ProvisioningModel: ptr.To("SPOT"),
+					},
+				},
+			},
+			want: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType:       "tpu7x-standard-4t",
+						Reservation:       ptr.To("my-res"),
+						Subnetwork:        ptr.To("custom-subnet"),
+						ProvisioningModel: ptr.To("SPOT"),
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &TPUNodeGroupReconciler{}
+			r.SetDefaults(tc.group)
+
+			if diff := cmp.Diff(tc.want, tc.group); diff != "" {
+				t.Errorf("SetDefaults() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+

@@ -1,4 +1,4 @@
-package instancetemplate
+package converter
 
 import (
 	"testing"
