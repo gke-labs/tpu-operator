@@ -14,6 +14,7 @@ import (
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup/deviceplugin"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/converter"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	"k8s.io/utils/ptr"
 )
@@ -66,7 +67,6 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	logger.Info("Reconciling TPUNodeGroup")
-	r.SetDefaults(&tpuNodeGroup)
 
 	// Step 1: Reconcile Resource Policy
 	if err := r.reconcileResourcePolicy(ctx, &tpuNodeGroup); err != nil {
@@ -103,8 +103,14 @@ func (r *TPUNodeGroupReconciler) reconcileResourcePolicy(ctx context.Context, gr
 }
 
 func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	// TODO: Implement InstanceTemplate reconciliation.
-	// Check if user provided or if we need to create one.
+	template := converter.ToInstanceTemplateCR(group)
+	if template == nil {
+		return nil
+	}
+
+	r.defaultInstanceTemplate(template)
+
+	// TODO: Implement InstanceTemplate reconciliation (Create/Patch in K8s).
 	return nil
 }
 
@@ -128,19 +134,16 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// SetDefaults populates default values for a TPUNodeGroup prior to reconciliation.
-func (r *TPUNodeGroupReconciler) SetDefaults(group *tpuapi.TPUNodeGroup) {
-	if group.Spec.InstanceConfig == nil {
+// defaultInstanceTemplate populates default values for an InstanceTemplate prior to reconciliation.
+func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.InstanceTemplate) {
+	if template == nil {
 		return
 	}
-	if group.Spec.InstanceConfig.Subnetwork == nil {
-		group.Spec.InstanceConfig.Subnetwork = ptr.To("default")
-	}
-	if group.Spec.InstanceConfig.ProvisioningModel == nil {
-		if group.Spec.InstanceConfig.Reservation != nil {
-			group.Spec.InstanceConfig.ProvisioningModel = ptr.To("RESERVATION_BOUND")
+	if template.Spec.InstanceConfig.ProvisioningModel == nil {
+		if template.Spec.InstanceConfig.Reservation != nil {
+			template.Spec.InstanceConfig.ProvisioningModel = ptr.To("RESERVATION_BOUND")
 		} else {
-			group.Spec.InstanceConfig.ProvisioningModel = ptr.To("STANDARD")
+			template.Spec.InstanceConfig.ProvisioningModel = ptr.To("STANDARD")
 		}
 	}
 }

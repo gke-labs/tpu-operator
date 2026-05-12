@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: TPUNodeGroup is the Schema for the tpunodegroups API
+        description: TPUNodeGroup is the Schema for the tpunodegroups API.
         properties:
           apiVersion:
             description: |-
@@ -37,7 +37,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: TPUNodeGroupSpec defines the desired state of a TPUNodeGroup
+            description: TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
             properties:
               acceleratorConnectionMode:
                 description: |-
@@ -123,6 +123,7 @@ spec:
                     maxItems: 1
                     type: array
                   subnetwork:
+                    default: default
                     description: Subnetwork is the VPC subnetwork URI.
                     type: string
                 required:
@@ -165,7 +166,7 @@ spec:
                 specified
               rule: has(self.instanceTemplateURI) != has(self.instanceConfig)
           status:
-            description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup
+            description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
             properties:
               conditions:
                 description: Conditions represent the latest available observations

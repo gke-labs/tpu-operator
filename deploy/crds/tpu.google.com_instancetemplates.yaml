@@ -17,7 +17,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: InstanceTemplate is the Schema for the instancetemplates API
+        description: InstanceTemplate is the Schema for the instancetemplates API.
         properties:
           apiVersion:
             description: |-
@@ -37,7 +37,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: InstanceTemplateSpec defines the desired state of an InstanceTemplate
+            description: InstanceTemplateSpec defines the desired state of an InstanceTemplate.
             properties:
               bootDiskSizeGB:
                 description: BootDiskSizeGB is the size of the boot disk in GB.
@@ -111,14 +111,23 @@ spec:
                 maxItems: 1
                 type: array
               subnetwork:
+                default: default
                 description: Subnetwork is the VPC subnetwork URI.
                 type: string
             required:
             - machineType
             - project
             type: object
+            x-kubernetes-validations:
+            - message: Reservation is required when provisioningModel is RESERVATION_BOUND
+              rule: '!has(self.provisioningModel) || self.provisioningModel != ''RESERVATION_BOUND''
+                || has(self.reservation)'
+            - message: ProvisioningModel must be RESERVATION_BOUND when reservation
+                is specified
+              rule: '!has(self.reservation) || !has(self.provisioningModel) || self.provisioningModel
+                == ''RESERVATION_BOUND'''
           status:
-            description: InstanceTemplateStatus defines the observed state of InstanceTemplate
+            description: InstanceTemplateStatus defines the observed state of InstanceTemplate.
             properties:
               conditions:
                 description: Conditions represent the latest available observations

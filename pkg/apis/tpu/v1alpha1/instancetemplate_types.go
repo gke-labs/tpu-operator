@@ -9,6 +9,8 @@ const (
 	MaintenancePolicyTerminate = "TERMINATE"
 )
 
+// +kubebuilder:validation:XValidation:rule="!has(self.provisioningModel) || self.provisioningModel != 'RESERVATION_BOUND' || has(self.reservation)",message="Reservation is required when provisioningModel is RESERVATION_BOUND"
+// +kubebuilder:validation:XValidation:rule="!has(self.reservation) || !has(self.provisioningModel) || self.provisioningModel == 'RESERVATION_BOUND'",message="ProvisioningModel must be RESERVATION_BOUND when reservation is specified"
 // InstanceTemplateSpec defines the desired state of an InstanceTemplate.
 type InstanceTemplateSpec struct {
 	// Project is the GCP project ID.

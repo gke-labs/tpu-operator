@@ -89,6 +89,7 @@ type InstanceConfig struct {
 	DiskType *string `json:"diskType,omitempty"`
 
 	// Subnetwork is the VPC subnetwork URI.
+	// +kubebuilder:default="default"
 	// +optional
 	Subnetwork *string `json:"subnetwork,omitempty"`
 

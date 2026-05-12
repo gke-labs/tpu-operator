@@ -116,33 +116,30 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 	}
 }
 
-func TestTPUNodeGroupReconciler_SetDefaults(t *testing.T) {
+func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 	tests := []struct {
-		name  string
-		group *tpuapi.TPUNodeGroup
-		want  *tpuapi.TPUNodeGroup
+		name     string
+		template *tpuapi.InstanceTemplate
+		want     *tpuapi.InstanceTemplate
 	}{
 		{
-			name: "nil InstanceConfig",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{},
-			},
-			want: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{},
-			},
+			name:     "nil template",
+			template: nil,
+			want:     nil,
 		},
 		{
 			name: "empty InstanceConfig defaults to STANDARD and default subnetwork",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
+			template: &tpuapi.InstanceTemplate{
+				Spec: tpuapi.InstanceTemplateSpec{
+					InstanceConfig: tpuapi.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
+						Subnetwork:  ptr.To("default"),
 					},
 				},
 			},
-			want: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
+			want: &tpuapi.InstanceTemplate{
+				Spec: tpuapi.InstanceTemplateSpec{
+					InstanceConfig: tpuapi.InstanceConfig{
 						MachineType:       "tpu7x-standard-4t",
 						Subnetwork:        ptr.To("default"),
 						ProvisioningModel: ptr.To("STANDARD"),
@@ -152,17 +149,18 @@ func TestTPUNodeGroupReconciler_SetDefaults(t *testing.T) {
 		},
 		{
 			name: "Reservation present defaults to RESERVATION_BOUND",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
+			template: &tpuapi.InstanceTemplate{
+				Spec: tpuapi.InstanceTemplateSpec{
+					InstanceConfig: tpuapi.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 						Reservation: ptr.To("my-res"),
+						Subnetwork:  ptr.To("default"),
 					},
 				},
 			},
-			want: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
+			want: &tpuapi.InstanceTemplate{
+				Spec: tpuapi.InstanceTemplateSpec{
+					InstanceConfig: tpuapi.InstanceConfig{
 						MachineType:       "tpu7x-standard-4t",
 						Reservation:       ptr.To("my-res"),
 						Subnetwork:        ptr.To("default"),
@@ -173,9 +171,9 @@ func TestTPUNodeGroupReconciler_SetDefaults(t *testing.T) {
 		},
 		{
 			name: "fields already set are preserved",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
+			template: &tpuapi.InstanceTemplate{
+				Spec: tpuapi.InstanceTemplateSpec{
+					InstanceConfig: tpuapi.InstanceConfig{
 						MachineType:       "tpu7x-standard-4t",
 						Reservation:       ptr.To("my-res"),
 						Subnetwork:        ptr.To("custom-subnet"),
@@ -183,9 +181,9 @@ func TestTPUNodeGroupReconciler_SetDefaults(t *testing.T) {
 					},
 				},
 			},
-			want: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
+			want: &tpuapi.InstanceTemplate{
+				Spec: tpuapi.InstanceTemplateSpec{
+					InstanceConfig: tpuapi.InstanceConfig{
 						MachineType:       "tpu7x-standard-4t",
 						Reservation:       ptr.To("my-res"),
 						Subnetwork:        ptr.To("custom-subnet"),
@@ -199,10 +197,10 @@ func TestTPUNodeGroupReconciler_SetDefaults(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &TPUNodeGroupReconciler{}
-			r.SetDefaults(tc.group)
+			r.defaultInstanceTemplate(tc.template)
 
-			if diff := cmp.Diff(tc.want, tc.group); diff != "" {
-				t.Errorf("SetDefaults() mismatch (-want +got):\n%s", diff)
+			if diff := cmp.Diff(tc.want, tc.template); diff != "" {
+				t.Errorf("defaultInstanceTemplate() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
