@@ -5,6 +5,7 @@ import (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.instanceTemplateURI) != has(self.instanceConfig)",message="Exactly one of instanceTemplateURI or instanceConfig must be specified"
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes) || !self.bootstrapKubernetes.enabled",message="BootstrapKubernetes cannot be enabled when using a custom InstanceTemplateURI"
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
