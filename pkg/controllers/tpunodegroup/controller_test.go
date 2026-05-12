@@ -85,7 +85,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				objs = append(objs, tc.initialObject)
 			}
 
-			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+			builder := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...)
+			if tc.initialObject != nil {
+				builder = builder.WithStatusSubresource(tc.initialObject)
+			}
+			cl := builder.Build()
 			k8sFakeClient := k8sfake.NewSimpleClientset()
 
 			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, &gce.MockIGMClient{}, &gce.MockInstanceClient{}, logr.Discard()).
