@@ -2,11 +2,10 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: tpu-device-plugin
+  namespace: kube-system
   labels:
     k8s-app: tpu-device-plugin
 spec:
-  updateStrategy:
-    type: RollingUpdate
   selector:
     matchLabels:
       k8s-app: tpu-device-plugin
@@ -18,57 +17,141 @@ spec:
         seccomp.security.alpha.kubernetes.io/pod: "runtime/default"
     spec:
       hostNetwork: true
-      serviceAccountName: tpu-device-plugin
-      tolerations:
-      - operator: "Exists"
-        effect: "NoExecute"
-      - operator: "Exists"
-        effect: "NoSchedule"
       priorityClassName: system-node-critical
+      serviceAccountName: tpu-device-plugin-sa
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             nodeSelectorTerms:
             - matchExpressions:
-              - key: cloud.google.com/gk8s-tpu-accelerator
+              - key: cloud.google.com/gke-tpu-accelerator
                 operator: Exists
+      tolerations:
+      - operator: "Exists"
+        effect: "NoExecute"
+      - operator: "Exists"
+        effect: "NoSchedule"
       volumes:
       - name: device-plugin
         hostPath:
           path: /var/lib/kubelet/device-plugins
-          type: Directory
+          type: DirectoryOrCreate
       - name: dev
         hostPath:
           path: /dev
-          type: Directory
+          type: DirectoryOrCreate
       - name: pod-resources
         hostPath:
           path: /var/lib/kubelet/pod-resources
-          type: Directory
-      - name: tmp
-        emptyDir: {}
+          type: DirectoryOrCreate
+      - name: tpu-env
+        hostPath:
+          path: /etc/tpu
+          type: DirectoryOrCreate
+      - name: tpu-logs
+        hostPath:
+          path: /tmp/tpu_logs
+          type: DirectoryOrCreate
+      - name: tpu-plugin-run
+        hostPath:
+          path: /var/run/tpu-plugin
+          type: DirectoryOrCreate
       containers:
-      - name: tpu-device-plugin
-        # TODO(b/500811129): Update this image to a production-ready image.
-        image: "gcr.io/gsc-nexus-xteam-shared-testing/tpu-device-plugin:latest"
-        command:
-        - /usr/local/bin/tpu-device-plugin
+        # TODO: update the image version to match the kubernetes version
+      - image: "gcr.io/gke-release/tpu-device-plugin:1.35.7-gke.0"
+        name: tpu-device-plugin
+        command: ["/usr/bin/tpu-device-plugin"]
+        args:
         - --logtostderr
-        - -v=3
+        - --enable-runtime-metrics=false
+        - --enable-host-metrics=false
+        - --enable-vbar-uds
         env:
+        - name: CONTAINER_NAME
+          value: "tpu-device-plugin"
         - name: NODE_NAME
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+
+        resources:
+          requests:
+            cpu: 80m
+            memory: 80Mi
+          limits:
+            memory: 80Mi
         securityContext:
           privileged: true
-          seccompProfile: { type: RuntimeDefault }
+          seccompProfile:
+            type: RuntimeDefault
         volumeMounts:
         - name: device-plugin
-          mountPath: /var/lib/kubelet/device-plugins
+          mountPath: /device-plugin
         - name: dev
           mountPath: /dev
         - name: pod-resources
           mountPath: /var/lib/kubelet/pod-resources
-        - name: tmp
-          mountPath: /tmp
+        - name: tpu-logs
+          mountPath: /tmp/tpu_logs
+        - name: tpu-plugin-run
+          mountPath: /var/run/tpu-plugin
+      - image: "gcr.io/gke-release/gke-distroless/bash@sha256:f97677214e19917c800bd7165a42bf5dbe1e5afde513aecb48a4916c145e1504"
+        name: sidecar-log-collector
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            cpu: 20m
+            memory: 20Mi
+          limits:
+            memory: 20Mi
+        args: [/bin/sh, -c, 'tail -n+1 -F /tmp/tpu_logs/tpu_driver.INFO']
+        volumeMounts:
+        - name: tpu-logs
+          readOnly: true
+          mountPath: /tmp/tpu_logs
+      - image: "gcr.io/gke-release/vbar_control_agent@sha256:450e948cfa0b0db0c0136138f96da19589635409e6eb790b80fcaee3ffc6cd75"
+        name: vbar-control-agent
+        env:
+        - name: TPU_SKIP_MDS_QUERY
+          value: 'true'
+        - name: TPU_ON_GKE
+          value: 'true'
+        securityContext:
+          privileged: true
+          readOnlyRootFilesystem: true
+          seccompProfile:
+            type: RuntimeDefault
+        resources:
+          requests:
+            memory: 150Mi
+            cpu: 10m
+          limits:
+            memory: 150Mi
+        volumeMounts:
+        - name: tpu-plugin-run
+          mountPath: /var/run/tpu-plugin
+        command: ["vbar_control_agent_files/bin/vbar_control_agent"]
+        args: ['--logtostderr', '--census_enabled=false', '--gid=', '--uid=', '--chroot=']
+  updateStrategy:
+    type: RollingUpdate

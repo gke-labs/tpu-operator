@@ -28,12 +28,12 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 		t.Errorf("expected namespace to be %s, got %s", group.Namespace, ds.Namespace)
 	}
 
-	if len(ds.Spec.Template.Spec.Containers) != 1 {
-		t.Fatalf("expected 1 container, got %d", len(ds.Spec.Template.Spec.Containers))
+	if len(ds.Spec.Template.Spec.Containers) != 3 {
+		t.Fatalf("expected 3 containers, got %d", len(ds.Spec.Template.Spec.Containers))
 	}
 
 	container := ds.Spec.Template.Spec.Containers[0]
-	expectedImage := "gcr.io/gsc-nexus-xteam-shared-testing/tpu-device-plugin:latest"
+	expectedImage := "gcr.io/gke-release/tpu-device-plugin:1.35.7-gke.0"
 	if container.Image != expectedImage {
 		t.Errorf("expected image to be %s, got %s", expectedImage, container.Image)
 	}
@@ -41,6 +41,19 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 	if container.SecurityContext == nil || container.SecurityContext.SeccompProfile == nil || container.SecurityContext.SeccompProfile.Type != "RuntimeDefault" {
 		t.Errorf("expected seccomp profile to be RuntimeDefault, got %v", container.SecurityContext)
 	}
+
+	sidecar := ds.Spec.Template.Spec.Containers[1]
+	expectedSidecarImage := "gcr.io/gke-release/gke-distroless/bash@sha256:f97677214e19917c800bd7165a42bf5dbe1e5afde513aecb48a4916c145e1504"
+	if sidecar.Image != expectedSidecarImage {
+		t.Errorf("expected sidecar image to be %s, got %s", expectedSidecarImage, sidecar.Image)
+	}
+
+	vbarAgent := ds.Spec.Template.Spec.Containers[2]
+	expectedVbarImage := "gcr.io/gke-release/vbar_control_agent@sha256:450e948cfa0b0db0c0136138f96da19589635409e6eb790b80fcaee3ffc6cd75"
+	if vbarAgent.Image != expectedVbarImage {
+		t.Errorf("expected vbar agent image to be %s, got %s", expectedVbarImage, vbarAgent.Image)
+	}
+
 
 	affinity := ds.Spec.Template.Spec.Affinity
 	if affinity == nil || affinity.NodeAffinity == nil || affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
@@ -54,7 +67,7 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 	if len(exprs) != 1 {
 		t.Fatalf("expected 1 match expression, got %d", len(exprs))
 	}
-	if exprs[0].Key != "cloud.google.com/gk8s-tpu-accelerator" || exprs[0].Operator != "Exists" {
+	if exprs[0].Key != "cloud.google.com/gke-tpu-accelerator" || exprs[0].Operator != "Exists" {
 		t.Errorf("unexpected match expression: %v", exprs[0])
 	}
 }
@@ -83,12 +96,12 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
 		}
 
-		sa, err := k8sFakeClient.CoreV1().ServiceAccounts("kube-system").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+		sa, err := k8sFakeClient.CoreV1().ServiceAccounts("kube-system").Get(context.Background(), "tpu-device-plugin-sa", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("failed to get ServiceAccount: %v", err)
 		}
-		if sa.Name != "tpu-device-plugin" {
-			t.Errorf("expected name to be 'tpu-device-plugin', got %s", sa.Name)
+		if sa.Name != "tpu-device-plugin-sa" {
+			t.Errorf("expected name to be 'tpu-device-plugin-sa', got %s", sa.Name)
 		}
 	})
 
