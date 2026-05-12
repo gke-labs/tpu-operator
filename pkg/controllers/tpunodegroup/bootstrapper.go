@@ -109,8 +109,8 @@ func instanceShortName(url string) string {
 
 // generateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
 func (b *NodeBootstrapper) generateBootstrapToken(ctx context.Context) (string, error) {
-	tokenID := rand.String(6)
-	tokenSecret := rand.String(16)
+	tokenID := strings.ToLower(rand.String(6))
+	tokenSecret := strings.ToLower(rand.String(16))
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{

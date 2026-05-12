@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"math/big"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -186,6 +187,10 @@ func TestNodeBootstrapper_generateBootstrapToken(t *testing.T) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
 		t.Errorf("Invalid token format: %s", token)
+	}
+
+	if !regexp.MustCompile(`^[a-z0-9]{6}\.[a-z0-9]{16}$`).MatchString(token) {
+		t.Errorf("Token does not match required kubeadm pattern: %s", token)
 	}
 }
 
