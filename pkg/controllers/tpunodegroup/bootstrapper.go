@@ -77,6 +77,7 @@ func (b *NodeBootstrapper) ReconcileNodeJoin(ctx context.Context, group *tpuapi.
 			for _, cond := range node.Status.Conditions {
 				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
 					readyCount++
+					// TODO(b/500810349): Cleanup bootstrap token secret for this node after it has joined.
 					break
 				}
 			}
