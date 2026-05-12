@@ -121,9 +121,8 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 }
 
 func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	// TODO: Implement Node Bootstrapping check.
-	// Watch nodes, check for ready status, and update TPUNodeGroup status.
-	return nil
+	bootstrapper := NewNodeBootstrapper(r.Client, r.igmClient)
+	return bootstrapper.ReconcileNodeJoin(ctx, group)
 }
 
 // SetupWithManager sets up the controller with the Manager.
