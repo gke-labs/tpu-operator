@@ -81,7 +81,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeLocation: "us-central1-a",
 					NodeCount:    1,
 					BootstrapKubernetes: &tpuapi.BootstrapConfig{
-						Enabled:        true,
+
 						ControlPlaneIP: "1.2.3.4",
 					},
 				},
@@ -136,9 +136,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Project:      "test-project",
 					NodeLocation: "us-central1-a",
 					NodeCount:    1,
-					BootstrapKubernetes: &tpuapi.BootstrapConfig{
-						Enabled: false,
-					},
+
 				},
 			},
 			nodes: []corev1.Node{
@@ -190,7 +188,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					InstanceTemplateURI: ptr.To("projects/test-project/global/instanceTemplates/my-template"),
 				},
 			},
-			wantResult:    reconcile.Result{},
+			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
 			wantErr:       false,
 			wantDaemonSet: true,
 		},
@@ -266,7 +264,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult:    reconcile.Result{},
+			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
 			wantErr:       false,
 			wantDaemonSet: true,
 			wantConditions: []metav1.Condition{

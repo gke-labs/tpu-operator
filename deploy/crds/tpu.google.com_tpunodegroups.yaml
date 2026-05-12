@@ -49,23 +49,15 @@ spec:
                   should install K8s components.
                 properties:
                   controlPlaneIP:
-                    description: |-
-                      ControlPlaneIP is the IP address of the Kubernetes control plane.
-                      Required when Enabled is true.
+                    description: ControlPlaneIP is the IP address of the Kubernetes
+                      control plane.
                     type: string
-                  enabled:
-                    description: |-
-                      Enabled indicates if the controller should bootstrap the nodes.
-                      If omitted, the controller will not bootstrap the nodes.
-                    type: boolean
                   version:
                     description: Version is the Kubernetes version to install.
                     type: string
                 type: object
-                x-kubernetes-validations:
-                - message: controlPlaneIP is required when bootstrapping is enabled
-                  rule: '!self.enabled || (has(self.controlPlaneIP) && self.controlPlaneIP
-                    != '''')'
+                required:
+                - controlPlaneIP
               instanceConfig:
                 description: |-
                   InstanceConfig allows the controller to generate an instance template.
@@ -174,9 +166,8 @@ spec:
             - message: Exactly one of instanceTemplateURI or instanceConfig must be
                 specified
               rule: has(self.instanceTemplateURI) != has(self.instanceConfig)
-            - message: BootstrapKubernetes cannot be enabled when using a custom InstanceTemplateURI
-              rule: '!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)
-                || !self.bootstrapKubernetes.enabled'
+            - message: BootstrapKubernetes cannot be specified when using a custom InstanceTemplateURI
+              rule: '!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)'
           status:
             description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
             properties:

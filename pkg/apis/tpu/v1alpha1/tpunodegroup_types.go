@@ -5,7 +5,7 @@ import (
 )
 
 // +kubebuilder:validation:XValidation:rule="has(self.instanceTemplateURI) != has(self.instanceConfig)",message="Exactly one of instanceTemplateURI or instanceConfig must be specified"
-// +kubebuilder:validation:XValidation:rule="!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes) || !self.bootstrapKubernetes.enabled",message="BootstrapKubernetes cannot be enabled when using a custom InstanceTemplateURI"
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)",message="BootstrapKubernetes cannot be specified when using a custom InstanceTemplateURI"
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
@@ -109,22 +109,15 @@ type InstanceConfig struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// +kubebuilder:validation:XValidation:rule="!self.enabled || (has(self.controlPlaneIP) && self.controlPlaneIP != '')",message="controlPlaneIP is required when bootstrapping is enabled"
 // BootstrapConfig defines settings for automated node bootstrapping.
 type BootstrapConfig struct {
-	// Enabled indicates if the controller should bootstrap the nodes.
-	// If omitted, the controller will not bootstrap the nodes.
-	// +optional
-	Enabled bool `json:"enabled"`
-
 	// Version is the Kubernetes version to install.
 	// +optional
 	Version *string `json:"version,omitempty"`
 
 	// ControlPlaneIP is the IP address of the Kubernetes control plane.
-	// Required when Enabled is true.
-	// +optional
-	ControlPlaneIP string `json:"controlPlaneIP,omitempty"`
+	// +required
+	ControlPlaneIP string `json:"controlPlaneIP"`
 }
 
 // TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.

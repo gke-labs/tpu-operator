@@ -243,6 +243,7 @@ func generateTestCACert(t *testing.T) string {
 	return string(pemBytes)
 }
 
+
 func TestNodeBootstrapper_InjectJoinTokens(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := tpuapi.AddToScheme(scheme); err != nil {
@@ -273,7 +274,7 @@ func TestNodeBootstrapper_InjectJoinTokens(t *testing.T) {
 			NodeLocation: "us-central1-a",
 			NodeCount:    1,
 			BootstrapKubernetes: &tpuapi.BootstrapConfig{
-				Enabled:        true,
+
 				ControlPlaneIP: "1.2.3.4",
 			},
 		},
@@ -413,3 +414,4 @@ func TestMergeMetadataItems(t *testing.T) {
 		})
 	}
 }
+

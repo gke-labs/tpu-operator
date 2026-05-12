@@ -221,7 +221,7 @@ func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context,
 	logger.Info("Bootstrapping TPU nodes", "name", group.Name)
 	bootstrapper := NewNodeBootstrapper(r.Client, r.igmClient, r.instanceClient)
 
-	if group.Spec.BootstrapKubernetes != nil && group.Spec.BootstrapKubernetes.Enabled {
+	if group.Spec.BootstrapKubernetes != nil {
 		// Inject tokens for new instances if needed
 		if err := bootstrapper.InjectJoinTokens(ctx, group); err != nil {
 			return fmt.Errorf("failed to inject join tokens: %w", err)
