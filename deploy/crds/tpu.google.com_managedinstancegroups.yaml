@@ -52,8 +52,7 @@ spec:
                   to use.
                 type: string
               location:
-                description: Location is the GCP zone or region where the MIG will
-                  be created.
+                description: Location is the GCP zone where the MIG will be created.
                 type: string
               project:
                 description: Project is the GCP project ID.

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -35,13 +36,15 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		request       reconcile.Request
-		initialObject *tpuapi.TPUNodeGroup
-		wantResult    reconcile.Result
-		wantErr       bool
-		wantDaemonSet bool
-		wantStatus    *tpuapi.NodeSummary
+		name              string
+		request           reconcile.Request
+		initialObject     *tpuapi.TPUNodeGroup
+		additionalObjects []client.Object
+		wantResult        reconcile.Result
+		wantErr           bool
+		wantDaemonSet     bool
+		wantStatus        *tpuapi.NodeSummary
+		wantConditions    []metav1.Condition
 	}{
 		{
 			name: "resource_not_found",
@@ -82,6 +85,114 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				Reconciling: 1,
 			},
 		},
+		{
+			name: "external_template_uri",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:             "test-project",
+					NodeLocation:        "us-central1-a",
+					NodeCount:           1,
+					InstanceTemplateURI: ptr.To("projects/test-project/global/instanceTemplates/my-template"),
+				},
+			},
+			wantResult:    reconcile.Result{},
+			wantErr:       false,
+			wantDaemonSet: true,
+		},
+		{
+			name: "reconcile_instance_template_create",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
+		{
+			name: "reconcile_instance_template_ready",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+			},
+			wantResult:    reconcile.Result{},
+			wantErr:       false,
+			wantDaemonSet: true,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "InstanceTemplate provisioned successfully",
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -90,6 +201,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			if tc.initialObject != nil {
 				objs = append(objs, tc.initialObject)
 			}
+			objs = append(objs, tc.additionalObjects...)
 
 			builder := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...)
 			if tc.initialObject != nil {
@@ -130,6 +242,16 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				}
 				if diff := cmp.Diff(tc.wantStatus, updatedObject.Status.NodeSummary); diff != "" {
 					t.Errorf("Status.NodeSummary mismatch (-want +got):\n%s", diff)
+				}
+			}
+
+			if tc.wantConditions != nil {
+				var updatedObject tpuapi.TPUNodeGroup
+				if err := cl.Get(t.Context(), tc.request.NamespacedName, &updatedObject); err != nil {
+					t.Fatalf("Failed to get updated object: %v", err)
+				}
+				if diff := cmp.Diff(tc.wantConditions, updatedObject.Status.Conditions, cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")); diff != "" {
+					t.Errorf("Status.Conditions mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})

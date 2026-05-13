@@ -2,10 +2,14 @@ package tpunodegroup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/record"
@@ -66,7 +70,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// 1. Fetch the TPUNodeGroup resource
 	var tpuNodeGroup tpuapi.TPUNodeGroup
 	if err := r.Get(ctx, req.NamespacedName, &tpuNodeGroup); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			logger.Info("TPUNodeGroup no longer exists")
 			return ctrl.Result{}, nil
 		}
@@ -95,6 +99,15 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Step 2: Reconcile Instance Template
 	if err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
+		var waitErr *WaitingForChildError
+		if errors.As(err, &waitErr) {
+			// We do not return an error or an explicit requeue timer here.
+			// Because the controller is configured with .Owns(&tpuapi.InstanceTemplate{}),
+			// any status update to the child CR (e.g., Status.URI being populated)
+			// will automatically trigger a new reconciliation request for the parent TPUNodeGroup.
+			logger.Info(waitErr.Error())
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
 	}
 
@@ -122,7 +135,20 @@ func (r *TPUNodeGroupReconciler) reconcileResourcePolicy(ctx context.Context, gr
 	return nil
 }
 
+// WaitingForChildError indicates that reconciliation is waiting for a child resource to be provisioned.
+type WaitingForChildError struct {
+	ChildKind string
+}
+
+func (e *WaitingForChildError) Error() string {
+	return fmt.Sprintf("waiting for child resource %s to be provisioned", e.ChildKind)
+}
+
 func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	if group.Spec.InstanceTemplateURI != nil {
+		return nil
+	}
+
 	template := converter.ToInstanceTemplateCR(group)
 	if template == nil {
 		return nil
@@ -130,7 +156,52 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 
 	r.defaultInstanceTemplate(template)
 
-	// TODO: Implement InstanceTemplate reconciliation (Create/Patch in K8s).
+	existing := &tpuapi.InstanceTemplate{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: template.Namespace, Name: template.Name}, existing)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.Log.Info("Creating InstanceTemplate CR", "name", template.Name)
+			if err := r.Create(ctx, template); err != nil {
+				return fmt.Errorf("creating InstanceTemplate CR: %w", err)
+			}
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    "InstanceTemplateReady",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Provisioning",
+				Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
+			})
+			return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+		}
+		return fmt.Errorf("getting InstanceTemplate CR: %w", err)
+	}
+
+	if !equality.Semantic.DeepEqual(existing.Spec, template.Spec) {
+		r.Log.Info("Patching InstanceTemplate CR", "name", template.Name)
+		patchBase := existing.DeepCopy()
+		existing.Spec = template.Spec
+		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
+			return fmt.Errorf("patching InstanceTemplate CR: %w", err)
+		}
+	}
+
+	if existing.Status.URI == "" {
+		r.Log.Info("InstanceTemplate CR ready but URI missing", "name", existing.Name)
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    "InstanceTemplateReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "Provisioning",
+			Message: "Waiting for GCE resource provisioning",
+		})
+		return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+	}
+
+	r.Log.Info("InstanceTemplate CR is ready", "uri", existing.Status.URI)
+	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+		Type:    "InstanceTemplateReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Ready",
+		Message: "InstanceTemplate provisioned successfully",
+	})
 	return nil
 }
 
@@ -150,6 +221,7 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("TPUNodeGroupController")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tpuapi.TPUNodeGroup{}).
+		Owns(&tpuapi.InstanceTemplate{}).
 		Complete(r)
 }
 
