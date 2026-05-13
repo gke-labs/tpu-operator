@@ -10,6 +10,7 @@ import (
 	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/instancetemplate"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/workloadpolicy"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -82,6 +83,14 @@ func main() {
 	if err = tpunodegroup.NewTPUNodeGroupReconciler(mgr.GetClient(), mgr.GetScheme(), kubeClient, gceManager.IGM(), gceManager.Instances(), ctrl.Log.WithName("controller").WithName("tpunodegroup")).
 		SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Error setting up TPU Node Group controller")
+		os.Exit(1)
+	}
+	if err = (&workloadpolicy.WorkloadPolicyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		Log:    ctrl.Log.WithName("controller").WithName("workloadpolicy"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Error setting up WorkloadPolicy controller")
 		os.Exit(1)
 	}
 
