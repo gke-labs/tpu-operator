@@ -118,7 +118,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 4: Reconcile Node Bootstrapping
-	if err := r.reconcileNodeBootstrapping(ctx, &tpuNodeGroup); err != nil {
+	if err := r.reconcileNodeBootstrapping(ctx, logger, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile node bootstrapping: %w", err)
 	}
 
@@ -217,8 +217,18 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	return nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
+	logger.Info("Bootstrapping TPU nodes", "name", group.Name)
 	bootstrapper := NewNodeBootstrapper(r.Client, r.igmClient, r.instanceClient)
+
+	if group.Spec.BootstrapKubernetes != nil && group.Spec.BootstrapKubernetes.Enabled {
+		// Inject tokens for new instances if needed
+		if err := bootstrapper.InjectJoinTokens(ctx, group); err != nil {
+			return fmt.Errorf("failed to inject join tokens: %w", err)
+		}
+	}
+
+	// Check status of joining nodes
 	return bootstrapper.ReconcileNodeJoin(ctx, group)
 }
 

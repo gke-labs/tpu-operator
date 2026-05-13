@@ -282,7 +282,17 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			objs := []client.Object{}
+			caCertPem := generateTestCACert(t)
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "kube-root-ca.crt",
+					Namespace: "kube-system",
+				},
+				Data: map[string]string{
+					"ca.crt": caCertPem,
+				},
+			}
+			objs := []client.Object{cm}
 			if tc.initialObject != nil {
 				objs = append(objs, tc.initialObject)
 			}
