@@ -123,7 +123,25 @@ func ensureWorkloadPolicyDeleted(ctx context.Context, k8sClient client.Client, g
 	return false, nil
 }
 
-// TODO(b/512987019): Implement deleteNodeObjects
-// func deleteNodeObjects(ctx context.Context, client client.Client, group *tpuapi.TPUNodeGroup) error {
-// 	return nil
-// }
+// deleteNodeObjects deletes Kubernetes Node objects that were associated with the group.
+func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client.Client, group *tpuapi.TPUNodeGroup) error {
+	var nodeList corev1.NodeList
+	labelSelector := client.MatchingLabels{
+		"cloud.google.com/tpu-node-group": fmt.Sprintf("%s-%s", group.Namespace, group.Name),
+	}
+	if err := k8sClient.List(ctx, &nodeList, labelSelector); err != nil {
+		return fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	var errs []error
+	for _, node := range nodeList.Items {
+		logger.Info("Deleting stale Node object", "node", node.Name)
+		if err := k8sClient.Delete(ctx, &node); err != nil {
+			if !apierrors.IsNotFound(err) {
+				errs = append(errs, fmt.Errorf("failed to delete node %s: %w", node.Name, err))
+			}
+		}
+	}
+
+	return errors.Join(errs...)
+}
