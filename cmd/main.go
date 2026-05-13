@@ -89,6 +89,8 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controller").WithName("workloadpolicy"),
+		GCE:    gceManager.ResourcePolicies(),
+		GCEOps: gceManager.RegionOperations(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Error setting up WorkloadPolicy controller")
 		os.Exit(1)

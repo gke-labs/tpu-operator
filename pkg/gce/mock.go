@@ -105,3 +105,47 @@ func (m *MockGlobalOperationsClient) Get(ctx context.Context, project, operation
 	}
 	return nil, nil
 }
+
+// MockResourcePolicyClient is a mock implementation of the gce.ResourcePolicyClient.
+type MockResourcePolicyClient struct {
+	GetFunc    func(ctx context.Context, project, region, name string) (*computepb.ResourcePolicy, error)
+	InsertFunc func(ctx context.Context, project, region string, policy *computepb.ResourcePolicy) (Operation, error)
+	DeleteFunc func(ctx context.Context, project, region, name string) (Operation, error)
+}
+
+// Get calls the mocked GetFunc.
+func (m *MockResourcePolicyClient) Get(ctx context.Context, project, region, name string) (*computepb.ResourcePolicy, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, project, region, name)
+	}
+	return nil, nil
+}
+
+// Insert calls the mocked InsertFunc.
+func (m *MockResourcePolicyClient) Insert(ctx context.Context, project, region string, policy *computepb.ResourcePolicy) (Operation, error) {
+	if m.InsertFunc != nil {
+		return m.InsertFunc(ctx, project, region, policy)
+	}
+	return nil, nil
+}
+
+// Delete calls the mocked DeleteFunc.
+func (m *MockResourcePolicyClient) Delete(ctx context.Context, project, region, name string) (Operation, error) {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, project, region, name)
+	}
+	return nil, nil
+}
+
+// MockRegionOperationsClient is a mock implementation of the gce.RegionOperationsClient.
+type MockRegionOperationsClient struct {
+	GetFunc func(ctx context.Context, project, region, operation string) (*computepb.Operation, error)
+}
+
+// Get calls the mocked GetFunc.
+func (m *MockRegionOperationsClient) Get(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, project, region, operation)
+	}
+	return nil, nil
+}

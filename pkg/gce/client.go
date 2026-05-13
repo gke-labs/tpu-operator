@@ -48,12 +48,26 @@ type GlobalOperationsClient interface {
 	Get(ctx context.Context, project, operation string) (*computepb.Operation, error)
 }
 
+// ResourcePolicyClient defines methods for interacting with Resource Policies.
+type ResourcePolicyClient interface {
+	Get(ctx context.Context, project, region, name string) (*computepb.ResourcePolicy, error)
+	Insert(ctx context.Context, project, region string, policy *computepb.ResourcePolicy) (Operation, error)
+	Delete(ctx context.Context, project, region, name string) (Operation, error)
+}
+
+// RegionOperationsClient defines methods for interacting with Region Operations.
+type RegionOperationsClient interface {
+	Get(ctx context.Context, project, region, operation string) (*computepb.Operation, error)
+}
+
 // Manager provides a centralized point to manage various GCE resources.
 type Manager struct {
 	igmClient               *compute.InstanceGroupManagersClient
 	instancesClient         *compute.InstancesClient
 	instanceTemplatesClient *compute.InstanceTemplatesClient
 	globalOperationsClient  *compute.GlobalOperationsClient
+	resourcePoliciesClient *compute.ResourcePoliciesClient
+	regionOperationsClient *compute.RegionOperationsClient
 }
 
 // NewManager creates and initializes the GCE clients.
@@ -64,6 +78,8 @@ func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, err
 		compute.NewInstancesRESTClient,
 		compute.NewInstanceTemplatesRESTClient,
 		compute.NewGlobalOperationsRESTClient,
+		compute.NewResourcePoliciesRESTClient,
+		compute.NewRegionOperationsRESTClient,
 		nil, // No observation hook needed in production
 		opts...,
 	)
@@ -73,6 +89,8 @@ type newIGMClientFunc func(context.Context, ...option.ClientOption) (*compute.In
 type newInstancesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstancesClient, error)
 type newInstanceTemplatesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstanceTemplatesClient, error)
 type newGlobalOperationsClientFunc func(context.Context, ...option.ClientOption) (*compute.GlobalOperationsClient, error)
+type newResourcePoliciesClientFunc func(context.Context, ...option.ClientOption) (*compute.ResourcePoliciesClient, error)
+type newRegionOperationsClientFunc func(context.Context, ...option.ClientOption) (*compute.RegionOperationsClient, error)
 
 // newManagerWithConstructors allows injecting dependencies internally for testing.
 func newManagerWithConstructors(
@@ -81,6 +99,8 @@ func newManagerWithConstructors(
 	newInstancesClient newInstancesClientFunc,
 	newInstanceTemplatesClient newInstanceTemplatesClientFunc,
 	newGlobalOperationsClient newGlobalOperationsClientFunc,
+	newResourcePoliciesClient newResourcePoliciesClientFunc,
+	newRegionOperationsClient newRegionOperationsClientFunc,
 	onClientClose func(clientName string),
 	opts ...option.ClientOption,
 ) (mgr *Manager, err error) {
@@ -137,11 +157,35 @@ func newManagerWithConstructors(
 		return globalOperationsClient.Close()
 	})
 
+	resourcePoliciesClient, err := newResourcePoliciesClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create resource policies client: %w", err)
+	}
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("resourcePolicies")
+		}
+		return resourcePoliciesClient.Close()
+	})
+
+	regionOperationsClient, err := newRegionOperationsClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create region operations client: %w", err)
+	}
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("regionOperations")
+		}
+		return regionOperationsClient.Close()
+	})
+
 	return &Manager{
 		igmClient:               igmClient,
 		instancesClient:         instancesClient,
 		instanceTemplatesClient: instanceTemplatesClient,
 		globalOperationsClient:  globalOperationsClient,
+		resourcePoliciesClient: resourcePoliciesClient,
+		regionOperationsClient: regionOperationsClient,
 	}, nil
 }
 
@@ -163,6 +207,16 @@ func (m *Manager) InstanceTemplates() InstanceTemplateClient {
 // GlobalOperations returns the GlobalOperationsClient.
 func (m *Manager) GlobalOperations() GlobalOperationsClient {
 	return &globalOperationsClientWrapper{client: m.globalOperationsClient}
+}
+
+// ResourcePolicies returns the ResourcePolicyClient.
+func (m *Manager) ResourcePolicies() ResourcePolicyClient {
+	return &resourcePolicyClientWrapper{client: m.resourcePoliciesClient}
+}
+
+// RegionOperations returns the RegionOperationsClient.
+func (m *Manager) RegionOperations() RegionOperationsClient {
+	return &regionOperationsClientWrapper{client: m.regionOperationsClient}
 }
 
 type igmClientWrapper struct {
@@ -278,6 +332,64 @@ func (w *globalOperationsClientWrapper) Get(ctx context.Context, project, operat
 	return w.client.Get(ctx, req)
 }
 
+type resourcePolicyClientWrapper struct {
+	client *compute.ResourcePoliciesClient
+}
+
+func (w *resourcePolicyClientWrapper) Get(ctx context.Context, project, region, name string) (*computepb.ResourcePolicy, error) {
+	req := &computepb.GetResourcePolicyRequest{
+		Project:        project,
+		Region:         region,
+		ResourcePolicy: name,
+	}
+	return w.client.Get(ctx, req)
+}
+
+func (w *resourcePolicyClientWrapper) Insert(ctx context.Context, project, region string, policy *computepb.ResourcePolicy) (Operation, error) {
+	req := &computepb.InsertResourcePolicyRequest{
+		Project:                project,
+		Region:                 region,
+		ResourcePolicyResource: policy,
+	}
+	op, err := w.client.Insert(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, nil
+	}
+	return &operationWrapper{op: op}, nil
+}
+
+func (w *resourcePolicyClientWrapper) Delete(ctx context.Context, project, region, name string) (Operation, error) {
+	req := &computepb.DeleteResourcePolicyRequest{
+		Project:        project,
+		Region:         region,
+		ResourcePolicy: name,
+	}
+	op, err := w.client.Delete(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, nil
+	}
+	return &operationWrapper{op: op}, nil
+}
+
+type regionOperationsClientWrapper struct {
+	client *compute.RegionOperationsClient
+}
+
+func (w *regionOperationsClientWrapper) Get(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
+	req := &computepb.GetRegionOperationRequest{
+		Project:   project,
+		Region:    region,
+		Operation: operation,
+	}
+	return w.client.Get(ctx, req)
+}
+
 // Close closes the underlying clients.
 func (m *Manager) Close() error {
 	var errs []error
@@ -291,6 +403,12 @@ func (m *Manager) Close() error {
 		errs = append(errs, err)
 	}
 	if err := m.globalOperationsClient.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.resourcePoliciesClient.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.regionOperationsClient.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
