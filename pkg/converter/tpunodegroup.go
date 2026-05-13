@@ -32,6 +32,7 @@ func ToInstanceTemplateCR(tpuNodeGroup *api.TPUNodeGroup) *tpuv1alpha1.InstanceT
 			},
 		},
 		Spec: api.InstanceTemplateSpec{
+			Project:        tpuNodeGroup.Spec.Project,
 			InstanceConfig: *tpuNodeGroup.Spec.InstanceConfig.DeepCopy(),
 		},
 	}
