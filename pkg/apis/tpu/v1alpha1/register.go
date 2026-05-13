@@ -35,6 +35,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&InstanceTemplateList{},
 		&WorkloadPolicy{},
 		&WorkloadPolicyList{},
+		&ManagedInstanceGroup{},
+		&ManagedInstanceGroupList{},
 	)
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
