@@ -31,6 +31,7 @@ func TestToInstanceTemplateCR(t *testing.T) {
 					UID:       "my-uid",
 				},
 				Spec: api.TPUNodeGroupSpec{
+					Project: "my-project",
 					InstanceConfig: &api.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
@@ -52,6 +53,7 @@ func TestToInstanceTemplateCR(t *testing.T) {
 					},
 				},
 				Spec: api.InstanceTemplateSpec{
+					Project: "my-project",
 					InstanceConfig: api.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
