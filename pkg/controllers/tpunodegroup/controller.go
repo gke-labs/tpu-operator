@@ -107,7 +107,17 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
 			}
 
-			// TODO(b/512987019): Implement GCE resource cleanup and node object deletion.
+			logger.Info("Deleting child CRs")
+			done, err := deleteChildCRs(ctx, r.Client, &tpuNodeGroup)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete child CRs: %w", err)
+			}
+			if !done {
+				logger.Info("Waiting for child CRs to be deleted")
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
+			// TODO(b/512987019): Implement node object deletion.
 
 			controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerName)
 			if err := r.Update(ctx, &tpuNodeGroup); err != nil {

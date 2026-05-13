@@ -333,6 +333,82 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "resource_deletion_wait_mig",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{}, nil
+				}
+			},
+		},
+		{
+			name: "resource_deletion_wait_mig_deleting",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-tpu-mig",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
+						Finalizers:        []string{"tpu.google.com/dummy-cleanup"},
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{}, nil
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
