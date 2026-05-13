@@ -55,9 +55,9 @@ spec:
                   version:
                     description: Version is the Kubernetes version to install.
                     type: string
-                type: object
                 required:
                 - controlPlaneIP
+                type: object
               instanceConfig:
                 description: |-
                   InstanceConfig allows the controller to generate an instance template.
@@ -166,7 +166,8 @@ spec:
             - message: Exactly one of instanceTemplateURI or instanceConfig must be
                 specified
               rule: has(self.instanceTemplateURI) != has(self.instanceConfig)
-            - message: BootstrapKubernetes cannot be specified when using a custom InstanceTemplateURI
+            - message: BootstrapKubernetes cannot be specified when using a custom
+                InstanceTemplateURI
               rule: '!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)'
           status:
             description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
