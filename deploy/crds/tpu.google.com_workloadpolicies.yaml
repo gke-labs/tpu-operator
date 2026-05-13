@@ -122,6 +122,12 @@ spec:
                   - type
                   type: object
                 type: array
+              operationName:
+                description: OperationName is the name of the pending GCE operation.
+                type: string
+              uri:
+                description: URI is the GCE Resource Policy URI.
+                type: string
             type: object
         type: object
     served: true

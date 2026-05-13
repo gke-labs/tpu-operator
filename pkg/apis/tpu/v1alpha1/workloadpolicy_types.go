@@ -36,6 +36,14 @@ type WorkloadPolicyStatus struct {
 	// Conditions represent the latest available observations of an object's state.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// URI is the GCE Resource Policy URI.
+	// +optional
+	URI string `json:"uri,omitempty"`
+
+	// OperationName is the name of the pending GCE operation.
+	// +optional
+	OperationName string `json:"operationName,omitempty"`
 }
 
 // +genclient
