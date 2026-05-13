@@ -148,14 +148,7 @@ func TestNodeBootstrapper_ReconcileNodeJoin(t *testing.T) {
 				t.Errorf("ReconcileNodeJoin() error = %v, wantErr %v", err, tc.wantErr)
 			}
 
-			// Get updated group from client
-			var updatedGroup tpuapi.TPUNodeGroup
-			err = cl.Get(t.Context(), client.ObjectKey{Name: tc.group.Name, Namespace: tc.group.Namespace}, &updatedGroup)
-			if err != nil {
-				t.Fatalf("Failed to get updated group: %v", err)
-			}
-
-			if diff := cmp.Diff(tc.wantStatus, updatedGroup.Status.NodeSummary); diff != "" {
+			if diff := cmp.Diff(tc.wantStatus, tc.group.Status.NodeSummary); diff != "" {
 				t.Errorf("NodeSummary mismatch (-want +got):\n%s", diff)
 			}
 		})

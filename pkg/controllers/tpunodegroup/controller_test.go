@@ -41,6 +41,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantResult    reconcile.Result
 		wantErr       bool
 		wantDaemonSet bool
+		wantStatus    *tpuapi.NodeSummary
 	}{
 		{
 			name: "resource_not_found",
@@ -75,6 +76,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantResult:    reconcile.Result{},
 			wantErr:       false,
 			wantDaemonSet: true,
+			wantStatus: &tpuapi.NodeSummary{
+				Total:       1,
+				Ready:       0,
+				Reconciling: 1,
+			},
 		},
 	}
 
@@ -114,6 +120,16 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					} else {
 						t.Errorf("Failed to get DaemonSet: %v", err)
 					}
+				}
+			}
+
+			if tc.wantStatus != nil {
+				var updatedObject tpuapi.TPUNodeGroup
+				if err := cl.Get(t.Context(), tc.request.NamespacedName, &updatedObject); err != nil {
+					t.Fatalf("Failed to get updated object: %v", err)
+				}
+				if diff := cmp.Diff(tc.wantStatus, updatedObject.Status.NodeSummary); diff != "" {
+					t.Errorf("Status.NodeSummary mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})

@@ -53,8 +53,15 @@ func (r *TPUNodeGroupReconciler) WithRecorder(recorder record.EventRecorder) *TP
 // +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups/finalizers,verbs=update
 
 // Reconcile is the main entry point for reconciling a TPUNodeGroup.
-func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := r.Log.WithValues("req", req)
+//
+// ARCHITECTURAL NOTICE ON STATUS PATCHING:
+// Sub-reconcilers (e.g., reconcileInstanceTemplate, ReconcileNodeJoin) must act
+// strictly as in-memory mutators of the TPUNodeGroup struct. They should never issue
+// intermediate Status().Patch() calls. Intermediate patches overwrite the in-memory object
+// with server state, wiping out unpersisted condition changes. All cumulative state
+// updates are persisted atomically by the single Status().Patch() call at the end of Reconcile.
+func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
+	logger := r.Log.WithValues("tpunodegroup", req.NamespacedName)
 
 	// 1. Fetch the TPUNodeGroup resource
 	var tpuNodeGroup tpuapi.TPUNodeGroup
@@ -65,6 +72,17 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 		return ctrl.Result{}, err
 	}
+
+	base := tpuNodeGroup.DeepCopy()
+	defer func() {
+		if err := r.Status().Patch(ctx, &tpuNodeGroup, client.MergeFrom(base)); err != nil {
+			if retErr == nil {
+				retErr = fmt.Errorf("failed to patch status: %w", err)
+			} else {
+				logger.Error(err, "failed to patch status after reconcile error")
+			}
+		}
+	}()
 
 	logger.Info("Reconciling TPUNodeGroup")
 
@@ -146,4 +164,3 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 		}
 	}
 }
-

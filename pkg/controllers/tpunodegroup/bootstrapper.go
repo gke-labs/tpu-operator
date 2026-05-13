@@ -32,10 +32,10 @@ func NewNodeBootstrapper(client client.Client, igm gce.IGMClient) *NodeBootstrap
 	}
 }
 
-// ReconcileNodeJoin checks if nodes have joined the cluster and updates status.
+// ReconcileNodeJoin checks if nodes have joined the cluster and mutates NodeSummary in memory.
+// Note: This helper defers persistence to the main Reconcile loop to prevent intermediate API
+// patches from wiping out uncommitted status conditions set by earlier sub-reconcilers.
 func (b *NodeBootstrapper) ReconcileNodeJoin(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	base := group.DeepCopy()
-
 	// 1. Get list of expected instances from MIG
 	// Convention: migName = group.Name for now.
 	// TODO(b/500810349): Get actual MIG name from status or child CR when available.
@@ -86,11 +86,6 @@ func (b *NodeBootstrapper) ReconcileNodeJoin(ctx context.Context, group *tpuapi.
 	group.Status.NodeSummary.Ready = int32(readyCount)
 	// For now, reconciling means expected but not ready.
 	group.Status.NodeSummary.Reconciling = group.Spec.NodeCount - int32(readyCount)
-
-	// Persist status update
-	if err := b.client.Status().Patch(ctx, group, client.MergeFrom(base)); err != nil {
-		return fmt.Errorf("failed to patch TPUNodeGroup status: %w", err)
-	}
 
 	// TODO(b/500810349): Use providerID for lookup in the future.
 
