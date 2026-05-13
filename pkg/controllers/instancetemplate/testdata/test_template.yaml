@@ -11,7 +11,7 @@ spec:
   diskType: pd-ssd
   subnetwork: regions/us-central1/subnetworks/default
   maintenancePolicy: TERMINATE
-  provisioningModel: SPOT
+  provisioningModel: RESERVATION_BOUND
   reservation: test-reservation
   metadata:
     key1: value1

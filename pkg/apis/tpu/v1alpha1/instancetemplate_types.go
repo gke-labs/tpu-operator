@@ -36,6 +36,9 @@ type InstanceTemplateStatus struct {
 	// URI is the GCE URI of the created template.
 	// +optional
 	URI string `json:"uri,omitempty"`
+	// OperationName tracks the ongoing GCE operation (insert/delete) by name.
+	// +optional
+	OperationName string `json:"operationName,omitempty"`
 }
 
 // +genclient

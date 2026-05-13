@@ -42,11 +42,31 @@ func (m *MockInstanceClient) SetMetadata(ctx context.Context, req *computepb.Set
 	return nil, nil
 }
 
+// MockOperation is a mock implementation of gce.Operation.
+type MockOperation struct {
+	DoneFunc func() bool
+	NameFunc func() string
+}
+
+func (m *MockOperation) Done() bool {
+	if m.DoneFunc != nil {
+		return m.DoneFunc()
+	}
+	return true
+}
+
+func (m *MockOperation) Name() string {
+	if m.NameFunc != nil {
+		return m.NameFunc()
+	}
+	return "mock-operation"
+}
+
 // MockInstanceTemplateClient is a mock implementation of the gce.InstanceTemplateClient.
 type MockInstanceTemplateClient struct {
 	GetFunc    func(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error)
-	InsertFunc func(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error)
-	DeleteFunc func(ctx context.Context, project, name string) (*compute.Operation, error)
+	InsertFunc func(ctx context.Context, project string, template *computepb.InstanceTemplate) (Operation, error)
+	DeleteFunc func(ctx context.Context, project, name string) (Operation, error)
 }
 
 // Get calls the mocked GetFunc.
@@ -58,7 +78,7 @@ func (m *MockInstanceTemplateClient) Get(ctx context.Context, project, name stri
 }
 
 // Insert calls the mocked InsertFunc.
-func (m *MockInstanceTemplateClient) Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error) {
+func (m *MockInstanceTemplateClient) Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (Operation, error) {
 	if m.InsertFunc != nil {
 		return m.InsertFunc(ctx, project, template)
 	}
@@ -66,9 +86,22 @@ func (m *MockInstanceTemplateClient) Insert(ctx context.Context, project string,
 }
 
 // Delete calls the mocked DeleteFunc.
-func (m *MockInstanceTemplateClient) Delete(ctx context.Context, project, name string) (*compute.Operation, error) {
+func (m *MockInstanceTemplateClient) Delete(ctx context.Context, project, name string) (Operation, error) {
 	if m.DeleteFunc != nil {
 		return m.DeleteFunc(ctx, project, name)
+	}
+	return nil, nil
+}
+
+// MockGlobalOperationsClient is a mock implementation of the gce.GlobalOperationsClient.
+type MockGlobalOperationsClient struct {
+	GetFunc func(ctx context.Context, project, operation string) (*computepb.Operation, error)
+}
+
+// Get calls the mocked GetFunc.
+func (m *MockGlobalOperationsClient) Get(ctx context.Context, project, operation string) (*computepb.Operation, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, project, operation)
 	}
 	return nil, nil
 }

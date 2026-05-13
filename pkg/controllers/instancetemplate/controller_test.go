@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/api/googleapi"
@@ -35,6 +34,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 		wantErr        bool
 		wantFinalizers []string
 		mockGCE        *gce.MockInstanceTemplateClient
+		mockGCEOps     *gce.MockGlobalOperationsClient
 	}{
 		{
 			name: "resource_not_found",
@@ -91,7 +91,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantErr:        false,
 			wantFinalizers: []string{},
 			mockGCE: &gce.MockInstanceTemplateClient{
-				DeleteFunc: func(ctx context.Context, project, name string) (*compute.Operation, error) {
+				DeleteFunc: func(ctx context.Context, project, name string) (gce.Operation, error) {
 					return nil, nil // Success
 				},
 			},
@@ -131,13 +131,85 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 						}
 						return nil, nil
 					},
-					InsertFunc: func(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error) {
+					InsertFunc: func(ctx context.Context, project string, template *computepb.InstanceTemplate) (gce.Operation, error) {
 						inserted = true
 						return nil, nil
 					},
 				}
 			}(),
 			wantResult:     reconcile.Result{},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+		},
+		{
+			name: "resource_creation_pending_operation",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-template",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{
+					Project: "test-project",
+					InstanceConfig: tpuv1alpha1.InstanceConfig{
+						MachineType: "v4-8",
+					},
+				},
+			},
+			mockGCE: &gce.MockInstanceTemplateClient{
+				GetFunc: func(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error) {
+					return nil, &googleapi.Error{Code: 404}
+				},
+				InsertFunc: func(ctx context.Context, project string, template *computepb.InstanceTemplate) (gce.Operation, error) {
+					return &gce.MockOperation{
+						DoneFunc: func() bool { return false },
+						NameFunc: func() string { return "op-123" },
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+		},
+		{
+			name: "resource_creation_polling_operation",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-template",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{
+					Project: "test-project",
+					InstanceConfig: tpuv1alpha1.InstanceConfig{
+						MachineType: "v4-8",
+					},
+				},
+				Status: tpuv1alpha1.InstanceTemplateStatus{
+					OperationName: "op-123",
+				},
+			},
+			mockGCEOps: &gce.MockGlobalOperationsClient{
+				GetFunc: func(ctx context.Context, project, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					return &computepb.Operation{
+						Status: &status,
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{Requeue: true},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
 		},
@@ -159,11 +231,16 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			if mockGCE == nil {
 				mockGCE = &gce.MockInstanceTemplateClient{}
 			}
+			mockGCEOps := tc.mockGCEOps
+			if mockGCEOps == nil {
+				mockGCEOps = &gce.MockGlobalOperationsClient{}
+			}
 			r := &InstanceTemplateReconciler{
 				Client:   cl,
 				Scheme:   scheme,
 				Recorder: record.NewFakeRecorder(10),
 				GCE:      mockGCE,
+				GCEOps:   mockGCEOps,
 			}
 
 			gotResult, err := r.Reconcile(t.Context(), tc.request)

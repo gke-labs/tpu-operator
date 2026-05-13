@@ -187,6 +187,10 @@ spec:
                   - type
                   type: object
                 type: array
+              operationName:
+                description: OperationName tracks the ongoing GCE operation (insert/delete)
+                  by name.
+                type: string
               uri:
                 description: URI is the GCE URI of the created template.
                 type: string

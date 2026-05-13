@@ -75,6 +75,8 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	base := tpuNodeGroup.DeepCopy()
 	defer func() {
+		// TODO(b/500810949): handle the case where TPUNodeGroup is about to be deleted
+		// after the deletion of all of the k8s resources it owns.
 		if err := r.Status().Patch(ctx, &tpuNodeGroup, client.MergeFrom(base)); err != nil {
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)

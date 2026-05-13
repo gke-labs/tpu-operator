@@ -30,11 +30,22 @@ type InstanceClient interface {
 	SetMetadata(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error)
 }
 
+// Operation defines methods for interacting with long-running operations.
+type Operation interface {
+	Done() bool
+	Name() string
+}
+
 // InstanceTemplateClient defines methods for interacting with Instance Templates.
 type InstanceTemplateClient interface {
 	Get(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error)
-	Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error)
-	Delete(ctx context.Context, project, name string) (*compute.Operation, error)
+	Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (Operation, error)
+	Delete(ctx context.Context, project, name string) (Operation, error)
+}
+
+// GlobalOperationsClient defines methods for interacting with Global Operations.
+type GlobalOperationsClient interface {
+	Get(ctx context.Context, project, operation string) (*computepb.Operation, error)
 }
 
 // Manager provides a centralized point to manage various GCE resources.
@@ -42,6 +53,7 @@ type Manager struct {
 	igmClient               *compute.InstanceGroupManagersClient
 	instancesClient         *compute.InstancesClient
 	instanceTemplatesClient *compute.InstanceTemplatesClient
+	globalOperationsClient  *compute.GlobalOperationsClient
 }
 
 // NewManager creates and initializes the GCE clients.
@@ -51,6 +63,7 @@ func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, err
 		compute.NewInstanceGroupManagersRESTClient,
 		compute.NewInstancesRESTClient,
 		compute.NewInstanceTemplatesRESTClient,
+		compute.NewGlobalOperationsRESTClient,
 		nil, // No observation hook needed in production
 		opts...,
 	)
@@ -59,6 +72,7 @@ func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, err
 type newIGMClientFunc func(context.Context, ...option.ClientOption) (*compute.InstanceGroupManagersClient, error)
 type newInstancesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstancesClient, error)
 type newInstanceTemplatesClientFunc func(context.Context, ...option.ClientOption) (*compute.InstanceTemplatesClient, error)
+type newGlobalOperationsClientFunc func(context.Context, ...option.ClientOption) (*compute.GlobalOperationsClient, error)
 
 // newManagerWithConstructors allows injecting dependencies internally for testing.
 func newManagerWithConstructors(
@@ -66,6 +80,7 @@ func newManagerWithConstructors(
 	newIGMClient newIGMClientFunc,
 	newInstancesClient newInstancesClientFunc,
 	newInstanceTemplatesClient newInstanceTemplatesClientFunc,
+	newGlobalOperationsClient newGlobalOperationsClientFunc,
 	onClientClose func(clientName string),
 	opts ...option.ClientOption,
 ) (mgr *Manager, err error) {
@@ -111,10 +126,22 @@ func newManagerWithConstructors(
 		return instanceTemplatesClient.Close()
 	})
 
+	globalOperationsClient, err := newGlobalOperationsClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create global operations client: %w", err)
+	}
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("globalOperations")
+		}
+		return globalOperationsClient.Close()
+	})
+
 	return &Manager{
 		igmClient:               igmClient,
 		instancesClient:         instancesClient,
 		instanceTemplatesClient: instanceTemplatesClient,
+		globalOperationsClient:  globalOperationsClient,
 	}, nil
 }
 
@@ -131,6 +158,11 @@ func (m *Manager) Instances() InstanceClient {
 // InstanceTemplates returns the InstanceTemplateClient.
 func (m *Manager) InstanceTemplates() InstanceTemplateClient {
 	return &instanceTemplateClientWrapper{client: m.instanceTemplatesClient}
+}
+
+// GlobalOperations returns the GlobalOperationsClient.
+func (m *Manager) GlobalOperations() GlobalOperationsClient {
+	return &globalOperationsClientWrapper{client: m.globalOperationsClient}
 }
 
 type igmClientWrapper struct {
@@ -186,20 +218,64 @@ func (w *instanceTemplateClientWrapper) Get(ctx context.Context, project, name s
 	return w.client.Get(ctx, req)
 }
 
-func (w *instanceTemplateClientWrapper) Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (*compute.Operation, error) {
+type operationWrapper struct {
+	op *compute.Operation
+}
+
+func (w *operationWrapper) Done() bool {
+	if w.op == nil {
+		return true
+	}
+	return w.op.Done()
+}
+
+func (w *operationWrapper) Name() string {
+	if w.op == nil {
+		return ""
+	}
+	return w.op.Name()
+}
+
+func (w *instanceTemplateClientWrapper) Insert(ctx context.Context, project string, template *computepb.InstanceTemplate) (Operation, error) {
 	req := &computepb.InsertInstanceTemplateRequest{
 		Project:                  project,
 		InstanceTemplateResource: template,
 	}
-	return w.client.Insert(ctx, req)
+	op, err := w.client.Insert(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, nil
+	}
+	return &operationWrapper{op: op}, nil
 }
 
-func (w *instanceTemplateClientWrapper) Delete(ctx context.Context, project, name string) (*compute.Operation, error) {
+func (w *instanceTemplateClientWrapper) Delete(ctx context.Context, project, name string) (Operation, error) {
 	req := &computepb.DeleteInstanceTemplateRequest{
 		Project:          project,
 		InstanceTemplate: name,
 	}
-	return w.client.Delete(ctx, req)
+	op, err := w.client.Delete(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, nil
+	}
+	return &operationWrapper{op: op}, nil
+}
+
+type globalOperationsClientWrapper struct {
+	client *compute.GlobalOperationsClient
+}
+
+func (w *globalOperationsClientWrapper) Get(ctx context.Context, project, operation string) (*computepb.Operation, error) {
+	req := &computepb.GetGlobalOperationRequest{
+		Project:   project,
+		Operation: operation,
+	}
+	return w.client.Get(ctx, req)
 }
 
 // Close closes the underlying clients.
@@ -212,6 +288,9 @@ func (m *Manager) Close() error {
 		errs = append(errs, err)
 	}
 	if err := m.instanceTemplatesClient.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.globalOperationsClient.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {
