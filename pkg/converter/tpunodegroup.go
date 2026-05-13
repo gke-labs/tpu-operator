@@ -88,3 +88,37 @@ func getRegion(location string) (string, error) {
 func isZone(location string) bool {
 	return len(strings.Split(location, "-")) == 3
 }
+
+// ToManagedInstanceGroupCR converts a TPUNodeGroup to a ManagedInstanceGroup CR.
+func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, templateURL, workloadPolicyURL string) *api.ManagedInstanceGroup {
+	var wp *string
+	if workloadPolicyURL != "" {
+		wp = &workloadPolicyURL
+	}
+
+	mig := &api.ManagedInstanceGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      tpuNodeGroup.Name + "-mig",
+			Namespace: tpuNodeGroup.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion:         "tpu.google.com/v1alpha1",
+					Kind:               "TPUNodeGroup",
+					Name:               tpuNodeGroup.Name,
+					UID:                tpuNodeGroup.UID,
+					Controller:         ptr.To(true),
+					BlockOwnerDeletion: ptr.To(true),
+				},
+			},
+		},
+		Spec: api.ManagedInstanceGroupSpec{
+			Project:          tpuNodeGroup.Spec.Project,
+			Location:         tpuNodeGroup.Spec.NodeLocation,
+			InstanceTemplate: templateURL,
+			TargetSize:       tpuNodeGroup.Spec.NodeCount,
+			WorkloadPolicy:   wp,
+		},
+	}
+
+	return mig
+}
