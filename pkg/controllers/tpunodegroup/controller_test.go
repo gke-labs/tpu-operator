@@ -444,15 +444,6 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
-				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
-					return []*computepb.ManagedInstance{
-						{
-							Instance: ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-0"),
-						},
-					}, nil
-				}
-			},
 		},
 		{
 			name: "resource_deletion_wait_mig",

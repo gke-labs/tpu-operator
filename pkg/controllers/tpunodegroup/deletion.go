@@ -7,18 +7,19 @@ import (
 
 	"github.com/go-logr/logr"
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+const tpuNodeGroupLabel = "cloud.google.com/tpu-node-group"
+
 // cordonNodes taints all nodes associated with the TPUNodeGroup as NoSchedule.
-func cordonNodes(ctx context.Context, logger logr.Logger, k8sClient client.Client, igmClient gce.IGMClient, group *tpuapi.TPUNodeGroup) error {
+func cordonNodes(ctx context.Context, logger logr.Logger, k8sClient client.Client, group *tpuapi.TPUNodeGroup) error {
 	// 1. List Node objects in the cluster with matching label
 	var nodeList corev1.NodeList
 	labelSelector := client.MatchingLabels{
-		"cloud.google.com/tpu-node-group": fmt.Sprintf("%s-%s", group.Namespace, group.Name),
+		tpuNodeGroupLabel: fmt.Sprintf("%s-%s", group.Namespace, group.Name),
 	}
 	if err := k8sClient.List(ctx, &nodeList, labelSelector); err != nil {
 		return fmt.Errorf("failed to list nodes: %w", err)

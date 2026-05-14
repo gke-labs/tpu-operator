@@ -103,7 +103,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		logger.Info("TPUNodeGroup is being deleted")
 		if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerName) {
 			logger.Info("Cordoning nodes")
-			if err := cordonNodes(ctx, logger, r.Client, r.igmClient, &tpuNodeGroup); err != nil {
+			if err := cordonNodes(ctx, logger, r.Client, &tpuNodeGroup); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
 			}
 
