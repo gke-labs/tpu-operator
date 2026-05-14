@@ -222,6 +222,11 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Step 3: Reconcile Managed Instance Group
 	if err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
+		var waitErr *WaitingForChildError
+		if errors.As(err, &waitErr) {
+			logger.Info(waitErr.Error())
+			return ctrl.Result{}, nil
+		}
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
 	}
 
@@ -389,8 +394,97 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 }
 
 func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	// TODO: Implement MIG reconciliation.
-	// Create MIG in bulk mode referencing policy and template.
+	var template *tpuapi.InstanceTemplate
+	var policy *tpuapi.WorkloadPolicy
+	var err error
+
+	// 1. Fetch InstanceTemplate if needed
+	if group.Spec.InstanceTemplateURI == nil {
+		template = &tpuapi.InstanceTemplate{}
+		templateName := group.Name + "-template"
+		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+			}
+			return fmt.Errorf("getting InstanceTemplate CR: %w", err)
+		}
+		if template.Status.URI == "" {
+			return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+		}
+	}
+
+	// 2. Fetch WorkloadPolicy if needed
+	if group.Spec.Topology != "" {
+		policy = &tpuapi.WorkloadPolicy{}
+		policyName := group.Name + "-policy"
+		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, policy)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+			}
+			return fmt.Errorf("getting WorkloadPolicy CR: %w", err)
+		}
+		if policy.Status.URI == "" {
+			return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+		}
+	}
+
+	// 3. Generate desired state
+	mig := converter.ToManagedInstanceGroupCR(group, template, policy)
+
+	// 4. Get existing CR
+	existing := &tpuapi.ManagedInstanceGroup{}
+	err = r.Get(ctx, client.ObjectKey{Namespace: mig.Namespace, Name: mig.Name}, existing)
+
+	// 5. Create if not found
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.Log.Info("Creating ManagedInstanceGroup CR", "name", mig.Name)
+			if err := r.Create(ctx, mig); err != nil {
+				return fmt.Errorf("creating ManagedInstanceGroup CR: %w", err)
+			}
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    "ManagedInstanceGroupReady",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Provisioning",
+				Message: "Child ManagedInstanceGroup CR created; waiting for GCE resource provisioning",
+			})
+			return &WaitingForChildError{ChildKind: "ManagedInstanceGroup"}
+		}
+		return fmt.Errorf("getting ManagedInstanceGroup CR: %w", err)
+	}
+
+	// 6. Update if changed
+	if !equality.Semantic.DeepEqual(existing.Spec, mig.Spec) {
+		r.Log.Info("Patching ManagedInstanceGroup CR", "name", mig.Name)
+		patchBase := existing.DeepCopy()
+		existing.Spec = mig.Spec
+		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
+			return fmt.Errorf("patching ManagedInstanceGroup CR: %w", err)
+		}
+	}
+
+	// 7. Wait for URL population
+	if existing.Status.URL == "" {
+		r.Log.Info("ManagedInstanceGroup CR ready but URL missing", "name", existing.Name)
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    "ManagedInstanceGroupReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "Provisioning",
+			Message: "Waiting for GCE resource provisioning",
+		})
+		return &WaitingForChildError{ChildKind: "ManagedInstanceGroup"}
+	}
+
+	// 8. Mark Ready
+	r.Log.Info("ManagedInstanceGroup CR is ready", "url", existing.Status.URL)
+	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+		Type:    "ManagedInstanceGroupReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Ready",
+		Message: "ManagedInstanceGroup provisioned successfully",
+	})
 	return nil
 }
 
@@ -415,6 +509,7 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&tpuapi.TPUNodeGroup{}).
 		Owns(&tpuapi.InstanceTemplate{}).
 		Owns(&tpuapi.WorkloadPolicy{}).
+		Owns(&tpuapi.ManagedInstanceGroup{}).
 		Complete(r)
 }
 

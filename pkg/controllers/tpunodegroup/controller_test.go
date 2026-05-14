@@ -117,6 +117,38 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:          "test-project",
+						Location:         "us-central1-a",
+						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:       1,
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
+				},
+			},
 			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
 			wantErr:       false,
 			wantDaemonSet: true,
@@ -170,6 +202,38 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 
 				},
 			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-disabled-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-disabled-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:          "test-project",
+						Location:         "us-central1-a",
+						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:       1,
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-disabled-mig",
+					},
+				},
+			},
 			nodes: []corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "test-tpu-0"},
@@ -217,6 +281,23 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeLocation:        "us-central1-a",
 					NodeCount:           1,
 					InstanceTemplateURI: ptr.To("projects/test-project/global/instanceTemplates/my-template"),
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:          "test-project",
+						Location:         "us-central1-a",
+						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:       1,
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
 				},
 			},
 			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
@@ -296,6 +377,21 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 						URI: "projects/test-project/global/instanceTemplates/my-template",
 					},
 				},
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:          "test-project",
+						Location:         "us-central1-a",
+						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:       1,
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
+				},
 			},
 			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
 			wantErr:       false,
@@ -306,6 +402,12 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Status:  metav1.ConditionTrue,
 					Reason:  "Ready",
 					Message: "InstanceTemplate provisioned successfully",
+				},
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "ManagedInstanceGroup provisioned successfully",
 				},
 			},
 		},
@@ -638,6 +740,87 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantResult: reconcile.Result{},
 			wantErr:    false,
 			wantDeleted: true,
+		},
+		{
+			name: "reconcile_mig_create",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:             "test-project",
+					NodeLocation:        "us-central1-a",
+					NodeCount:           1,
+					InstanceTemplateURI: ptr.To("projects/test-project/global/instanceTemplates/my-template"),
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child ManagedInstanceGroup CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
+		{
+			name: "reconcile_mig_ready",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:             "test-project",
+					NodeLocation:        "us-central1-a",
+					NodeCount:           1,
+					InstanceTemplateURI: ptr.To("projects/test-project/global/instanceTemplates/my-template"),
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:          "test-project",
+						Location:         "us-central1-a",
+						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:       1,
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
+				},
+			},
+			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantErr:       false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "ManagedInstanceGroup provisioned successfully",
+				},
+			},
 		},
 	}
 

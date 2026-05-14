@@ -233,11 +233,11 @@ func TestToWorkloadPolicyCR(t *testing.T) {
 
 func TestToManagedInstanceGroupCR(t *testing.T) {
 	tests := []struct {
-		name              string
-		tpuNodeGroup      *api.TPUNodeGroup
-		templateURL       string
-		workloadPolicyURL string
-		want              *api.ManagedInstanceGroup
+		name         string
+		tpuNodeGroup *api.TPUNodeGroup
+		template     *api.InstanceTemplate
+		policy       *api.WorkloadPolicy
+		want         *api.ManagedInstanceGroup
 	}{
 		{
 			name: "with workload policy",
@@ -253,8 +253,16 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 					NodeCount:    4,
 				},
 			},
-			templateURL:       "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
-			workloadPolicyURL: "https://www.googleapis.com/compute/v1/projects/my-project/regions/us-central1/resourcePolicies/my-policy",
+			template: &api.InstanceTemplate{
+				Status: api.InstanceTemplateStatus{
+					URI: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
+				},
+			},
+			policy: &api.WorkloadPolicy{
+				Status: api.WorkloadPolicyStatus{
+					URI: "https://www.googleapis.com/compute/v1/projects/my-project/regions/us-central1/resourcePolicies/my-policy",
+				},
+			},
 			want: &api.ManagedInstanceGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-tpu-group-mig",
@@ -293,8 +301,12 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 					NodeCount:    4,
 				},
 			},
-			templateURL:       "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
-			workloadPolicyURL: "",
+			template: &api.InstanceTemplate{
+				Status: api.InstanceTemplateStatus{
+					URI: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
+				},
+			},
+			policy: nil,
 			want: &api.ManagedInstanceGroup{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "my-tpu-group-mig",
@@ -319,11 +331,52 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "with InstanceTemplateURI in spec",
+			tpuNodeGroup: &api.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-tpu-group",
+					Namespace: "my-namespace",
+					UID:       "my-uid",
+				},
+				Spec: api.TPUNodeGroupSpec{
+					Project:             "my-project",
+					NodeLocation:        "us-central1-a",
+					NodeCount:           4,
+					InstanceTemplateURI: ptr.To("https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/spec-template"),
+				},
+			},
+			template: nil,
+			policy:   nil,
+			want: &api.ManagedInstanceGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-tpu-group-mig",
+					Namespace: "my-namespace",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "tpu.google.com/v1alpha1",
+							Kind:               "TPUNodeGroup",
+							Name:               "my-tpu-group",
+							UID:                "my-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: api.ManagedInstanceGroupSpec{
+					Project:          "my-project",
+					Location:         "us-central1-a",
+					InstanceTemplate: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/spec-template",
+					TargetSize:       4,
+					WorkloadPolicy:   nil,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ToManagedInstanceGroupCR(tt.tpuNodeGroup, tt.templateURL, tt.workloadPolicyURL)
+			got := ToManagedInstanceGroupCR(tt.tpuNodeGroup, tt.template, tt.policy)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("ToManagedInstanceGroupCR() mismatch (-want +got):\n%s", diff)
 			}
