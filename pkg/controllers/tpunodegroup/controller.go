@@ -135,9 +135,14 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, nil // Return and let it reconcile again with finalizer
 	}
 
-	// Step 1: Reconcile Resource Policy
-	if err := r.reconcileResourcePolicy(ctx, &tpuNodeGroup); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile resource policy: %w", err)
+	// Step 1: Reconcile Workload Policy
+	if err := r.reconcileWorkloadPolicy(ctx, &tpuNodeGroup); err != nil {
+		var waitErr *WaitingForChildError
+		if errors.As(err, &waitErr) {
+			logger.Info(waitErr.Error())
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile workload policy: %w", err)
 	}
 
 	// Step 2: Reconcile Instance Template
@@ -182,9 +187,73 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	return ctrl.Result{}, nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileResourcePolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	// TODO: Implement ResourcePolicy reconciliation (Composite Pattern).
-	// Check if multi-host and if policy exists, create if not.
+// reconcileWorkloadPolicy orchestrates the child WorkloadPolicy CR.
+// It is only needed for multi-host slices where topology is specified.
+func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	// WorkloadPolicy is only needed for multi-host slices where topology is specified.
+	if group.Spec.Topology == "" {
+		r.Log.Info("Skipping WorkloadPolicy reconciliation as topology is not specified")
+		return nil
+	}
+
+	// 1. Generate desired state
+	policy, err := converter.ToWorkloadPolicyCR(group)
+	if err != nil {
+		return fmt.Errorf("failed to convert to WorkloadPolicy CR: %w", err)
+	}
+
+	// 2. Get existing CR
+	existing := &tpuapi.WorkloadPolicy{}
+	err = r.Get(ctx, client.ObjectKey{Namespace: policy.Namespace, Name: policy.Name}, existing)
+	
+	// 3. Create if not found
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.Log.Info("Creating WorkloadPolicy CR", "name", policy.Name)
+			if err := r.Create(ctx, policy); err != nil {
+				return fmt.Errorf("creating WorkloadPolicy CR: %w", err)
+			}
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    "WorkloadPolicyReady",
+				Status:  metav1.ConditionFalse,
+				Reason:  "Provisioning",
+				Message: "Child WorkloadPolicy CR created; waiting for GCE resource provisioning",
+			})
+			return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+		}
+		return fmt.Errorf("getting WorkloadPolicy CR: %w", err)
+	}
+
+	// 4. Update if changed
+	if !equality.Semantic.DeepEqual(existing.Spec, policy.Spec) {
+		r.Log.Info("Patching WorkloadPolicy CR", "name", policy.Name)
+		patchBase := existing.DeepCopy()
+		existing.Spec = policy.Spec
+		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
+			return fmt.Errorf("patching WorkloadPolicy CR: %w", err)
+		}
+	}
+
+	// 5. Wait for URI population by the WorkloadPolicy controller
+	if existing.Status.URI == "" {
+		r.Log.Info("WorkloadPolicy CR ready but URI missing", "name", existing.Name)
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    "WorkloadPolicyReady",
+			Status:  metav1.ConditionFalse,
+			Reason:  "Provisioning",
+			Message: "Waiting for GCE resource provisioning",
+		})
+		return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+	}
+
+	// 6. Mark Ready
+	r.Log.Info("WorkloadPolicy CR is ready", "uri", existing.Status.URI)
+	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+		Type:    "WorkloadPolicyReady",
+		Status:  metav1.ConditionTrue,
+		Reason:  "Ready",
+		Message: "WorkloadPolicy provisioned successfully",
+	})
 	return nil
 }
 
@@ -284,6 +353,7 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tpuapi.TPUNodeGroup{}).
 		Owns(&tpuapi.InstanceTemplate{}).
+		Owns(&tpuapi.WorkloadPolicy{}).
 		Complete(r)
 }
 

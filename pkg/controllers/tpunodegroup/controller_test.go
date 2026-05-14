@@ -281,6 +281,129 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "reconcile_workload_policy_create",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+					Topology:     "2x2x1",
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "WorkloadPolicyReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child WorkloadPolicy CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
+		{
+			name: "reconcile_workload_policy_ready",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+					Topology:     "2x2x1",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.WorkloadPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-policy",
+						Namespace: "default",
+					},
+					Spec: tpuapi.WorkloadPolicySpec{
+						Project:             "test-project",
+						Region:              "us-central1",
+						AcceleratorTopology: "2x2x1",
+					},
+					Status: tpuapi.WorkloadPolicyStatus{
+						URI: "projects/test-project/regions/us-central1/resourcePolicies/test-tpu-policy",
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "WorkloadPolicyReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "WorkloadPolicy provisioned successfully",
+				},
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
+		{
+			name: "reconcile_workload_policy_skip",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
+		{
 			name: "resource_deletion_cordon",
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
