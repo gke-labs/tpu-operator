@@ -63,11 +63,12 @@ spec:
                 format: int32
                 type: integer
               targetSizePolicyMode:
-                default: BULK
+                default: INDIVIDUAL
                 description: TargetSizePolicyMode specifies the mode of target size
                   policy.
                 enum:
                 - BULK
+                - INDIVIDUAL
                 type: string
               workloadPolicy:
                 description: WorkloadPolicy is the URL of the workload policy to associate

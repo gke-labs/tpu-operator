@@ -1022,3 +1022,132 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 	}
 }
 
+func TestTPUNodeGroupReconciler_defaultManagedInstanceGroup(t *testing.T) {
+	tests := []struct {
+		name  string
+		mig   *tpuapi.ManagedInstanceGroup
+		group *tpuapi.TPUNodeGroup
+		want  *tpuapi.ManagedInstanceGroup
+	}{
+		{
+			name:  "nil mig",
+			mig:   nil,
+			group: &tpuapi.TPUNodeGroup{},
+			want:  nil,
+		},
+		{
+			name: "empty topology defaults to INDIVIDUAL",
+			mig: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{},
+			},
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{},
+			},
+			want: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{
+					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeIndividual),
+				},
+			},
+		},
+		{
+			name: "topology present defaults to BULK",
+			mig: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{},
+			},
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Topology: "2x2x1",
+				},
+			},
+			want: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{
+					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeBulk),
+				},
+			},
+		},
+		{
+			name: "already set value is preserved",
+			mig: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{
+					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeBulk),
+				},
+			},
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Topology: "",
+				},
+			},
+			want: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{
+					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeBulk),
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &TPUNodeGroupReconciler{}
+			r.defaultManagedInstanceGroup(tc.mig, tc.group)
+
+			if diff := cmp.Diff(tc.want, tc.mig); diff != "" {
+				t.Errorf("defaultManagedInstanceGroup() mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestDefaultManagedInstanceGroup(t *testing.T) {
+	r := &TPUNodeGroupReconciler{}
+
+	tests := []struct {
+		name     string
+		group    *tpuapi.TPUNodeGroup
+		mig      *tpuapi.ManagedInstanceGroup
+		wantMode string
+	}{
+		{
+			name: "topology_empty_defaults_to_individual",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{},
+			},
+			mig: &tpuapi.ManagedInstanceGroup{},
+			wantMode: "INDIVIDUAL",
+		},
+		{
+			name: "topology_not_empty_defaults_to_bulk",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Topology: "2x2x2",
+				},
+			},
+			mig: &tpuapi.ManagedInstanceGroup{},
+			wantMode: "BULK",
+		},
+		{
+			name: "existing_mode_preserved",
+			group: &tpuapi.TPUNodeGroup{
+				Spec: tpuapi.TPUNodeGroupSpec{},
+			},
+			mig: &tpuapi.ManagedInstanceGroup{
+				Spec: tpuapi.ManagedInstanceGroupSpec{
+					TargetSizePolicyMode: ptr.To("BULK"),
+				},
+			},
+			wantMode: "BULK",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r.defaultManagedInstanceGroup(tt.mig, tt.group)
+			if tt.mig.Spec.TargetSizePolicyMode == nil {
+				t.Fatal("TargetSizePolicyMode is nil")
+			}
+			if *tt.mig.Spec.TargetSizePolicyMode != tt.wantMode {
+				t.Errorf("got %s, want %s", *tt.mig.Spec.TargetSizePolicyMode, tt.wantMode)
+			}
+		})
+	}
+}
+

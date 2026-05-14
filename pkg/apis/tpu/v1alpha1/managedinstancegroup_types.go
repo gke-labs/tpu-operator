@@ -8,6 +8,9 @@ const (
 	// TargetSizePolicyModeBulk specifies that the MIG should be provisioned in bulk.
 	TargetSizePolicyModeBulk = "BULK"
 
+	// TargetSizePolicyModeIndividual specifies that the MIG should be provisioned individually.
+	TargetSizePolicyModeIndividual = "INDIVIDUAL"
+
 	// DefaultActionOnFailureDoNothing specifies that the MIG should not attempt to restart failed instances.
 	DefaultActionOnFailureDoNothing = "DO_NOTHING"
 )
@@ -35,8 +38,8 @@ type ManagedInstanceGroupSpec struct {
 	WorkloadPolicy *string `json:"workloadPolicy,omitempty"`
 
 	// TargetSizePolicyMode specifies the mode of target size policy.
-	// +kubebuilder:validation:Enum=BULK
-	// +kubebuilder:default="BULK"
+	// +kubebuilder:validation:Enum=BULK;INDIVIDUAL
+	// +kubebuilder:default="INDIVIDUAL"
 	// +optional
 	TargetSizePolicyMode *string `json:"targetSizePolicyMode,omitempty"`
 
