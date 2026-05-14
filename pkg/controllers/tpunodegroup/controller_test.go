@@ -51,6 +51,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantStatus        *tpuapi.NodeSummary
 		wantConditions    []metav1.Condition
 		wantNodeTaints    map[string][]corev1.Taint
+		wantFinalizers    []string
+		wantDeleted       bool
 		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
 	}{
 		{
@@ -65,6 +67,33 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			name: "add_finalizers",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantFinalizers: []string{
+				"tpu.google.com/cleanup-mig",
+				"tpu.google.com/cleanup-template",
+				"tpu.google.com/cleanup-policy",
+			},
+		},
+		{
 			name: "resource_found_success",
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -76,7 +105,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -132,7 +161,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu-disabled",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -181,7 +210,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:             "test-project",
@@ -206,7 +235,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -240,7 +269,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -292,7 +321,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -324,7 +353,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -381,7 +410,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:       "test-tpu",
 					Namespace:  "default",
-					Finalizers: []string{"tpu.google.com/slice-cleanup"},
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -415,7 +444,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-tpu",
 					Namespace:         "default",
-					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					Finalizers:        []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
@@ -457,7 +486,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-tpu",
 					Namespace:         "default",
-					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					Finalizers:        []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
@@ -494,7 +523,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-tpu",
 					Namespace:         "default",
-					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					Finalizers:        []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
@@ -520,6 +549,95 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					return []*computepb.ManagedInstance{}, nil
 				}
 			},
+		},
+		{
+			name: "resource_deletion_mig_gone_wait_template",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+		},
+		{
+			name: "resource_deletion_template_gone_wait_policy",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/cleanup-policy"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.WorkloadPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-policy",
+						Namespace: "default",
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+		},
+		{
+			name: "resource_deletion_all_gone",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/cleanup-policy"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantDeleted: true,
 		},
 	}
 
@@ -582,23 +700,36 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				}
 			}
 
-			if tc.wantStatus != nil {
+			if tc.wantDeleted {
+				var updatedObject tpuapi.TPUNodeGroup
+				err := cl.Get(t.Context(), tc.request.NamespacedName, &updatedObject)
+				if err == nil {
+					t.Errorf("Expected object to be deleted, but it was found")
+				} else if !errors.IsNotFound(err) {
+					t.Errorf("Expected NotFound error, got: %v", err)
+				}
+			} else if tc.wantStatus != nil || tc.wantConditions != nil || tc.wantFinalizers != nil {
 				var updatedObject tpuapi.TPUNodeGroup
 				if err := cl.Get(t.Context(), tc.request.NamespacedName, &updatedObject); err != nil {
 					t.Fatalf("Failed to get updated object: %v", err)
 				}
-				if diff := cmp.Diff(tc.wantStatus, updatedObject.Status.NodeSummary); diff != "" {
-					t.Errorf("Status.NodeSummary mismatch (-want +got):\n%s", diff)
-				}
-			}
 
-			if tc.wantConditions != nil {
-				var updatedObject tpuapi.TPUNodeGroup
-				if err := cl.Get(t.Context(), tc.request.NamespacedName, &updatedObject); err != nil {
-					t.Fatalf("Failed to get updated object: %v", err)
+				if tc.wantStatus != nil {
+					if diff := cmp.Diff(tc.wantStatus, updatedObject.Status.NodeSummary); diff != "" {
+						t.Errorf("Status.NodeSummary mismatch (-want +got):\n%s", diff)
+					}
 				}
-				if diff := cmp.Diff(tc.wantConditions, updatedObject.Status.Conditions, cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")); diff != "" {
-					t.Errorf("Status.Conditions mismatch (-want +got):\n%s", diff)
+
+				if tc.wantConditions != nil {
+					if diff := cmp.Diff(tc.wantConditions, updatedObject.Status.Conditions, cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")); diff != "" {
+						t.Errorf("Status.Conditions mismatch (-want +got):\n%s", diff)
+					}
+				}
+
+				if tc.wantFinalizers != nil {
+					if diff := cmp.Diff(tc.wantFinalizers, updatedObject.Finalizers); diff != "" {
+						t.Errorf("Finalizers mismatch (-want +got):\n%s", diff)
+					}
 				}
 			}
 

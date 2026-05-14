@@ -60,67 +60,67 @@ func hasTaint(node *corev1.Node, key string) bool {
 	return false
 }
 
-// deleteChildCRs deletes the child CRs in order: MIG, Template, Policy.
-// It returns true if all resources are gone, and false if it needs to wait (requeue).
-func deleteChildCRs(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
-	// 1. Delete ManagedInstanceGroup
+// ensureManagedInstanceGroupDeleted ensures the ManagedInstanceGroup is deleted.
+// It returns true if the resource is gone, and false if it initiated deletion or is waiting.
+func ensureManagedInstanceGroupDeleted(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
 	migName := group.ManagedInstanceGroupName()
 	var mig tpuapi.ManagedInstanceGroup
 	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: migName}, &mig)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return false, fmt.Errorf("failed to get ManagedInstanceGroup: %w", err)
+		if apierrors.IsNotFound(err) {
+			return true, nil
 		}
-		// MIG is gone, proceed to next
-	} else {
-		if mig.DeletionTimestamp.IsZero() {
-			if err := k8sClient.Delete(ctx, &mig); err != nil {
-				return false, fmt.Errorf("failed to delete ManagedInstanceGroup: %w", err)
-			}
-		}
-		// Wait for it to be gone
-		return false, nil
+		return false, fmt.Errorf("failed to get ManagedInstanceGroup: %w", err)
 	}
 
-	// 2. Delete InstanceTemplate
+	if mig.DeletionTimestamp.IsZero() {
+		if err := k8sClient.Delete(ctx, &mig); err != nil {
+			return false, fmt.Errorf("failed to delete ManagedInstanceGroup: %w", err)
+		}
+	}
+	return false, nil
+}
+
+// ensureInstanceTemplateDeleted ensures the InstanceTemplate is deleted.
+// It returns true if the resource is gone, and false if it initiated deletion or is waiting.
+func ensureInstanceTemplateDeleted(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
 	templateName := group.InstanceTemplateName()
 	var template tpuapi.InstanceTemplate
-	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, &template)
+	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, &template)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return false, fmt.Errorf("failed to get InstanceTemplate: %w", err)
+		if apierrors.IsNotFound(err) {
+			return true, nil
 		}
-		// Template is gone, proceed to next
-	} else {
-		if template.DeletionTimestamp.IsZero() {
-			if err := k8sClient.Delete(ctx, &template); err != nil {
-				return false, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
-			}
-		}
-		// Wait for it to be gone
-		return false, nil
+		return false, fmt.Errorf("failed to get InstanceTemplate: %w", err)
 	}
 
-	// 3. Delete WorkloadPolicy
+	if template.DeletionTimestamp.IsZero() {
+		if err := k8sClient.Delete(ctx, &template); err != nil {
+			return false, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
+		}
+	}
+	return false, nil
+}
+
+// ensureWorkloadPolicyDeleted ensures the WorkloadPolicy is deleted.
+// It returns true if the resource is gone, and false if it initiated deletion or is waiting.
+func ensureWorkloadPolicyDeleted(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
 	policyName := group.WorkloadPolicyName()
 	var policy tpuapi.WorkloadPolicy
-	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, &policy)
+	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, &policy)
 	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return false, fmt.Errorf("failed to get WorkloadPolicy: %w", err)
+		if apierrors.IsNotFound(err) {
+			return true, nil
 		}
-		// Policy is gone, all done!
-	} else {
-		if policy.DeletionTimestamp.IsZero() {
-			if err := k8sClient.Delete(ctx, &policy); err != nil {
-				return false, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
-			}
-		}
-		// Wait for it to be gone
-		return false, nil
+		return false, fmt.Errorf("failed to get WorkloadPolicy: %w", err)
 	}
 
-	return true, nil
+	if policy.DeletionTimestamp.IsZero() {
+		if err := k8sClient.Delete(ctx, &policy); err != nil {
+			return false, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
+		}
+	}
+	return false, nil
 }
 
 // TODO(b/512987019): Implement deleteNodeObjects
