@@ -90,7 +90,6 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantErr:       false,
 			wantDaemonSet: true,
 			wantStatus: &tpuapi.NodeSummary{
-				Total:       1,
 				Ready:       0,
 				Reconciling: 1,
 			},
@@ -153,7 +152,6 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantErr:       false,
 			wantDaemonSet: true,
 			wantStatus: &tpuapi.NodeSummary{
-				Total:       1,
 				Ready:       1,
 				Reconciling: 0,
 			},

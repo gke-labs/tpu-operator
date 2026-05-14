@@ -69,7 +69,6 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-2")},
 			},
 			wantStatus: &tpuapi.NodeSummary{
-				Total:       2,
 				Ready:       2,
 				Reconciling: 0,
 			},
@@ -111,7 +110,6 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-2")},
 			},
 			wantStatus: &tpuapi.NodeSummary{
-				Total:       2,
 				Ready:       1,
 				Reconciling: 1,
 			},

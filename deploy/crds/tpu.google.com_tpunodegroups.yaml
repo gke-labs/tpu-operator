@@ -249,15 +249,10 @@ spec:
                       reconciled.
                     format: int32
                     type: integer
-                  total:
-                    description: Total is the total number of nodes requested.
-                    format: int32
-                    type: integer
                 required:
                 - failed
                 - ready
                 - reconciling
-                - total
                 type: object
             type: object
         type: object
