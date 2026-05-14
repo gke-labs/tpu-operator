@@ -401,7 +401,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	// 1. Fetch InstanceTemplate if needed
 	if group.Spec.InstanceTemplateURI == nil {
 		template = &tpuapi.InstanceTemplate{}
-		templateName := group.Name + "-template"
+		templateName := group.InstanceTemplateName()
 		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
@@ -417,7 +417,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	// 2. Fetch WorkloadPolicy if needed
 	if group.Spec.Topology != "" {
 		policy = &tpuapi.WorkloadPolicy{}
-		policyName := group.Name + "-policy"
+		policyName := group.WorkloadPolicyName()
 		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, policy)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
