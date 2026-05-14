@@ -141,6 +141,9 @@ spec:
                   - type
                   type: object
                 type: array
+              operationName:
+                description: OperationName is the name of the pending GCE operation.
+                type: string
               url:
                 description: URL is the GCE URL of the created managed instance group.
                 type: string

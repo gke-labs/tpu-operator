@@ -55,6 +55,10 @@ type ManagedInstanceGroupStatus struct {
 	// URL is the GCE URL of the created managed instance group.
 	// +optional
 	URL string `json:"url,omitempty"`
+
+	// OperationName is the name of the pending GCE operation.
+	// +optional
+	OperationName string `json:"operationName,omitempty"`
 }
 
 // +genclient
