@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestTPUNodeGroup(t *testing.T) {
@@ -15,7 +18,8 @@ func TestTPUNodeGroup(t *testing.T) {
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/tpunodegroup/testdata/test_nodegroup.yaml")
 	crName := "test-nodegroup"
-	childTemplateName := crName + "-template"
+	dummyNodeGroup := &tpuapi.TPUNodeGroup{ObjectMeta: metav1.ObjectMeta{Name: crName}}
+	childTemplateName := dummyNodeGroup.InstanceTemplateName()
 
 	t.Log("=== Applying Test Manifest ===")
 	cmd := exec.Command("kubectl", "apply", "-f", manifest, "--request-timeout=30s")
@@ -102,8 +106,9 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/tpunodegroup/testdata/test_nodegroup_multi_host.yaml")
 	crName := "test-multihost"
-	childTemplateName := crName + "-template"
-	childPolicyName := crName + "-policy"
+	dummyNodeGroup := &tpuapi.TPUNodeGroup{ObjectMeta: metav1.ObjectMeta{Name: crName}}
+	childTemplateName := dummyNodeGroup.InstanceTemplateName()
+	childPolicyName := dummyNodeGroup.WorkloadPolicyName()
 	migManifest := filepath.Join(repoRoot, "pkg/controllers/managedinstancegroup/testdata/test_mig.yaml")
 	migName := "test-mig"
 

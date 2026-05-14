@@ -64,7 +64,7 @@ func hasTaint(node *corev1.Node, key string) bool {
 // It returns true if all resources are gone, and false if it needs to wait (requeue).
 func deleteChildCRs(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
 	// 1. Delete ManagedInstanceGroup
-	migName := group.Name + "-mig"
+	migName := group.ManagedInstanceGroupName()
 	var mig tpuapi.ManagedInstanceGroup
 	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: migName}, &mig)
 	if err != nil {
@@ -83,7 +83,7 @@ func deleteChildCRs(ctx context.Context, k8sClient client.Client, group *tpuapi.
 	}
 
 	// 2. Delete InstanceTemplate
-	templateName := group.Name + "-template"
+	templateName := group.InstanceTemplateName()
 	var template tpuapi.InstanceTemplate
 	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, &template)
 	if err != nil {
@@ -102,7 +102,7 @@ func deleteChildCRs(ctx context.Context, k8sClient client.Client, group *tpuapi.
 	}
 
 	// 3. Delete WorkloadPolicy
-	policyName := group.Name + "-policy"
+	policyName := group.WorkloadPolicyName()
 	var policy tpuapi.WorkloadPolicy
 	err = k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, &policy)
 	if err != nil {

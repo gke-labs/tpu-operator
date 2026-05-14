@@ -18,7 +18,7 @@ func ToInstanceTemplateCR(tpuNodeGroup *api.TPUNodeGroup) *tpuv1alpha1.InstanceT
 
 	template := &api.InstanceTemplate{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tpuNodeGroup.Name + "-template",
+			Name:      tpuNodeGroup.InstanceTemplateName(),
 			Namespace: tpuNodeGroup.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -49,7 +49,7 @@ func ToWorkloadPolicyCR(tpuNodeGroup *api.TPUNodeGroup) (*api.WorkloadPolicy, er
 
 	policy := &api.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tpuNodeGroup.Name + "-policy",
+			Name:      tpuNodeGroup.WorkloadPolicyName(),
 			Namespace: tpuNodeGroup.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -99,7 +99,7 @@ func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, templateURL, workl
 
 	mig := &api.ManagedInstanceGroup{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      tpuNodeGroup.Name + "-mig",
+			Name:      tpuNodeGroup.ManagedInstanceGroupName(),
 			Namespace: tpuNodeGroup.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
