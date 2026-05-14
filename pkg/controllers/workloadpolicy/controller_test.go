@@ -2,6 +2,7 @@ package workloadpolicy
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -212,6 +213,283 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{Requeue: true},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+		},
+		{
+			name: "creation_gce_get_error",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-policy",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				GetFunc: func(ctx context.Context, project, region, name string) (*computepb.ResourcePolicy, error) {
+					return nil, fmt.Errorf("forced GCE error")
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "creation_gce_insert_error",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-policy",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				GetFunc: func(ctx context.Context, project, region, name string) (*computepb.ResourcePolicy, error) {
+					return nil, &googleapi.Error{Code: 404}
+				},
+				InsertFunc: func(ctx context.Context, project, region string, policy *computepb.ResourcePolicy) (gce.Operation, error) {
+					return nil, fmt.Errorf("forced insert error")
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "polling_operation_still_pending",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-policy",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Status: tpuv1alpha1.WorkloadPolicyStatus{
+					OperationName: "op-123",
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCEOps: &gce.MockRegionOperationsClient{
+				GetFunc: func(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_RUNNING
+					return &computepb.Operation{
+						Status: &status,
+					}, nil
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+		},
+		{
+			name: "polling_operation_failed",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-policy",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Status: tpuv1alpha1.WorkloadPolicyStatus{
+					OperationName: "op-123",
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCEOps: &gce.MockRegionOperationsClient{
+				GetFunc: func(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					return &computepb.Operation{
+						Status:               &status,
+						HttpErrorStatusCode: ptr.To(int32(500)),
+						HttpErrorMessage:     ptr.To("internal error"),
+					}, nil
+				},
+			},
+			wantErr: true,
+			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+		},
+		{
+			name: "deletion_gce_delete_error",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				DeleteFunc: func(ctx context.Context, project, region, name string) (gce.Operation, error) {
+					return nil, fmt.Errorf("forced delete error")
+				},
+			},
+			wantErr: true,
+			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+		},
+		{
+			name: "deletion_gce_not_found",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				DeleteFunc: func(ctx context.Context, project, region, name string) (gce.Operation, error) {
+					return nil, &googleapi.Error{Code: 404}
+				},
+			},
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
+			wantFinalizers: []string{},
+		},
+		{
+			name: "polling_delete_operation_404",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Status: tpuv1alpha1.WorkloadPolicyStatus{
+					OperationName: "op-123",
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCEOps: &gce.MockRegionOperationsClient{
+				GetFunc: func(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					return &computepb.Operation{
+						Status:               &status,
+						HttpErrorStatusCode: ptr.To(int32(404)),
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
+			wantFinalizers: []string{},
+		},
+		{
+			name: "deletion_operation_immediately_done",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				DeleteFunc: func(ctx context.Context, project, region, name string) (gce.Operation, error) {
+					return &gce.MockOperation{
+						DoneFunc: func() bool { return true },
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
+			wantFinalizers: []string{},
+		},
+		{
+			name: "deletion_no_operation",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				DeleteFunc: func(ctx context.Context, project, region, name string) (gce.Operation, error) {
+					return nil, nil
+				},
+			},
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
+			wantFinalizers: []string{},
 		},
 	}
 
