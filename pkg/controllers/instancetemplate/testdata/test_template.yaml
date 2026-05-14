@@ -21,4 +21,4 @@ spec:
   serviceAccounts:
     - email: default
       scopes:
-        - cloud-platform
+        - https://www.googleapis.com/auth/cloud-platform

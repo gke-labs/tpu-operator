@@ -29,7 +29,7 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 				ServiceAccounts: []tpuv1alpha1.ServiceAccount{
 					{
 						Email:  "default",
-						Scopes: []string{"cloud-platform"},
+						Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
 					},
 				},
 				Reservation:       ptr.To("test-reservation"),
@@ -103,6 +103,9 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 	}
 	if gceTemplate.Properties.Scheduling.ProvisioningModel == nil || *gceTemplate.Properties.Scheduling.ProvisioningModel != *cr.Spec.ProvisioningModel {
 		t.Errorf("Expected ProvisioningModel %q, got %q", *cr.Spec.ProvisioningModel, *gceTemplate.Properties.Scheduling.ProvisioningModel)
+	}
+	if gceTemplate.Properties.Scheduling.InstanceTerminationAction == nil || *gceTemplate.Properties.Scheduling.InstanceTerminationAction != "DELETE" {
+		t.Errorf("Expected InstanceTerminationAction %q, got %q", "DELETE", *gceTemplate.Properties.Scheduling.InstanceTerminationAction)
 	}
 
 	if gceTemplate.Properties.ReservationAffinity == nil {

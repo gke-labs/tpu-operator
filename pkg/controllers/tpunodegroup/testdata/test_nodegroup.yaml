@@ -5,7 +5,7 @@ metadata:
   namespace: default
 spec:
   project: gsc-nexus-xteam-shared-testing
-  nodeLocation: us-central1-a
+  nodeLocation: us-central1-c
   nodeCount: 1
   acceleratorConnectionMode: static
   instanceConfig:
@@ -24,4 +24,4 @@ spec:
     serviceAccounts:
       - email: default
         scopes:
-          - cloud-platform
+          - https://www.googleapis.com/auth/cloud-platform

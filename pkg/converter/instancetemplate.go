@@ -31,6 +31,12 @@ func ToGCEInstanceTemplate(cr *tpuv1alpha1.InstanceTemplate) *computepb.Instance
 		}
 		if cr.Spec.ProvisioningModel != nil {
 			scheduling.ProvisioningModel = cr.Spec.ProvisioningModel
+			// TODO: This is a shortcut to avoid GCE error when provisioning model is RESERVATION_BOUND or SPOT.
+			// Proper fix should introduce a new field in InstanceTemplateSpec to track terminate action and do proper defaulting in controller.
+			switch *cr.Spec.ProvisioningModel {
+			case "RESERVATION_BOUND", "SPOT":
+				scheduling.InstanceTerminationAction = ptr.To("DELETE")
+			}
 		}
 		properties.Scheduling = scheduling
 	}
