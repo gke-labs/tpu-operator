@@ -16,7 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestNodeBootstrapper_ReconcileNodeJoin(t *testing.T) {
+func TestNodeManager_ReconcileNodes(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := tpuapi.AddToScheme(scheme); err != nil {
 		t.Fatalf("Adding TPU API to scheme: %v", err)
@@ -134,15 +134,113 @@ func TestNodeBootstrapper_ReconcileNodeJoin(t *testing.T) {
 				},
 			}
 
-			bootstrapper := NewNodeBootstrapper(cl, mockIGM, nil)
-
-			err := bootstrapper.ReconcileNodeJoin(t.Context(), tc.group)
+			err := ReconcileNodes(t.Context(), cl, mockIGM, tc.group)
 			if (err != nil) != tc.wantErr {
-				t.Errorf("ReconcileNodeJoin() error = %v, wantErr %v", err, tc.wantErr)
+				t.Errorf("ReconcileNodes() error = %v, wantErr %v", err, tc.wantErr)
 			}
 
 			if diff := cmp.Diff(tc.wantStatus, tc.group.Status.NodeSummary); diff != "" {
 				t.Errorf("NodeSummary mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestEnsureNodeLabel(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding CoreV1 to scheme: %v", err)
+	}
+
+	tests := []struct {
+		name        string
+		initialNode *corev1.Node
+		wantLabels  map[string]string
+		wantErr     bool
+	}{
+		{
+			name: "label_missing",
+			initialNode: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
+			},
+			wantLabels: map[string]string{
+				LabelTPUAccelerator: "true",
+				LabelTPUNodeGroup:   "default-test-tpu",
+			},
+			wantErr:    false,
+		},
+		{
+			name: "labels_already_correct",
+			initialNode: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-node",
+					Labels: map[string]string{
+						LabelTPUAccelerator: "true",
+						LabelTPUNodeGroup:   "default-test-tpu",
+					},
+				},
+			},
+			wantLabels: map[string]string{
+				LabelTPUAccelerator: "true",
+				LabelTPUNodeGroup:   "default-test-tpu",
+			},
+			wantErr:    false,
+		},
+		{
+			name: "accelerator_label_different_value",
+			initialNode: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-node",
+					Labels: map[string]string{LabelTPUAccelerator: "false"},
+				},
+			},
+			wantLabels: map[string]string{
+				LabelTPUAccelerator: "true",
+				LabelTPUNodeGroup:   "default-test-tpu",
+			},
+			wantErr:    false,
+		},
+		{
+			name: "group_label_different_value",
+			initialNode: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-node",
+					Labels: map[string]string{
+						LabelTPUAccelerator: "true",
+						LabelTPUNodeGroup:   "wrong-value",
+					},
+				},
+			},
+			wantLabels: map[string]string{
+				LabelTPUAccelerator: "true",
+				LabelTPUNodeGroup:   "default-test-tpu",
+			},
+			wantErr:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialNode).Build()
+
+			group := &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			}
+			err := ensureNodeLabels(t.Context(), cl, tc.initialNode, group)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("ensureNodeLabels() error = %v, wantErr %v", err, tc.wantErr)
+			}
+
+			var updatedNode corev1.Node
+			if err := cl.Get(t.Context(), client.ObjectKey{Name: tc.initialNode.Name}, &updatedNode); err != nil {
+				t.Fatalf("Failed to get updated node: %v", err)
+			}
+
+			if diff := cmp.Diff(tc.wantLabels, updatedNode.Labels); diff != "" {
+				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

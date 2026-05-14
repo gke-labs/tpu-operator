@@ -39,6 +39,9 @@ func NewNodeBootstrapper(client client.Client, igm gce.IGMClient, instance gce.I
 
 
 
+
+
+
 // generateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
 func (b *NodeBootstrapper) generateBootstrapToken(ctx context.Context) (string, error) {
 	tokenID := strings.ToLower(rand.String(6))

@@ -122,6 +122,11 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile node bootstrapping: %w", err)
 	}
 
+	// Step 4.5: Reconcile Nodes (Labeling and Status)
+	if err := ReconcileNodes(ctx, r.Client, r.igmClient, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile nodes: %w", err)
+	}
+
 	// Step 5: Reconcile Device Plugin
 	if err := deviceplugin.Reconcile(ctx, r.kubeClientset, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile device plugin: %w", err)
@@ -228,8 +233,7 @@ func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context,
 		}
 	}
 
-	// Check status of joining nodes
-	return bootstrapper.ReconcileNodeJoin(ctx, group)
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
