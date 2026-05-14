@@ -109,8 +109,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 	dummyNodeGroup := &tpuapi.TPUNodeGroup{ObjectMeta: metav1.ObjectMeta{Name: crName}}
 	childTemplateName := dummyNodeGroup.InstanceTemplateName()
 	childPolicyName := dummyNodeGroup.WorkloadPolicyName()
-	migManifest := filepath.Join(repoRoot, "pkg/controllers/managedinstancegroup/testdata/test_mig.yaml")
-	migName := "test-mig"
+	migName := dummyNodeGroup.ManagedInstanceGroupName()
 
 	t.Log("=== Applying Test Manifest ===")
 	cmd := exec.Command("kubectl", "apply", "-f", manifest, "--request-timeout=30s")
@@ -121,15 +120,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 	t.Cleanup(func() {
 		t.Log("=== Teardown Verification ===")
 
-		t.Log("Deleting ManagedInstanceGroup CR...")
-		cmd := exec.Command("kubectl", "delete", "managedinstancegroup", migName, "--timeout=300s", "--request-timeout=30s")
 		var stdout, stderr bytes.Buffer
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			t.Logf("Failed to delete ManagedInstanceGroup CR (might not exist): %v\nStdout: %s\nStderr: %s", err, stdout.String(), stderr.String())
-		}
-
 		t.Log("Deleting TPUNodeGroup CR...")
 		cmd = exec.Command("kubectl", "delete", "tpunodegroup", crName, "--timeout=300s", "--request-timeout=30s")
 		stdout.Reset()
@@ -140,10 +131,27 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 			t.Errorf("Failed to delete TPUNodeGroup CR: %v\nStdout: %s\nStderr: %s", err, stdout.String(), stderr.String())
 		}
 
-		t.Log("Verifying child InstanceTemplate deletion...")
+		t.Log("Verifying child ManagedInstanceGroup deletion...")
 		timeout := 60 * time.Second
 		start := time.Now()
 		interval := 5 * time.Second
+		for {
+			if time.Since(start) > timeout {
+				t.Errorf("Timeout waiting for child ManagedInstanceGroup to be deleted")
+				break
+			}
+
+			cmd = exec.Command("kubectl", "get", "managedinstancegroup", migName, "--request-timeout=30s")
+			if err := cmd.Run(); err != nil {
+				t.Log("Child ManagedInstanceGroup deleted successfully.")
+				break
+			}
+
+			time.Sleep(interval)
+		}
+
+		t.Log("Verifying child InstanceTemplate deletion...")
+		start = time.Now()
 		for {
 			if time.Since(start) > timeout {
 				t.Errorf("Timeout waiting for child InstanceTemplate to be deleted")
@@ -178,10 +186,42 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 	})
 
 	t.Run("TPUNodeGroup_Orchestration", func(t *testing.T) {
-		t.Log("=== Waiting for child WorkloadPolicy to have URI ===")
-		timeout := 60 * time.Second
-		interval := 5 * time.Second
+		t.Log("=== Verifying Finalizers ===")
+		timeout := 30 * time.Second
+		interval := 2 * time.Second
 		start := time.Now()
+		expectedFinalizers := []string{
+			"tpu.google.com/cleanup-mig",
+			"tpu.google.com/cleanup-template",
+			"tpu.google.com/cleanup-policy",
+		}
+		for {
+			if time.Since(start) > timeout {
+				t.Fatal("Timeout waiting for finalizers to be set")
+			}
+			cmd := exec.Command("kubectl", "get", "tpunodegroup", crName, "-o", "jsonpath={.metadata.finalizers}", "--request-timeout=30s")
+			output, err := cmd.Output()
+			if err == nil {
+				finalizers := string(output)
+				allFound := true
+				for _, f := range expectedFinalizers {
+					if !strings.Contains(finalizers, f) {
+						allFound = false
+						break
+					}
+				}
+				if allFound {
+					t.Log("All expected finalizers found.")
+					break
+				}
+			}
+			time.Sleep(interval)
+		}
+
+		t.Log("=== Waiting for child WorkloadPolicy to have URI ===")
+		timeout = 60 * time.Second
+		interval = 5 * time.Second
+		start = time.Now()
 		for {
 			if time.Since(start) > timeout {
 				t.Fatal("Timeout waiting for child WorkloadPolicy to have URI")
@@ -214,16 +254,26 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 	})
 
 	t.Run("ManagedInstanceGroup_Provisioning", func(t *testing.T) {
-		t.Log("=== Applying MIG Manifest ===")
-		cmd := exec.Command("kubectl", "apply", "-f", migManifest, "--request-timeout=30s")
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("Failed to apply MIG manifest: %v", err)
-		}
-
-		t.Log("=== Waiting for ManagedInstanceGroup to be ready ===")
+		t.Log("=== Waiting for ManagedInstanceGroup to be created by controller ===")
 		timeout := 120 * time.Second
 		interval := 5 * time.Second
 		start := time.Now()
+		for {
+			if time.Since(start) > timeout {
+				t.Fatal("Timeout waiting for ManagedInstanceGroup to be created")
+			}
+			cmd = exec.Command("kubectl", "get", "managedinstancegroup", migName, "--request-timeout=30s")
+			if err := cmd.Run(); err == nil {
+				t.Logf("ManagedInstanceGroup %s created.", migName)
+				break
+			}
+			time.Sleep(interval)
+		}
+
+		t.Log("=== Waiting for ManagedInstanceGroup to be ready ===")
+		timeout = 120 * time.Second
+		interval = 5 * time.Second
+		start = time.Now()
 		for {
 			if time.Since(start) > timeout {
 				t.Log("Timeout waiting for ManagedInstanceGroup to be ready. Dumping status:")
