@@ -102,8 +102,23 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if !tpuNodeGroup.DeletionTimestamp.IsZero() {
 		logger.Info("TPUNodeGroup is being deleted")
 		if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerName) {
-			// TODO(b/512987019): Implement cleanup phases here.
-			// For now, just remove the finalizer to allow deletion.
+			logger.Info("Cordoning nodes")
+			if err := cordonNodes(ctx, logger, r.Client, r.igmClient, &tpuNodeGroup); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
+			}
+
+			logger.Info("Deleting child CRs")
+			done, err := deleteChildCRs(ctx, r.Client, &tpuNodeGroup)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to delete child CRs: %w", err)
+			}
+			if !done {
+				logger.Info("Waiting for child CRs to be deleted")
+				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			}
+
+			// TODO(b/512987019): Implement node object deletion.
+
 			controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerName)
 			if err := r.Update(ctx, &tpuNodeGroup); err != nil {
 				return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)

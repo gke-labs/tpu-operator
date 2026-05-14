@@ -50,6 +50,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantDaemonSet     bool
 		wantStatus        *tpuapi.NodeSummary
 		wantConditions    []metav1.Condition
+		wantNodeTaints    map[string][]corev1.Taint
 		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
 	}{
 		{
@@ -279,6 +280,133 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "resource_deletion_cordon",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-tpu-0",
+						Labels: map[string]string{
+							"cloud.google.com/tpu-node-group": "default-test-tpu",
+						},
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantNodeTaints: map[string][]corev1.Taint{
+				"test-tpu-0": {
+					{
+						Key:    corev1.TaintNodeUnschedulable,
+						Effect: corev1.TaintEffectNoSchedule,
+					},
+				},
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{
+						{
+							Instance: ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-0"),
+						},
+					}, nil
+				}
+			},
+		},
+		{
+			name: "resource_deletion_wait_mig",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{}, nil
+				}
+			},
+		},
+		{
+			name: "resource_deletion_wait_mig_deleting",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/slice-cleanup"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-tpu-mig",
+						Namespace:         "default",
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
+						Finalizers:        []string{"tpu.google.com/dummy-cleanup"},
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:    false,
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{}, nil
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -357,6 +485,19 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				}
 				if diff := cmp.Diff(tc.wantConditions, updatedObject.Status.Conditions, cmpopts.IgnoreFields(metav1.Condition{}, "LastTransitionTime")); diff != "" {
 					t.Errorf("Status.Conditions mismatch (-want +got):\n%s", diff)
+				}
+			}
+
+			if tc.wantNodeTaints != nil {
+				for nodeName, wantTaints := range tc.wantNodeTaints {
+					var node corev1.Node
+					if err := cl.Get(t.Context(), types.NamespacedName{Name: nodeName}, &node); err != nil {
+						t.Errorf("Failed to get node %s: %v", nodeName, err)
+						continue
+					}
+					if diff := cmp.Diff(wantTaints, node.Spec.Taints); diff != "" {
+						t.Errorf("Node %s taints mismatch (-want +got):\n%s", nodeName, diff)
+					}
 				}
 			}
 		})
