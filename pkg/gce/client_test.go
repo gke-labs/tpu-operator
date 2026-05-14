@@ -329,12 +329,22 @@ func TestNewManager(t *testing.T) {
 			return nil, fmt.Errorf("should not be called")
 		}
 
+		initResourcePoliciesDummy := func(ctx context.Context, opts ...option.ClientOption) (*compute.ResourcePoliciesClient, error) {
+			return nil, fmt.Errorf("should not be called")
+		}
+
+		initRegionOperationsDummy := func(ctx context.Context, opts ...option.ClientOption) (*compute.RegionOperationsClient, error) {
+			return nil, fmt.Errorf("should not be called")
+		}
+
 		_, err := newManagerWithConstructors(
 			ctx,
 			initIGMSuccess,
 			initInstancesFailure,
 			initInstanceTemplatesDummy,
 			initGlobalOperationsDummy,
+			initResourcePoliciesDummy,
+			initRegionOperationsDummy,
 			onClientCloseForTest,
 		)
 
