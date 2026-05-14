@@ -225,9 +225,9 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
 	}
 
-	// Step 4: Reconcile Node Bootstrapping
-	if err := r.reconcileNodeBootstrapping(ctx, logger, &tpuNodeGroup); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile node bootstrapping: %w", err)
+	// Step 4: Inject Metadata
+	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
 	}
 
 	// Step 4.5: Reconcile Nodes (Labeling and Status)
@@ -394,19 +394,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	return nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileNodeBootstrapping(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
-	logger.Info("Bootstrapping TPU nodes", "name", group.Name)
-	bootstrapper := NewNodeBootstrapper(r.Client, r.igmClient, r.instanceClient)
 
-	if group.Spec.BootstrapKubernetes != nil {
-		// Inject tokens for new instances if needed
-		if err := bootstrapper.InjectJoinTokens(ctx, group); err != nil {
-			return fmt.Errorf("failed to inject join tokens: %w", err)
-		}
-	}
-
-	return nil
-}
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
