@@ -101,6 +101,8 @@ func main() {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controller").WithName("managedinstancegroup"),
+		GCE:    gceManager.IGM(),
+		GCEOps: gceManager.ZoneOperations(),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Error setting up ManagedInstanceGroup controller")
 		os.Exit(1)

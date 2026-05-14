@@ -17,6 +17,9 @@ import (
 // IGMClient defines methods for interacting with Instance Group Managers.
 type IGMClient interface {
 	ListManagedInstances(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error)
+	Get(ctx context.Context, project, zone, name string) (*computepb.InstanceGroupManager, error)
+	Insert(ctx context.Context, project, zone string, igm *computepb.InstanceGroupManager) (Operation, error)
+	Delete(ctx context.Context, project, zone, name string) (Operation, error)
 }
 
 // managedInstanceIterator defines the interface for iterating over managed instances.
@@ -60,6 +63,11 @@ type RegionOperationsClient interface {
 	Get(ctx context.Context, project, region, operation string) (*computepb.Operation, error)
 }
 
+// ZoneOperationsClient defines methods for interacting with Zone Operations.
+type ZoneOperationsClient interface {
+	Get(ctx context.Context, project, zone, operation string) (*computepb.Operation, error)
+}
+
 // Manager provides a centralized point to manage various GCE resources.
 type Manager struct {
 	igmClient               *compute.InstanceGroupManagersClient
@@ -68,6 +76,7 @@ type Manager struct {
 	globalOperationsClient  *compute.GlobalOperationsClient
 	resourcePoliciesClient *compute.ResourcePoliciesClient
 	regionOperationsClient *compute.RegionOperationsClient
+	zoneOperationsClient   *compute.ZoneOperationsClient
 }
 
 // NewManager creates and initializes the GCE clients.
@@ -80,6 +89,7 @@ func NewManager(ctx context.Context, opts ...option.ClientOption) (*Manager, err
 		compute.NewGlobalOperationsRESTClient,
 		compute.NewResourcePoliciesRESTClient,
 		compute.NewRegionOperationsRESTClient,
+		compute.NewZoneOperationsRESTClient,
 		nil, // No observation hook needed in production
 		opts...,
 	)
@@ -91,6 +101,7 @@ type newInstanceTemplatesClientFunc func(context.Context, ...option.ClientOption
 type newGlobalOperationsClientFunc func(context.Context, ...option.ClientOption) (*compute.GlobalOperationsClient, error)
 type newResourcePoliciesClientFunc func(context.Context, ...option.ClientOption) (*compute.ResourcePoliciesClient, error)
 type newRegionOperationsClientFunc func(context.Context, ...option.ClientOption) (*compute.RegionOperationsClient, error)
+type newZoneOperationsClientFunc func(context.Context, ...option.ClientOption) (*compute.ZoneOperationsClient, error)
 
 // newManagerWithConstructors allows injecting dependencies internally for testing.
 func newManagerWithConstructors(
@@ -101,6 +112,7 @@ func newManagerWithConstructors(
 	newGlobalOperationsClient newGlobalOperationsClientFunc,
 	newResourcePoliciesClient newResourcePoliciesClientFunc,
 	newRegionOperationsClient newRegionOperationsClientFunc,
+	newZoneOperationsClient newZoneOperationsClientFunc,
 	onClientClose func(clientName string),
 	opts ...option.ClientOption,
 ) (mgr *Manager, err error) {
@@ -179,6 +191,17 @@ func newManagerWithConstructors(
 		return regionOperationsClient.Close()
 	})
 
+	zoneOperationsClient, err := newZoneOperationsClient(ctx, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create zone operations client: %w", err)
+	}
+	cleanups = append(cleanups, func() error {
+		if onClientClose != nil {
+			onClientClose("zoneOperations")
+		}
+		return zoneOperationsClient.Close()
+	})
+
 	return &Manager{
 		igmClient:               igmClient,
 		instancesClient:         instancesClient,
@@ -186,6 +209,7 @@ func newManagerWithConstructors(
 		globalOperationsClient:  globalOperationsClient,
 		resourcePoliciesClient: resourcePoliciesClient,
 		regionOperationsClient: regionOperationsClient,
+		zoneOperationsClient:   zoneOperationsClient,
 	}, nil
 }
 
@@ -219,6 +243,11 @@ func (m *Manager) RegionOperations() RegionOperationsClient {
 	return &regionOperationsClientWrapper{client: m.regionOperationsClient}
 }
 
+// ZoneOperations returns the ZoneOperationsClient.
+func (m *Manager) ZoneOperations() ZoneOperationsClient {
+	return &zoneOperationsClientWrapper{client: m.zoneOperationsClient}
+}
+
 type igmClientWrapper struct {
 	client *compute.InstanceGroupManagersClient
 }
@@ -231,6 +260,47 @@ func (w *igmClientWrapper) ListManagedInstances(ctx context.Context, project, zo
 	}
 	it := w.client.ListManagedInstances(ctx, req)
 	return iterateInstances(it)
+}
+
+func (w *igmClientWrapper) Get(ctx context.Context, project, zone, name string) (*computepb.InstanceGroupManager, error) {
+	req := &computepb.GetInstanceGroupManagerRequest{
+		Project:              project,
+		Zone:                 zone,
+		InstanceGroupManager: name,
+	}
+	return w.client.Get(ctx, req)
+}
+
+func (w *igmClientWrapper) Insert(ctx context.Context, project, zone string, igm *computepb.InstanceGroupManager) (Operation, error) {
+	req := &computepb.InsertInstanceGroupManagerRequest{
+		Project:                      project,
+		Zone:                         zone,
+		InstanceGroupManagerResource: igm,
+	}
+	op, err := w.client.Insert(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, nil
+	}
+	return &operationWrapper{op: op}, nil
+}
+
+func (w *igmClientWrapper) Delete(ctx context.Context, project, zone, name string) (Operation, error) {
+	req := &computepb.DeleteInstanceGroupManagerRequest{
+		Project:              project,
+		Zone:                 zone,
+		InstanceGroupManager: name,
+	}
+	op, err := w.client.Delete(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if op == nil {
+		return nil, nil
+	}
+	return &operationWrapper{op: op}, nil
 }
 
 func iterateInstances(it managedInstanceIterator) ([]*computepb.ManagedInstance, error) {
@@ -390,6 +460,19 @@ func (w *regionOperationsClientWrapper) Get(ctx context.Context, project, region
 	return w.client.Get(ctx, req)
 }
 
+type zoneOperationsClientWrapper struct {
+	client *compute.ZoneOperationsClient
+}
+
+func (w *zoneOperationsClientWrapper) Get(ctx context.Context, project, zone, operation string) (*computepb.Operation, error) {
+	req := &computepb.GetZoneOperationRequest{
+		Project:   project,
+		Zone:      zone,
+		Operation: operation,
+	}
+	return w.client.Get(ctx, req)
+}
+
 // Close closes the underlying clients.
 func (m *Manager) Close() error {
 	var errs []error
@@ -409,6 +492,9 @@ func (m *Manager) Close() error {
 		errs = append(errs, err)
 	}
 	if err := m.regionOperationsClient.Close(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := m.zoneOperationsClient.Close(); err != nil {
 		errs = append(errs, err)
 	}
 	if len(errs) > 0 {

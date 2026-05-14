@@ -337,6 +337,10 @@ func TestNewManager(t *testing.T) {
 			return nil, fmt.Errorf("should not be called")
 		}
 
+		initZoneOperationsDummy := func(ctx context.Context, opts ...option.ClientOption) (*compute.ZoneOperationsClient, error) {
+			return nil, fmt.Errorf("should not be called")
+		}
+
 		_, err := newManagerWithConstructors(
 			ctx,
 			initIGMSuccess,
@@ -345,6 +349,7 @@ func TestNewManager(t *testing.T) {
 			initGlobalOperationsDummy,
 			initResourcePoliciesDummy,
 			initRegionOperationsDummy,
+			initZoneOperationsDummy,
 			onClientCloseForTest,
 		)
 

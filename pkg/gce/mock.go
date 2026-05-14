@@ -10,12 +10,39 @@ import (
 // MockIGMClient is a mock implementation of the gce.IGMClient.
 type MockIGMClient struct {
 	ListManagedInstancesFunc func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error)
+	GetFunc    func(ctx context.Context, project, zone, name string) (*computepb.InstanceGroupManager, error)
+	InsertFunc func(ctx context.Context, project, zone string, igm *computepb.InstanceGroupManager) (Operation, error)
+	DeleteFunc func(ctx context.Context, project, zone, name string) (Operation, error)
 }
 
 // ListManagedInstances calls the mocked ListManagedInstancesFunc.
 func (m *MockIGMClient) ListManagedInstances(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 	if m.ListManagedInstancesFunc != nil {
 		return m.ListManagedInstancesFunc(ctx, project, zone, migName)
+	}
+	return nil, nil
+}
+
+// Get calls the mocked GetFunc.
+func (m *MockIGMClient) Get(ctx context.Context, project, zone, name string) (*computepb.InstanceGroupManager, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, project, zone, name)
+	}
+	return nil, nil
+}
+
+// Insert calls the mocked InsertFunc.
+func (m *MockIGMClient) Insert(ctx context.Context, project, zone string, igm *computepb.InstanceGroupManager) (Operation, error) {
+	if m.InsertFunc != nil {
+		return m.InsertFunc(ctx, project, zone, igm)
+	}
+	return nil, nil
+}
+
+// Delete calls the mocked DeleteFunc.
+func (m *MockIGMClient) Delete(ctx context.Context, project, zone, name string) (Operation, error) {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, project, zone, name)
 	}
 	return nil, nil
 }
@@ -146,6 +173,19 @@ type MockRegionOperationsClient struct {
 func (m *MockRegionOperationsClient) Get(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
 	if m.GetFunc != nil {
 		return m.GetFunc(ctx, project, region, operation)
+	}
+	return nil, nil
+}
+
+// MockZoneOperationsClient is a mock implementation of the gce.ZoneOperationsClient.
+type MockZoneOperationsClient struct {
+	GetFunc func(ctx context.Context, project, zone, operation string) (*computepb.Operation, error)
+}
+
+// Get calls the mocked GetFunc.
+func (m *MockZoneOperationsClient) Get(ctx context.Context, project, zone, operation string) (*computepb.Operation, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, project, zone, operation)
 	}
 	return nil, nil
 }

@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 )
 
 const finalizerName = "tpu.google.com/managedinstancegroup-cleanup"
@@ -21,6 +22,8 @@ type ManagedInstanceGroupReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Log    logr.Logger
+	GCE    gce.IGMClient
+	GCEOps gce.ZoneOperationsClient
 }
 
 // +kubebuilder:rbac:groups=tpu.google.com,resources=managedinstancegroups,verbs=get;list;watch;create;update;patch;delete
