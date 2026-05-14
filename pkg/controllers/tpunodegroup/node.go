@@ -77,7 +77,6 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 	if group.Status.NodeSummary == nil {
 		group.Status.NodeSummary = &tpuapi.NodeSummary{}
 	}
-	group.Status.NodeSummary.Total = group.Spec.NodeCount
 	group.Status.NodeSummary.Ready = int32(readyCount)
 	group.Status.NodeSummary.Reconciling = group.Spec.NodeCount - int32(readyCount)
 
