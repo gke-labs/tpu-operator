@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup/deviceplugin"
@@ -23,6 +24,8 @@ import (
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	"k8s.io/utils/ptr"
 )
+
+const finalizerName = "tpu.google.com/slice-cleanup"
 
 // TPUNodeGroupReconciler reconciles a TPUNodeGroup object.
 type TPUNodeGroupReconciler struct {
@@ -80,8 +83,10 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	base := tpuNodeGroup.DeepCopy()
 	defer func() {
-		// TODO(b/500810949): handle the case where TPUNodeGroup is about to be deleted
-		// after the deletion of all of the k8s resources it owns.
+		// Universal deletion guard: don't patch status if the object is fully deleted.
+		if !tpuNodeGroup.DeletionTimestamp.IsZero() && len(tpuNodeGroup.Finalizers) == 0 {
+			return
+		}
 		if err := r.Status().Patch(ctx, &tpuNodeGroup, client.MergeFrom(base)); err != nil {
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
@@ -92,6 +97,28 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}()
 
 	logger.Info("Reconciling TPUNodeGroup")
+
+	// Handle deletion
+	if !tpuNodeGroup.DeletionTimestamp.IsZero() {
+		logger.Info("TPUNodeGroup is being deleted")
+		if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerName) {
+			// TODO(b/512987019): Implement cleanup phases here.
+			// For now, just remove the finalizer to allow deletion.
+			controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerName)
+			if err := r.Update(ctx, &tpuNodeGroup); err != nil {
+				return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
+			}
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present
+	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerName) {
+		if err := r.Update(ctx, &tpuNodeGroup); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil // Return and let it reconcile again with finalizer
+	}
 
 	// Step 1: Reconcile Resource Policy
 	if err := r.reconcileResourcePolicy(ctx, &tpuNodeGroup); err != nil {

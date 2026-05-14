@@ -73,8 +73,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			initialObject: &tpuapi.TPUNodeGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-tpu",
-					Namespace: "default",
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -129,8 +130,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			initialObject: &tpuapi.TPUNodeGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-tpu-disabled",
-					Namespace: "default",
+					Name:       "test-tpu-disabled",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -178,8 +180,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			initialObject: &tpuapi.TPUNodeGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-tpu",
-					Namespace: "default",
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:             "test-project",
@@ -202,8 +205,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			initialObject: &tpuapi.TPUNodeGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-tpu",
-					Namespace: "default",
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
@@ -235,8 +239,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			initialObject: &tpuapi.TPUNodeGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-tpu",
-					Namespace: "default",
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/slice-cleanup"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					Project:      "test-project",
