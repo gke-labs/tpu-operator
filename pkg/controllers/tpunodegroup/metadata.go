@@ -133,14 +133,14 @@ func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance) map[
 	updates := make(map[string]string)
 
 	// 1. Map the raw GCE machine type to the specific accelerator string expected by the plugin
-	acceleratorType := getAcceleratorLabelValue(group)
+	acceleratorType := acceleratorLabelValue(group)
 	if acceleratorType == "" {
 		// Cannot inject labels without a known accelerator type
 		return updates
 	}
 
 	// 2. Extract the number of chips per VM from the machine type
-	chipsPerNode := getChipsPerNode(group)
+	chipsPerNode := chipsPerNode(group)
 	if chipsPerNode == 0 {
 		// The device plugin will crash if count is missing, fail safely here
 		return updates

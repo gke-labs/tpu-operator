@@ -6,7 +6,7 @@ import (
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 )
 
-func TestGetAcceleratorLabelValue(t *testing.T) {
+func TestAcceleratorLabelValue(t *testing.T) {
 	tests := []struct {
 		name        string
 		machineType string
@@ -51,15 +51,15 @@ func TestGetAcceleratorLabelValue(t *testing.T) {
 					Topology: tt.topology,
 				},
 			}
-			got := getAcceleratorLabelValue(group)
+			got := acceleratorLabelValue(group)
 			if got != tt.want {
-				t.Errorf("getAcceleratorLabelValue() = %v, want %v", got, tt.want)
+				t.Errorf("acceleratorLabelValue() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestGetChipsPerNode(t *testing.T) {
+func TestChipsPerNode(t *testing.T) {
 	tests := []struct {
 		name        string
 		machineType string
@@ -81,9 +81,9 @@ func TestGetChipsPerNode(t *testing.T) {
 					},
 				},
 			}
-			got := getChipsPerNode(group)
+			got := chipsPerNode(group)
 			if got != tt.want {
-				t.Errorf("getChipsPerNode() = %v, want %v", got, tt.want)
+				t.Errorf("chipsPerNode() = %v, want %v", got, tt.want)
 			}
 		})
 	}

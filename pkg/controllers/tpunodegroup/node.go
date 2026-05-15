@@ -13,9 +13,12 @@ import (
 )
 
 const (
-	LabelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
-	LabelTPUNodeGroup   = "cloud.google.com/tpu-node-group"
-	LabelTPUTopology    = "cloud.google.com/gke-tpu-topology"
+	// labelTPUAccelerator is the label required by the device plugin DaemonSet.
+	labelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
+	// labelTPUNodeGroup is the label identifying the TPUNodeGroup the node belongs to.
+	labelTPUNodeGroup   = "cloud.google.com/tpu-node-group"
+	// labelTPUTopology is the label identifying the topology of the TPU slice.
+	labelTPUTopology    = "cloud.google.com/gke-tpu-topology"
 )
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
@@ -91,23 +94,23 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 
 	tpuNodeGroupLabelValue := fmt.Sprintf("%s-%s", group.Namespace, group.Name)
 
-	acceleratorType := getAcceleratorLabelValue(group)
+	acceleratorType := acceleratorLabelValue(group)
 	if acceleratorType == "" {
 		return nil // Skip if we cannot determine accelerator type
 	}
 	needsUpdate := false
-	if val, ok := node.Labels[LabelTPUAccelerator]; !ok || val != acceleratorType {
+	if val, ok := node.Labels[labelTPUAccelerator]; !ok || val != acceleratorType {
 		needsUpdate = true
 	}
-	if val, ok := node.Labels[LabelTPUNodeGroup]; !ok || val != tpuNodeGroupLabelValue {
+	if val, ok := node.Labels[labelTPUNodeGroup]; !ok || val != tpuNodeGroupLabelValue {
 		needsUpdate = true
 	}
 	if group.Spec.Topology != "" {
-		if val, ok := node.Labels[LabelTPUTopology]; !ok || val != group.Spec.Topology {
+		if val, ok := node.Labels[labelTPUTopology]; !ok || val != group.Spec.Topology {
 			needsUpdate = true
 		}
 	} else {
-		if _, ok := node.Labels[LabelTPUTopology]; ok {
+		if _, ok := node.Labels[labelTPUTopology]; ok {
 			needsUpdate = true
 		}
 	}
@@ -118,12 +121,12 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 
 	// Apply labels using Patch to avoid conflicts
 	oldNode := node.DeepCopy()
-	node.Labels[LabelTPUAccelerator] = acceleratorType
-	node.Labels[LabelTPUNodeGroup] = tpuNodeGroupLabelValue
+	node.Labels[labelTPUAccelerator] = acceleratorType
+	node.Labels[labelTPUNodeGroup] = tpuNodeGroupLabelValue
 	if group.Spec.Topology != "" {
-		node.Labels[LabelTPUTopology] = group.Spec.Topology
+		node.Labels[labelTPUTopology] = group.Spec.Topology
 	} else {
-		delete(node.Labels, LabelTPUTopology)
+		delete(node.Labels, labelTPUTopology)
 	}
 
 	if err := k8sClient.Patch(ctx, node, client.MergeFrom(oldNode)); err != nil {
