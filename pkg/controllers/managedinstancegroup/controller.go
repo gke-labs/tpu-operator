@@ -91,7 +91,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			logger.Info("GCE operation completed successfully", "operation", mig.Status.OperationName)
 		}
 
-		if !mig.ObjectMeta.DeletionTimestamp.IsZero() {
+		if mig.Status.OperationType == "DELETE" {
 			// Deletion operation completed successfully, remove finalizer
 			if controllerutil.ContainsFinalizer(&mig, finalizerName) {
 				controllerutil.RemoveFinalizer(&mig, finalizerName)
@@ -102,7 +102,23 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			return ctrl.Result{}, nil
 		}
 
-		// Insert operation completed successfully. Clear operation name and requeue to refetch template.
+		if mig.Status.OperationType == "CREATE" {
+			// Insert operation completed successfully. Clear operation name and type and requeue to refetch template.
+			mig.Status.OperationName = ""
+			mig.Status.OperationType = ""
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		// Fallback for resources created before OperationType was introduced.
+		if !mig.ObjectMeta.DeletionTimestamp.IsZero() {
+			if controllerutil.ContainsFinalizer(&mig, finalizerName) {
+				controllerutil.RemoveFinalizer(&mig, finalizerName)
+				if err := r.Update(ctx, &mig); err != nil {
+					return ctrl.Result{}, fmt.Errorf("removing finalizer from ManagedInstanceGroup after GCE delete: %w", err)
+				}
+			}
+			return ctrl.Result{}, nil
+		}
 		mig.Status.OperationName = ""
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -133,6 +149,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 					return ctrl.Result{}, nil
 				}
 				mig.Status.OperationName = op.Name()
+				mig.Status.OperationType = "DELETE"
 				logger.Info("GCE delete operation started", "operation", op.Name())
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
@@ -166,6 +183,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			if op != nil {
 				if !op.Done() {
 					mig.Status.OperationName = op.Name()
+					mig.Status.OperationType = "CREATE"
 					logger.Info("GCE insert operation started", "operation", op.Name())
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
