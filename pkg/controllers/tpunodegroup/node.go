@@ -12,11 +12,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+
+
 const (
-	// LabelTPUAccelerator is the label required by the device plugin DaemonSet.
 	LabelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
-	// LabelTPUNodeGroup is the label identifying the TPUNodeGroup the node belongs to.
-	LabelTPUNodeGroup = "cloud.google.com/tpu-node-group"
+	LabelTPUNodeGroup   = "cloud.google.com/tpu-node-group"
+	LabelTPUTopology    = "cloud.google.com/gke-tpu-topology"
 )
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
@@ -92,12 +93,25 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 
 	tpuNodeGroupLabelValue := fmt.Sprintf("%s-%s", group.Namespace, group.Name)
 
+	acceleratorType := getAcceleratorLabelValue(group)
+	if acceleratorType == "" {
+		return nil // Skip if we cannot determine accelerator type
+	}
 	needsUpdate := false
-	if val, ok := node.Labels[LabelTPUAccelerator]; !ok || val != "true" {
+	if val, ok := node.Labels[LabelTPUAccelerator]; !ok || val != acceleratorType {
 		needsUpdate = true
 	}
 	if val, ok := node.Labels[LabelTPUNodeGroup]; !ok || val != tpuNodeGroupLabelValue {
 		needsUpdate = true
+	}
+	if group.Spec.Topology != "" {
+		if val, ok := node.Labels[LabelTPUTopology]; !ok || val != group.Spec.Topology {
+			needsUpdate = true
+		}
+	} else {
+		if _, ok := node.Labels[LabelTPUTopology]; ok {
+			needsUpdate = true
+		}
 	}
 
 	if !needsUpdate {
@@ -106,8 +120,13 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 
 	// Apply labels using Patch to avoid conflicts
 	oldNode := node.DeepCopy()
-	node.Labels[LabelTPUAccelerator] = "true"
+	node.Labels[LabelTPUAccelerator] = acceleratorType
 	node.Labels[LabelTPUNodeGroup] = tpuNodeGroupLabelValue
+	if group.Spec.Topology != "" {
+		node.Labels[LabelTPUTopology] = group.Spec.Topology
+	} else {
+		delete(node.Labels, LabelTPUTopology)
+	}
 
 	if err := k8sClient.Patch(ctx, node, client.MergeFrom(oldNode)); err != nil {
 		return fmt.Errorf("failed to patch node labels: %w", err)
