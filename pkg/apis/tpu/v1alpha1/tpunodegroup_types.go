@@ -110,6 +110,7 @@ type InstanceConfig struct {
 }
 
 // BootstrapConfig defines settings for automated node bootstrapping.
+// +kubebuilder:validation:XValidation:rule="has(self.version) && self.version == '1.31'",message="Version must be set to 1.31"
 type BootstrapConfig struct {
 	// Version is the Kubernetes version to install.
 	// +optional

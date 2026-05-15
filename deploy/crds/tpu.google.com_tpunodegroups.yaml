@@ -58,6 +58,9 @@ spec:
                 required:
                 - controlPlaneIP
                 type: object
+                x-kubernetes-validations:
+                - message: Version must be set to 1.31
+                  rule: has(self.version) && self.version == '1.31'
               instanceConfig:
                 description: |-
                   InstanceConfig allows the controller to generate an instance template.
