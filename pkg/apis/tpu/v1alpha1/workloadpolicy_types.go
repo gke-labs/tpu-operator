@@ -44,6 +44,10 @@ type WorkloadPolicyStatus struct {
 	// OperationName is the name of the pending GCE operation.
 	// +optional
 	OperationName string `json:"operationName,omitempty"`
+
+	// OperationType is the type of the pending GCE operation (e.g., "CREATE", "DELETE").
+	// +optional
+	OperationType string `json:"operationType,omitempty"`
 }
 
 // +genclient

@@ -191,6 +191,10 @@ spec:
                 description: OperationName tracks the ongoing GCE operation (insert/delete)
                   by name.
                 type: string
+              operationType:
+                description: OperationType is the type of the pending GCE operation
+                  (e.g., "CREATE", "DELETE").
+                type: string
               uri:
                 description: URI is the GCE URI of the created template.
                 type: string

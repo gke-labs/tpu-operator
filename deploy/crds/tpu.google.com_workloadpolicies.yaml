@@ -125,6 +125,10 @@ spec:
               operationName:
                 description: OperationName is the name of the pending GCE operation.
                 type: string
+              operationType:
+                description: OperationType is the type of the pending GCE operation
+                  (e.g., "CREATE", "DELETE").
+                type: string
               uri:
                 description: URI is the GCE Resource Policy URI.
                 type: string

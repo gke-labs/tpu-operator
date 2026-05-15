@@ -200,6 +200,44 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 				},
 				Status: tpuv1alpha1.WorkloadPolicyStatus{
 					OperationName: "op-123",
+					OperationType: "CREATE",
+				},
+			},
+			mockGCEOps: &gce.MockRegionOperationsClient{
+				GetFunc: func(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					return &computepb.Operation{
+						Status: &status,
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{Requeue: true},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+		},
+		{
+			name: "creation_completed_after_deletion_requested",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project:             "test-project",
+					Region:              "us-central1",
+					AcceleratorTopology: "v4-8",
+				},
+				Status: tpuv1alpha1.WorkloadPolicyStatus{
+					OperationName: "op-123",
+					OperationType: "CREATE",
 				},
 			},
 			mockGCEOps: &gce.MockRegionOperationsClient{
@@ -412,6 +450,7 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 				},
 				Status: tpuv1alpha1.WorkloadPolicyStatus{
 					OperationName: "op-123",
+					OperationType: "DELETE",
 				},
 				Spec: tpuv1alpha1.WorkloadPolicySpec{
 					Project: "test-project",

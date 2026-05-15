@@ -96,7 +96,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			logger.Info("GCE operation completed successfully", "operation", instanceTemplate.Status.OperationName)
 		}
 
-		if !instanceTemplate.ObjectMeta.DeletionTimestamp.IsZero() {
+		if instanceTemplate.Status.OperationType == "DELETE" {
 			// Deletion operation completed successfully, remove finalizer
 			if controllerutil.ContainsFinalizer(&instanceTemplate, finalizerName) {
 				controllerutil.RemoveFinalizer(&instanceTemplate, finalizerName)
@@ -107,7 +107,23 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{}, nil
 		}
 
-		// Insert operation completed successfully. Clear operation name and requeue to refetch template.
+		if instanceTemplate.Status.OperationType == "CREATE" {
+			// Insert operation completed successfully. Clear operation name and type and requeue to refetch template.
+			instanceTemplate.Status.OperationName = ""
+			instanceTemplate.Status.OperationType = ""
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		// Fallback for resources created before OperationType was introduced.
+		if !instanceTemplate.ObjectMeta.DeletionTimestamp.IsZero() {
+			if controllerutil.ContainsFinalizer(&instanceTemplate, finalizerName) {
+				controllerutil.RemoveFinalizer(&instanceTemplate, finalizerName)
+				if err := r.Update(ctx, &instanceTemplate); err != nil {
+					return ctrl.Result{}, fmt.Errorf("removing finalizer from InstanceTemplate after GCE delete: %w", err)
+				}
+			}
+			return ctrl.Result{}, nil
+		}
 		instanceTemplate.Status.OperationName = ""
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -138,6 +154,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					return ctrl.Result{}, nil
 				}
 				instanceTemplate.Status.OperationName = op.Name()
+				instanceTemplate.Status.OperationType = "DELETE"
 				logger.Info("GCE delete operation started", "operation", op.Name())
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
@@ -172,6 +189,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if op != nil {
 				if !op.Done() {
 					instanceTemplate.Status.OperationName = op.Name()
+					instanceTemplate.Status.OperationType = "CREATE"
 					logger.Info("GCE insert operation started", "operation", op.Name())
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}

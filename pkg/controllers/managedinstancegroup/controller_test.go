@@ -189,6 +189,45 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 				},
 				Status: tpuv1alpha1.ManagedInstanceGroupStatus{
 					OperationName: "op-123",
+					OperationType: "CREATE",
+				},
+			},
+			mockGCEOps: &gce.MockZoneOperationsClient{
+				GetFunc: func(ctx context.Context, project, zone, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					return &computepb.Operation{
+						Status: &status,
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{Requeue: true},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
+		},
+		{
+			name: "creation_completed_after_deletion_requested",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-mig",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.ManagedInstanceGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-mig",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/managedinstancegroup-cleanup"},
+				},
+				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
+					Project:          "test-project",
+					Location:         "us-central1-a",
+					InstanceTemplate: "test-template",
+					TargetSize:       1,
+				},
+				Status: tpuv1alpha1.ManagedInstanceGroupStatus{
+					OperationName: "op-123",
+					OperationType: "CREATE",
 				},
 			},
 			mockGCEOps: &gce.MockZoneOperationsClient{
@@ -401,6 +440,7 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 				},
 				Status: tpuv1alpha1.ManagedInstanceGroupStatus{
 					OperationName: "op-123",
+					OperationType: "DELETE",
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
 					Project:          "test-project",

@@ -199,6 +199,45 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 				},
 				Status: tpuv1alpha1.InstanceTemplateStatus{
 					OperationName: "op-123",
+					OperationType: "CREATE",
+				},
+			},
+			mockGCEOps: &gce.MockGlobalOperationsClient{
+				GetFunc: func(ctx context.Context, project, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					return &computepb.Operation{
+						Status: &status,
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{Requeue: true},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+		},
+		{
+			name: "creation_completed_after_deletion_requested",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-template",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/instancetemplate-cleanup"},
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{
+					Project: "test-project",
+					InstanceConfig: tpuv1alpha1.InstanceConfig{
+						MachineType: "v4-8",
+					},
+				},
+				Status: tpuv1alpha1.InstanceTemplateStatus{
+					OperationName: "op-123",
+					OperationType: "CREATE",
 				},
 			},
 			mockGCEOps: &gce.MockGlobalOperationsClient{

@@ -95,7 +95,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			logger.Info("GCE operation completed successfully", "operation", workloadPolicy.Status.OperationName)
 		}
 
-		if !workloadPolicy.ObjectMeta.DeletionTimestamp.IsZero() {
+		if workloadPolicy.Status.OperationType == "DELETE" {
 			// Deletion operation completed successfully, remove finalizer
 			if controllerutil.ContainsFinalizer(&workloadPolicy, finalizerName) {
 				controllerutil.RemoveFinalizer(&workloadPolicy, finalizerName)
@@ -106,7 +106,23 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			return ctrl.Result{}, nil
 		}
 
-		// Insert operation completed successfully. Clear operation name and requeue to refetch template.
+		if workloadPolicy.Status.OperationType == "CREATE" {
+			// Insert operation completed successfully. Clear operation name and type and requeue to refetch template.
+			workloadPolicy.Status.OperationName = ""
+			workloadPolicy.Status.OperationType = ""
+			return ctrl.Result{Requeue: true}, nil
+		}
+
+		// Fallback for resources created before OperationType was introduced.
+		if !workloadPolicy.ObjectMeta.DeletionTimestamp.IsZero() {
+			if controllerutil.ContainsFinalizer(&workloadPolicy, finalizerName) {
+				controllerutil.RemoveFinalizer(&workloadPolicy, finalizerName)
+				if err := r.Update(ctx, &workloadPolicy); err != nil {
+					return ctrl.Result{}, fmt.Errorf("removing finalizer from WorkloadPolicy after GCE delete: %w", err)
+				}
+			}
+			return ctrl.Result{}, nil
+		}
 		workloadPolicy.Status.OperationName = ""
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -137,6 +153,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 					return ctrl.Result{}, nil
 				}
 				workloadPolicy.Status.OperationName = op.Name()
+				workloadPolicy.Status.OperationType = "DELETE"
 				logger.Info("GCE delete operation started", "operation", op.Name())
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
@@ -170,6 +187,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			if op != nil {
 				if !op.Done() {
 					workloadPolicy.Status.OperationName = op.Name()
+					workloadPolicy.Status.OperationType = "CREATE"
 					logger.Info("GCE insert operation started", "operation", op.Name())
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
