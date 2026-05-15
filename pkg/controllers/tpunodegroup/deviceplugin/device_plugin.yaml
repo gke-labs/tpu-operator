@@ -66,6 +66,7 @@ spec:
         - --enable-runtime-metrics=false
         - --enable-host-metrics=false
         - --enable-vbar-uds
+        - --enable-subslice-application=false
         env:
         - name: CONTAINER_NAME
           value: "tpu-device-plugin"
