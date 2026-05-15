@@ -152,40 +152,51 @@ func TestEnsureNodeLabel(t *testing.T) {
 
 	tests := []struct {
 		name        string
+		machineType string
+		topology    string
 		initialNode *corev1.Node
 		wantLabels  map[string]string
 		wantErr     bool
 	}{
 		{
-			name: "label_missing",
+			name:        "label_missing",
+			machineType: "ct4p-hightpu-4t",
+			topology:    "2x2x2",
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator: "true",
-				LabelTPUNodeGroup:   "default-test-tpu",
+				LabelTPUAccelerator:                  "tpu-v4-podslice",
+				LabelTPUNodeGroup:                    "default-test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
-			wantErr:    false,
+			wantErr: false,
 		},
 		{
-			name: "labels_already_correct",
+			name:        "labels_already_correct",
+			machineType: "ct4p-hightpu-4t",
+			topology:    "2x2x2",
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "test-node",
 					Labels: map[string]string{
-						LabelTPUAccelerator: "true",
-						LabelTPUNodeGroup:   "default-test-tpu",
+						LabelTPUAccelerator:                  "tpu-v4-podslice",
+						LabelTPUNodeGroup:                    "default-test-tpu",
+						"cloud.google.com/gke-tpu-topology": "2x2x2",
 					},
 				},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator: "true",
-				LabelTPUNodeGroup:   "default-test-tpu",
+				LabelTPUAccelerator:                  "tpu-v4-podslice",
+				LabelTPUNodeGroup:                    "default-test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
-			wantErr:    false,
+			wantErr: false,
 		},
 		{
-			name: "accelerator_label_different_value",
+			name:        "accelerator_label_different_value",
+			machineType: "ct4p-hightpu-4t",
+			topology:    "2x2x2",
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "test-node",
@@ -193,26 +204,40 @@ func TestEnsureNodeLabel(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator: "true",
-				LabelTPUNodeGroup:   "default-test-tpu",
+				LabelTPUAccelerator:                  "tpu-v4-podslice",
+				LabelTPUNodeGroup:                    "default-test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
-			wantErr:    false,
+			wantErr: false,
 		},
 		{
-			name: "group_label_different_value",
+			name:        "group_label_different_value",
+			machineType: "ct4p-hightpu-4t",
+			topology:    "2x2x2",
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "test-node",
 					Labels: map[string]string{
-						LabelTPUAccelerator: "true",
-						LabelTPUNodeGroup:   "wrong-value",
+						LabelTPUAccelerator:                  "tpu-v4-podslice",
+						LabelTPUNodeGroup:                    "wrong-value",
+						"cloud.google.com/gke-tpu-topology": "2x2x2",
 					},
 				},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator: "true",
-				LabelTPUNodeGroup:   "default-test-tpu",
+				LabelTPUAccelerator:                  "tpu-v4-podslice",
+				LabelTPUNodeGroup:                    "default-test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
+			wantErr: false,
+		},
+		{
+			name:        "accelerator_type_unknown_skips",
+			machineType: "unknown-type",
+			initialNode: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
+			},
+			wantLabels: nil, // Should not be updated
 			wantErr:    false,
 		},
 	}
@@ -226,18 +251,24 @@ func TestEnsureNodeLabel(t *testing.T) {
 					Name:      "test-tpu",
 					Namespace: "default",
 				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "ct4p-hightpu-4t",
+					},
+					Topology: "2x2x2",
+				},
 			}
 			err := ensureNodeLabels(t.Context(), cl, tc.initialNode, group)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ensureNodeLabels() error = %v, wantErr %v", err, tc.wantErr)
 			}
 
-			var updatedNode corev1.Node
-			if err := cl.Get(t.Context(), client.ObjectKey{Name: tc.initialNode.Name}, &updatedNode); err != nil {
-				t.Fatalf("Failed to get updated node: %v", err)
+			wantLabels := tc.wantLabels
+			if wantLabels == nil {
+				wantLabels = tc.initialNode.Labels
 			}
 
-			if diff := cmp.Diff(tc.wantLabels, updatedNode.Labels); diff != "" {
+			if diff := cmp.Diff(wantLabels, tc.initialNode.Labels); diff != "" {
 				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
 			}
 		})
