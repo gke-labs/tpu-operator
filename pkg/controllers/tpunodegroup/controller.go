@@ -29,6 +29,7 @@ const (
 	finalizerMIG      = "tpu.google.com/cleanup-mig"
 	finalizerTemplate = "tpu.google.com/cleanup-template"
 	finalizerPolicy   = "tpu.google.com/cleanup-policy"
+	finalizerNodes    = "tpu.google.com/cleanup-nodes"
 )
 
 // TPUNodeGroupReconciler reconciles a TPUNodeGroup object.
@@ -108,7 +109,8 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		hasAnyFinalizer := controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerMIG) ||
 			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerTemplate) ||
-			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerPolicy)
+			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerPolicy) ||
+			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerNodes)
 
 		if hasAnyFinalizer {
 			logger.Info("Cordoning nodes")
@@ -172,7 +174,18 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				return ctrl.Result{}, nil // Return and reconcile again
 			}
 
-			// TODO(b/512987019): Implement node object deletion.
+			// 4. Nodes
+			if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerNodes) {
+				logger.Info("Deleting stale Node objects")
+				if err := deleteNodeObjects(ctx, logger, r.Client, &tpuNodeGroup); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
+				}
+				controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerNodes)
+				if err := r.Update(ctx, &tpuNodeGroup); err != nil {
+					return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)
+				}
+				return ctrl.Result{}, nil // Return and reconcile again
+			}
 		}
 		return ctrl.Result{}, nil
 	}
@@ -186,6 +199,9 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		updated = true
 	}
 	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerPolicy) {
+		updated = true
+	}
+	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerNodes) {
 		updated = true
 	}
 
