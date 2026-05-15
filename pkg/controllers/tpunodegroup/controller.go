@@ -448,6 +448,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 
 	// 3. Generate desired state
 	mig := converter.ToManagedInstanceGroupCR(group, template, policy)
+	r.defaultManagedInstanceGroup(mig, group)
 
 	// 4. Get existing CR
 	existing := &tpuapi.ManagedInstanceGroup{}
@@ -527,6 +528,20 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 			template.Spec.InstanceConfig.ProvisioningModel = ptr.To("RESERVATION_BOUND")
 		} else {
 			template.Spec.InstanceConfig.ProvisioningModel = ptr.To("STANDARD")
+		}
+	}
+}
+
+// defaultManagedInstanceGroup populates default values for a ManagedInstanceGroup prior to reconciliation.
+func (r *TPUNodeGroupReconciler) defaultManagedInstanceGroup(mig *tpuapi.ManagedInstanceGroup, group *tpuapi.TPUNodeGroup) {
+	if mig == nil {
+		return
+	}
+	if mig.Spec.TargetSizePolicyMode == nil {
+		if group.Spec.Topology == "" {
+			mig.Spec.TargetSizePolicyMode = ptr.To(tpuapi.TargetSizePolicyModeIndividual)
+		} else {
+			mig.Spec.TargetSizePolicyMode = ptr.To(tpuapi.TargetSizePolicyModeBulk)
 		}
 	}
 }
