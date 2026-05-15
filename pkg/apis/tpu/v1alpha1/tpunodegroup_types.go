@@ -4,8 +4,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:XValidation:rule="has(self.instanceTemplateURI) != has(self.instanceConfig)",message="Exactly one of instanceTemplateURI or instanceConfig must be specified"
-// +kubebuilder:validation:XValidation:rule="!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)",message="BootstrapKubernetes cannot be specified when using a custom InstanceTemplateURI"
+
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
@@ -17,15 +16,11 @@ type TPUNodeGroupSpec struct {
 	// +required
 	NodeLocation string `json:"nodeLocation"`
 
-	// InstanceTemplateURI is the full URI of a user-provided instance template.
-	// Cannot be set if InstanceConfig is provided.
-	// +optional
-	InstanceTemplateURI *string `json:"instanceTemplateURI,omitempty"`
+	// TODO(b/513637092): Handle bring your own instance template URI.
 
 	// InstanceConfig allows the controller to generate an instance template.
-	// Cannot be set if InstanceTemplateURI is provided.
-	// +optional
-	InstanceConfig *InstanceConfig `json:"instanceConfig,omitempty"`
+	// +required
+	InstanceConfig *InstanceConfig `json:"instanceConfig"`
 
 	// NodeCount is the total number of VMs desired.
 	// +required

@@ -349,9 +349,7 @@ func (e *WaitingForChildError) Error() string {
 }
 
 func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-	if group.Spec.InstanceTemplateURI != nil {
-		return nil
-	}
+
 
 	template := converter.ToInstanceTemplateCR(group)
 	if template == nil {
@@ -417,19 +415,17 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	var err error
 
 	// 1. Fetch InstanceTemplate if needed
-	if group.Spec.InstanceTemplateURI == nil {
-		template = &tpuapi.InstanceTemplate{}
-		templateName := group.InstanceTemplateName()
-		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
-		if err != nil {
-			if apierrors.IsNotFound(err) {
-				return &WaitingForChildError{ChildKind: "InstanceTemplate"}
-			}
-			return fmt.Errorf("getting InstanceTemplate CR: %w", err)
-		}
-		if template.Status.URI == "" {
+	template = &tpuapi.InstanceTemplate{}
+	templateName := group.InstanceTemplateName()
+	err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
 			return &WaitingForChildError{ChildKind: "InstanceTemplate"}
 		}
+		return fmt.Errorf("getting InstanceTemplate CR: %w", err)
+	}
+	if template.Status.URI == "" {
+		return &WaitingForChildError{ChildKind: "InstanceTemplate"}
 	}
 
 	// 2. Fetch WorkloadPolicy if needed
@@ -531,19 +527,18 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 		}
 	}
 
-	// Always include the startup script.
-	if template.Spec.Metadata == nil {
-		template.Spec.Metadata = make(map[string]string)
-	}
-	version := "1.31"
+	// Include the startup script only if BootstrapKubernetes is specified.
 	if group.Spec.BootstrapKubernetes != nil {
+		if template.Spec.Metadata == nil {
+			template.Spec.Metadata = make(map[string]string)
+		}
 		if group.Spec.BootstrapKubernetes.Version == nil {
 			return fmt.Errorf("version must be specified when bootstrapKubernetes is enabled")
 		}
-		version = *group.Spec.BootstrapKubernetes.Version
+		version := *group.Spec.BootstrapKubernetes.Version
+		script := renderStartupScript(version)
+		template.Spec.Metadata["startup-script"] = script
 	}
-	script := renderStartupScript(version)
-	template.Spec.Metadata["startup-script"] = script
 	return nil
 }
 

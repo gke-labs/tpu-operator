@@ -93,9 +93,7 @@ func isZone(location string) bool {
 // ToManagedInstanceGroupCR converts a TPUNodeGroup to a ManagedInstanceGroup CR.
 func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, template *api.InstanceTemplate, policy *api.WorkloadPolicy) *api.ManagedInstanceGroup {
 	var templateURL string
-	if tpuNodeGroup.Spec.InstanceTemplateURI != nil {
-		templateURL = *tpuNodeGroup.Spec.InstanceTemplateURI
-	} else if template != nil {
+	if template != nil {
 		templateURL = template.Status.URI
 	}
 

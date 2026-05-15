@@ -62,9 +62,8 @@ spec:
                 - message: Version must be set to 1.31
                   rule: has(self.version) && self.version == '1.31'
               instanceConfig:
-                description: |-
-                  InstanceConfig allows the controller to generate an instance template.
-                  Cannot be set if InstanceTemplateURI is provided.
+                description: InstanceConfig allows the controller to generate an instance
+                  template.
                 properties:
                   bootDiskSizeGB:
                     description: BootDiskSizeGB is the size of the boot disk in GB.
@@ -133,11 +132,6 @@ spec:
                 required:
                 - machineType
                 type: object
-              instanceTemplateURI:
-                description: |-
-                  InstanceTemplateURI is the full URI of a user-provided instance template.
-                  Cannot be set if InstanceConfig is provided.
-                type: string
               minNodeCount:
                 description: MinNodeCount is the minimum required for a single-host
                   slice.
@@ -162,17 +156,11 @@ spec:
                 type: string
             required:
             - acceleratorConnectionMode
+            - instanceConfig
             - nodeCount
             - nodeLocation
             - project
             type: object
-            x-kubernetes-validations:
-            - message: Exactly one of instanceTemplateURI or instanceConfig must be
-                specified
-              rule: has(self.instanceTemplateURI) != has(self.instanceConfig)
-            - message: BootstrapKubernetes cannot be specified when using a custom
-                InstanceTemplateURI
-              rule: '!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)'
           status:
             description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
             properties:
