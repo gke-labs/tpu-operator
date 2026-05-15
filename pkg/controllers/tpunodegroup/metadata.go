@@ -7,6 +7,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,9 +24,13 @@ import (
 )
 
 const (
-	kubeadmJoinTokenKey       = "kubeadm-join-token"
+	kubeadmJoinTokenKey      = "kubeadm-join-token"
 	kubeadmControlPlaneIPKey = "kubeadm-control-plane-ip"
-	kubeadmCAHashKey          = "kubeadm-ca-hash"
+	kubeadmCAHashKey         = "kubeadm-ca-hash"
+	tpuAcceleratorKey        = "cloud.google.com/gke-tpu-accelerator"
+	tpuAcceleratorCountKey   = "cloud.google.com/gke-accelerator-count"
+	tpuTopologyKey           = "cloud.google.com/gke-tpu-topology"
+	kubeLabelsKey            = "kube-labels"
 )
 
 // injectMetadata handles injecting metadata into instances.
@@ -124,9 +130,77 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 
 // sliceMetadata returns metadata for slice topology etc.
 func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance) map[string]string {
-	// TODO(b/500810349): Insert additional metadata here (e.g., kube-labels, accelerator_topology_id)
-	return nil
+	updates := make(map[string]string)
+
+	// 1. Map the raw GCE machine type to the specific accelerator string expected by the plugin
+	acceleratorType := getAcceleratorLabelValue(group)
+	if acceleratorType == "" {
+		// Cannot inject labels without a known accelerator type
+		return updates
+	}
+
+	// 2. Extract the number of chips per VM from the machine type
+	chipsPerNode := getChipsPerNode(group)
+	if chipsPerNode == 0 {
+		// The device plugin will crash if count is missing, fail safely here
+		return updates
+	}
+
+	// 3. Safely extract any existing kube-labels from the GCE Instance so we don't overwrite them
+	var existingLabels string
+	if gceInst != nil && gceInst.Metadata != nil {
+		for _, item := range gceInst.Metadata.Items {
+			if item.Key != nil && *item.Key == kubeLabelsKey && item.Value != nil {
+				existingLabels = *item.Value
+				break
+			}
+		}
+	}
+
+	// 4. Merge the existing labels with our new TPU labels (comma-separated format)
+	labelMap := make(map[string]string)
+	if existingLabels != "" {
+		parts := strings.Split(existingLabels, ",")
+		for _, part := range parts {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				labelMap[kv[0]] = kv[1]
+			} else if len(kv) == 1 && kv[0] != "" {
+				labelMap[kv[0]] = ""
+			}
+		}
+	}
+
+	// Overwrite with new labels
+	labelMap[tpuAcceleratorKey] = acceleratorType
+	labelMap[tpuAcceleratorCountKey] = strconv.Itoa(chipsPerNode)
+	if group.Spec.Topology != "" {
+		labelMap[tpuTopologyKey] = group.Spec.Topology
+	} else {
+		delete(labelMap, tpuTopologyKey)
+	}
+
+	// Reconstruct finalLabels in deterministic order
+	keys := make([]string, 0, len(labelMap))
+	for k := range labelMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var labelStrings []string
+	for _, k := range keys {
+		labelStrings = append(labelStrings, fmt.Sprintf("%s=%s", k, labelMap[k]))
+	}
+	finalLabels := strings.Join(labelStrings, ",")
+
+	// 6. Return the updates. The controller will patch this into the GCE VM's metadata.
+	updates[kubeLabelsKey] = finalLabels
+
+	return updates
 }
+
+
+
 
 // generateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
 func generateBootstrapToken(ctx context.Context, k8sClient client.Client) (string, error) {
