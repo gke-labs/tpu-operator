@@ -12,8 +12,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-
-
 const (
 	LabelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
 	LabelTPUNodeGroup   = "cloud.google.com/tpu-node-group"

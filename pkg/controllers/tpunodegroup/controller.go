@@ -287,7 +287,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 	// 2. Get existing CR
 	existing := &tpuapi.WorkloadPolicy{}
 	err = r.Get(ctx, client.ObjectKey{Namespace: policy.Namespace, Name: policy.Name}, existing)
-	
+
 	// 3. Create if not found
 	if err != nil {
 		if apierrors.IsNotFound(err) {
@@ -504,8 +504,6 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	})
 	return nil
 }
-
-
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {

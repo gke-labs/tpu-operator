@@ -14,16 +14,16 @@ import (
 
 	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
+	"github.com/google/go-cmp/cmp"
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"github.com/google/go-cmp/cmp"
-	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestGenerateBootstrapToken(t *testing.T) {
@@ -275,8 +275,6 @@ func generateTestCACert(t *testing.T) string {
 	return string(pemBytes)
 }
 
-
-
 func TestSliceMetadata(t *testing.T) {
 	parseLabels := func(s string) map[string]string {
 		m := make(map[string]string)
@@ -347,7 +345,6 @@ func TestSliceMetadata(t *testing.T) {
 		})
 	}
 }
-
 func TestSliceMetadata_TopologyRemoval(t *testing.T) {
 	parseLabels := func(s string) map[string]string {
 		m := make(map[string]string)
