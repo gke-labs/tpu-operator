@@ -2,6 +2,7 @@ package tpunodegroup
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -1009,6 +1010,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 }
 
 func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
+	expectedScript := strings.ReplaceAll(startupScriptFmt, "{{VERSION}}", "1.31")
+
 	tests := []struct {
 		name     string
 		template *tpuapi.InstanceTemplate
@@ -1035,6 +1038,9 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 						MachineType:       "tpu7x-standard-4t",
 						Subnetwork:        ptr.To("default"),
 						ProvisioningModel: ptr.To("STANDARD"),
+						Metadata: map[string]string{
+							"startup-script": expectedScript,
+						},
 					},
 				},
 			},
@@ -1057,6 +1063,9 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 						Reservation:       ptr.To("my-res"),
 						Subnetwork:        ptr.To("default"),
 						ProvisioningModel: ptr.To("RESERVATION_BOUND"),
+						Metadata: map[string]string{
+							"startup-script": expectedScript,
+						},
 					},
 				},
 			},
@@ -1080,6 +1089,9 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 						Reservation:       ptr.To("my-res"),
 						Subnetwork:        ptr.To("custom-subnet"),
 						ProvisioningModel: ptr.To("SPOT"),
+						Metadata: map[string]string{
+							"startup-script": expectedScript,
+						},
 					},
 				},
 			},
@@ -1089,7 +1101,10 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &TPUNodeGroupReconciler{}
-			r.defaultInstanceTemplate(tc.template)
+			err := r.defaultInstanceTemplate(tc.template, &tpuapi.TPUNodeGroup{})
+			if err != nil {
+				t.Fatalf("defaultInstanceTemplate() unexpected error: %v", err)
+			}
 
 			if diff := cmp.Diff(tc.want, tc.template); diff != "" {
 				t.Errorf("defaultInstanceTemplate() mismatch (-want +got):\n%s", diff)
