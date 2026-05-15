@@ -22,18 +22,19 @@ import (
 	"google.golang.org/protobuf/proto"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"github.com/google/go-cmp/cmp"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
-func TestNodeBootstrapper_generateBootstrapToken(t *testing.T) {
+func TestGenerateBootstrapToken(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Adding CoreV1 to scheme: %v", err)
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
-	bootstrapper := NewNodeBootstrapper(cl, nil, nil)
 
-	token, err := bootstrapper.generateBootstrapToken(t.Context())
+	token, err := generateBootstrapToken(t.Context(), cl)
 	if err != nil {
 		t.Fatalf("generateBootstrapToken() error = %v", err)
 	}
@@ -61,7 +62,7 @@ func TestNodeBootstrapper_generateBootstrapToken(t *testing.T) {
 	}
 }
 
-func TestNodeBootstrapper_getCAHash(t *testing.T) {
+func TestFetchCAHash(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Adding CoreV1 to scheme: %v", err)
@@ -80,11 +81,10 @@ func TestNodeBootstrapper_getCAHash(t *testing.T) {
 	}
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
-	bootstrapper := NewNodeBootstrapper(cl, nil, nil)
 
-	hash, err := bootstrapper.getCAHash(t.Context())
+	hash, err := fetchCAHash(t.Context(), cl)
 	if err != nil {
-		t.Fatalf("getCAHash() error = %v", err)
+		t.Fatalf("fetchCAHash() error = %v", err)
 	}
 
 	if !strings.HasPrefix(hash, "sha256:") {
@@ -92,31 +92,7 @@ func TestNodeBootstrapper_getCAHash(t *testing.T) {
 	}
 }
 
-func generateTestCACert(t *testing.T) string {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatalf("Failed to generate private key: %v", err)
-	}
-
-	template := x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().Add(1 * time.Hour),
-		IsCA:         true,
-		KeyUsage:     x509.KeyUsageCertSign,
-	}
-
-	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		t.Fatalf("Failed to create certificate: %v", err)
-	}
-
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
-	return string(pemBytes)
-}
-
-
-func TestNodeBootstrapper_InjectJoinTokens(t *testing.T) {
+func TestInjectMetadata(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := tpuapi.AddToScheme(scheme); err != nil {
 		t.Fatalf("Adding TPU API to scheme: %v", err)
@@ -169,7 +145,8 @@ func TestNodeBootstrapper_InjectJoinTokens(t *testing.T) {
 	mockInstance := &gce.MockInstanceClient{
 		GetFunc: func(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error) {
 			return &computepb.Instance{
-				Name: proto.String("inst-1"),
+				Name:   proto.String("inst-1"),
+				Status: proto.String("RUNNING"),
 				Metadata: &computepb.Metadata{
 					Fingerprint: proto.String("xyz"),
 					Items: []*computepb.Items{
@@ -184,11 +161,9 @@ func TestNodeBootstrapper_InjectJoinTokens(t *testing.T) {
 		},
 	}
 
-	bootstrapper := NewNodeBootstrapper(cl, mockIGM, mockInstance)
-
-	err := bootstrapper.InjectJoinTokens(t.Context(), group)
+	err := injectMetadata(t.Context(), group, cl, mockIGM, mockInstance)
 	if err != nil {
-		t.Fatalf("InjectJoinTokens() error = %v", err)
+		t.Fatalf("injectMetadata() error = %v", err)
 	}
 
 	if gotMetadata == nil {
@@ -264,26 +239,39 @@ func TestMergeMetadataItems(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := mergeMetadataItems(tt.existing, tt.updates)
-			if len(got) != len(tt.want) {
-				t.Errorf("mergeMetadataItems() returned %d items, want %d", len(got), len(tt.want))
+			gceInst := &computepb.Instance{
+				Metadata: &computepb.Metadata{
+					Items: tt.existing,
+				},
 			}
-			for _, w := range tt.want {
-				found := false
-				for _, g := range got {
-					if g.Key != nil && w.Key != nil && *g.Key == *w.Key {
-						if g.Value != nil && w.Value != nil && *g.Value != *w.Value {
-							t.Errorf("For key %s, got value %s, want %s", *g.Key, *g.Value, *w.Value)
-						}
-						found = true
-						break
-					}
-				}
-				if !found && w.Key != nil {
-					t.Errorf("Expected key %s not found in result", *w.Key)
-				}
+			got, _, _ := mergeMetadataItems(gceInst, tt.updates, nil)
+			if diff := cmp.Diff(tt.want, got, protocmp.Transform()); diff != "" {
+				t.Errorf("mergeMetadataItems() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
+}
+
+func generateTestCACert(t *testing.T) string {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("Failed to generate private key: %v", err)
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(1 * time.Hour),
+		IsCA:         true,
+		KeyUsage:     x509.KeyUsageCertSign,
+	}
+
+	certBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		t.Fatalf("Failed to create certificate: %v", err)
+	}
+
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
+	return string(pemBytes)
 }
 
