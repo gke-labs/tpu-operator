@@ -275,3 +275,123 @@ func generateTestCACert(t *testing.T) string {
 	return string(pemBytes)
 }
 
+
+
+func TestSliceMetadata(t *testing.T) {
+	parseLabels := func(s string) map[string]string {
+		m := make(map[string]string)
+		for _, part := range strings.Split(s, ",") {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				m[kv[0]] = kv[1]
+			}
+		}
+		return m
+	}
+
+	group := &tpuapi.TPUNodeGroup{
+		Spec: tpuapi.TPUNodeGroupSpec{
+			InstanceConfig: &tpuapi.InstanceConfig{
+				MachineType: "ct5lp-hightpu-4t",
+			},
+			Topology: "2x2x2",
+		},
+	}
+
+	tests := []struct {
+		name           string
+		existingLabels string
+		wantLabels     string
+	}{
+		{
+			name:           "no existing labels",
+			existingLabels: "",
+			wantLabels:     "cloud.google.com/gke-tpu-accelerator=tpu-v5-lite-podslice,cloud.google.com/gke-accelerator-count=4,cloud.google.com/gke-tpu-topology=2x2x2",
+		},
+		{
+			name:           "existing labels",
+			existingLabels: "foo=bar",
+			wantLabels:     "foo=bar,cloud.google.com/gke-tpu-accelerator=tpu-v5-lite-podslice,cloud.google.com/gke-accelerator-count=4,cloud.google.com/gke-tpu-topology=2x2x2",
+		},
+		{
+			name:           "malformed labels",
+			existingLabels: "foo=bar,malformed",
+			wantLabels:     "foo=bar,malformed=,cloud.google.com/gke-tpu-accelerator=tpu-v5-lite-podslice,cloud.google.com/gke-accelerator-count=4,cloud.google.com/gke-tpu-topology=2x2x2",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var gceInst *computepb.Instance
+			if tt.existingLabels != "" {
+				gceInst = &computepb.Instance{
+					Metadata: &computepb.Metadata{
+						Items: []*computepb.Items{
+							{Key: proto.String("kube-labels"), Value: proto.String(tt.existingLabels)},
+						},
+					},
+				}
+			}
+
+			got := sliceMetadata(group, gceInst)
+			gotLabels, ok := got["kube-labels"]
+			if !ok {
+				t.Fatalf("sliceMetadata did not return kube-labels")
+			}
+
+			gotMap := parseLabels(gotLabels)
+			wantMap := parseLabels(tt.wantLabels)
+			if diff := cmp.Diff(wantMap, gotMap); diff != "" {
+				t.Errorf("sliceMetadata() kube-labels mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestSliceMetadata_TopologyRemoval(t *testing.T) {
+	parseLabels := func(s string) map[string]string {
+		m := make(map[string]string)
+		for _, part := range strings.Split(s, ",") {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				m[kv[0]] = kv[1]
+			}
+		}
+		return m
+	}
+
+	group := &tpuapi.TPUNodeGroup{
+		Spec: tpuapi.TPUNodeGroupSpec{
+			InstanceConfig: &tpuapi.InstanceConfig{
+				MachineType: "ct5lp-hightpu-4t",
+			},
+			Topology: "", // Empty topology in spec
+		},
+	}
+
+	gceInst := &computepb.Instance{
+		Metadata: &computepb.Metadata{
+			Items: []*computepb.Items{
+				{Key: proto.String("kube-labels"), Value: proto.String("cloud.google.com/gke-tpu-topology=2x2x2,foo=bar")},
+			},
+		},
+	}
+
+	got := sliceMetadata(group, gceInst)
+	gotLabels, ok := got["kube-labels"]
+	if !ok {
+		t.Fatalf("sliceMetadata did not return kube-labels")
+	}
+
+	gotMap := parseLabels(gotLabels)
+
+	// Verify that topology is NOT in the output
+	if _, ok := gotMap["cloud.google.com/gke-tpu-topology"]; ok {
+		t.Errorf("Expected topology label to be removed, but it was present")
+	}
+
+	// Verify that other labels are preserved
+	if val, ok := gotMap["foo"]; !ok || val != "bar" {
+		t.Errorf("Expected foo=bar, got %v", val)
+	}
+}
