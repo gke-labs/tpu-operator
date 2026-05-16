@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -8,11 +9,17 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/clientcmd"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var controllerCmd *exec.Cmd
 var logFile *os.File
 var repoRoot string
+var k8sClient client.Client
 
 func TestMain(m *testing.M) {
 	setup()
@@ -44,14 +51,28 @@ func setup() {
 		log.Fatalf("Failed to apply CRDs: %v", err)
 	}
 
+	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+
+	fmt.Println("=== Initializing k8sClient ===")
+	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	if err != nil {
+		log.Fatalf("Failed to build kubeconfig: %v", err)
+	}
+	scheme := runtime.NewScheme()
+	if err := v1alpha1.AddToScheme(scheme); err != nil {
+		log.Fatalf("Failed to add v1alpha1 to scheme: %v", err)
+	}
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
+	if err != nil {
+		log.Fatalf("Failed to create k8sClient: %v", err)
+	}
+
 	fmt.Println("=== Starting Controller ===")
 	logPath := "/tmp/controller_e2e.log"
 	logFile, err = os.Create(logPath)
 	if err != nil {
 		log.Fatalf("Failed to create log file: %v", err)
 	}
-
-	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
 
 	controllerCmd = exec.Command("go", "run", "cmd/main.go", "--kube-config", kubeconfig)
 	controllerCmd.Dir = repoRoot
@@ -83,21 +104,64 @@ func teardown() {
 
 func cleanResources(t *testing.T, resourceTypes []string) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	for _, rt := range resourceTypes {
-		// Check stuck resources
-		cmd := exec.Command("kubectl", "get", rt, "-o", "jsonpath={.items[?(@.metadata.deletionTimestamp)].metadata.name}")
-		output, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("Failed to check stuck resources for %s: %v", rt, err)
-		}
-		if len(output) > 0 {
-			t.Fatalf("ERROR: Found %s stuck in deletion: %s", rt, string(output))
-		}
-
-		// Delete all
-		cmd = exec.Command("kubectl", "delete", rt, "--all", "--ignore-not-found", "--timeout=60s", "--request-timeout=30s")
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("Failed to delete resources of type %s: %v", rt, err)
+		switch rt {
+		case "tpunodegroups":
+			list := &v1alpha1.TPUNodeGroupList{}
+			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to list TPUNodeGroups: %v", err)
+			}
+			for _, item := range list.Items {
+				if !item.DeletionTimestamp.IsZero() {
+					t.Fatalf("ERROR: Found TPUNodeGroup stuck in deletion: %s", item.Name)
+				}
+			}
+			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.TPUNodeGroup{}, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to delete TPUNodeGroups: %v", err)
+			}
+		case "instancetemplates":
+			list := &v1alpha1.InstanceTemplateList{}
+			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to list InstanceTemplates: %v", err)
+			}
+			for _, item := range list.Items {
+				if !item.DeletionTimestamp.IsZero() {
+					t.Fatalf("ERROR: Found InstanceTemplate stuck in deletion: %s", item.Name)
+				}
+			}
+			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.InstanceTemplate{}, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to delete InstanceTemplates: %v", err)
+			}
+		case "workloadpolicies":
+			list := &v1alpha1.WorkloadPolicyList{}
+			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to list WorkloadPolicies: %v", err)
+			}
+			for _, item := range list.Items {
+				if !item.DeletionTimestamp.IsZero() {
+					t.Fatalf("ERROR: Found WorkloadPolicy stuck in deletion: %s", item.Name)
+				}
+			}
+			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.WorkloadPolicy{}, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to delete WorkloadPolicies: %v", err)
+			}
+		case "managedinstancegroups":
+			list := &v1alpha1.ManagedInstanceGroupList{}
+			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to list ManagedInstanceGroups: %v", err)
+			}
+			for _, item := range list.Items {
+				if !item.DeletionTimestamp.IsZero() {
+					t.Fatalf("ERROR: Found ManagedInstanceGroup stuck in deletion: %s", item.Name)
+				}
+			}
+			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.ManagedInstanceGroup{}, client.InNamespace("default")); err != nil {
+				t.Fatalf("Failed to delete ManagedInstanceGroups: %v", err)
+			}
+		default:
+			t.Fatalf("Unknown resource type in cleanup: %s", rt)
 		}
 	}
 }
