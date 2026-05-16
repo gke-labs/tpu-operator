@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -543,7 +542,7 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 		}
 		version = *group.Spec.BootstrapKubernetes.Version
 	}
-	script := strings.ReplaceAll(startupScriptFmt, "{{VERSION}}", version)
+	script := renderStartupScript(version)
 	template.Spec.Metadata["startup-script"] = script
 	return nil
 }

@@ -2,7 +2,6 @@ package tpunodegroup
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
@@ -1010,7 +1009,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 }
 
 func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
-	expectedScript := strings.ReplaceAll(startupScriptFmt, "{{VERSION}}", "1.31")
+	expectedScript := renderStartupScript("1.31")
 
 	tests := []struct {
 		name     string
