@@ -6,9 +6,9 @@ import (
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 )
 
-// getAcceleratorLabelValue translates the GCE machine type into the
+// acceleratorLabelValue translates the GCE machine type into the
 // specific string expected by the TPU device plugin.
-func getAcceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
+func acceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
 	if group.Spec.InstanceConfig == nil || group.Spec.InstanceConfig.MachineType == "" {
 		return ""
 	}
@@ -44,9 +44,9 @@ func getAcceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
 	}
 }
 
-// getChipsPerNode parses the machine type suffix to determine the number of
+// chipsPerNode parses the machine type suffix to determine the number of
 // chips attached to the VM (e.g., "tpu7x-standard-4t" -> 4).
-func getChipsPerNode(group *tpuapi.TPUNodeGroup) int {
+func chipsPerNode(group *tpuapi.TPUNodeGroup) int {
 	if group.Spec.InstanceConfig == nil || group.Spec.InstanceConfig.MachineType == "" {
 		return 0
 	}

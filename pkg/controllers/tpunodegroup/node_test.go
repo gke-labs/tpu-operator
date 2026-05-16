@@ -166,8 +166,8 @@ func TestEnsureNodeLabel(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator:                 "tpu-v4-podslice",
-				LabelTPUNodeGroup:                   "default-test-tpu",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroup:                   "default-test-tpu",
 				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
 			wantErr: false,
@@ -180,15 +180,15 @@ func TestEnsureNodeLabel(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
 					Labels: map[string]string{
-						LabelTPUAccelerator:                 "tpu-v4-podslice",
-						LabelTPUNodeGroup:                   "default-test-tpu",
+						labelTPUAccelerator:                 "tpu-v4-podslice",
+						labelTPUNodeGroup:                   "default-test-tpu",
 						"cloud.google.com/gke-tpu-topology": "2x2x2",
 					},
 				},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator:                 "tpu-v4-podslice",
-				LabelTPUNodeGroup:                   "default-test-tpu",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroup:                   "default-test-tpu",
 				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
 			wantErr: false,
@@ -200,12 +200,12 @@ func TestEnsureNodeLabel(t *testing.T) {
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "test-node",
-					Labels: map[string]string{LabelTPUAccelerator: "false"},
+					Labels: map[string]string{labelTPUAccelerator: "false"},
 				},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator:                 "tpu-v4-podslice",
-				LabelTPUNodeGroup:                   "default-test-tpu",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroup:                   "default-test-tpu",
 				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
 			wantErr: false,
@@ -218,15 +218,15 @@ func TestEnsureNodeLabel(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
 					Labels: map[string]string{
-						LabelTPUAccelerator:                 "tpu-v4-podslice",
-						LabelTPUNodeGroup:                   "wrong-value",
+						labelTPUAccelerator:                 "tpu-v4-podslice",
+						labelTPUNodeGroup:                   "wrong-value",
 						"cloud.google.com/gke-tpu-topology": "2x2x2",
 					},
 				},
 			},
 			wantLabels: map[string]string{
-				LabelTPUAccelerator:                 "tpu-v4-podslice",
-				LabelTPUNodeGroup:                   "default-test-tpu",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroup:                   "default-test-tpu",
 				"cloud.google.com/gke-tpu-topology": "2x2x2",
 			},
 			wantErr: false,
