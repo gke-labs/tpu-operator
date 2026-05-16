@@ -20,6 +20,7 @@ var controllerCmd *exec.Cmd
 var logFile *os.File
 var repoRoot string
 var k8sClient client.Client
+var controllerBinPath = "/tmp/tpu_controller_e2e_bin"
 
 func TestMain(m *testing.M) {
 	setup()
@@ -67,6 +68,13 @@ func setup() {
 		log.Fatalf("Failed to create k8sClient: %v", err)
 	}
 
+	fmt.Println("=== Building Controller Binary ===")
+	buildCmd := exec.Command("go", "build", "-o", controllerBinPath, "cmd/main.go")
+	buildCmd.Dir = repoRoot
+	if err := buildCmd.Run(); err != nil {
+		log.Fatalf("Failed to build controller binary: %v", err)
+	}
+
 	fmt.Println("=== Starting Controller ===")
 	logPath := "/tmp/controller_e2e.log"
 	logFile, err = os.Create(logPath)
@@ -74,7 +82,7 @@ func setup() {
 		log.Fatalf("Failed to create log file: %v", err)
 	}
 
-	controllerCmd = exec.Command("go", "run", "cmd/main.go", "--kube-config", kubeconfig)
+	controllerCmd = exec.Command(controllerBinPath, "--kube-config", kubeconfig)
 	controllerCmd.Dir = repoRoot
 	controllerCmd.Stdout = logFile
 	controllerCmd.Stderr = logFile
@@ -96,10 +104,12 @@ func teardown() {
 		if err := controllerCmd.Process.Kill(); err != nil {
 			fmt.Printf("Failed to kill controller process: %v\n", err)
 		}
+		_ = controllerCmd.Wait()
 	}
 	if logFile != nil {
 		logFile.Close()
 	}
+	_ = os.Remove(controllerBinPath)
 }
 
 func cleanResources(t *testing.T, resourceTypes []string) {
