@@ -201,7 +201,6 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Project:      "test-project",
 					NodeLocation: "us-central1-a",
 					NodeCount:    1,
-
 				},
 			},
 			additionalObjects: []client.Object{
@@ -553,7 +552,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-tpu",
 					Namespace:         "default",
-					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
+					Finalizers:        []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
@@ -614,8 +613,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{},
-			wantErr:    false,
+			wantResult:       reconcile.Result{},
+			wantErr:          false,
 			wantNodesDeleted: []string{"test-tpu-0"},
 			wantDeleted:      true,
 		},
@@ -631,7 +630,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-tpu",
 					Namespace:         "default",
-					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
+					Finalizers:        []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
@@ -690,7 +689,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:              "test-tpu",
 					Namespace:         "default",
-					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
+					Finalizers:        []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
@@ -802,8 +801,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeCount:    1,
 				},
 			},
-			wantResult: reconcile.Result{},
-			wantErr:    false,
+			wantResult:  reconcile.Result{},
+			wantErr:     false,
 			wantDeleted: true,
 		},
 		{
@@ -876,8 +875,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
-			wantErr:       false,
+			wantResult: reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
 					Type:    "ManagedInstanceGroupReady",
@@ -1188,7 +1187,7 @@ func TestDefaultManagedInstanceGroup(t *testing.T) {
 			group: &tpuapi.TPUNodeGroup{
 				Spec: tpuapi.TPUNodeGroupSpec{},
 			},
-			mig: &tpuapi.ManagedInstanceGroup{},
+			mig:      &tpuapi.ManagedInstanceGroup{},
 			wantMode: "INDIVIDUAL",
 		},
 		{
@@ -1198,7 +1197,7 @@ func TestDefaultManagedInstanceGroup(t *testing.T) {
 					Topology: "2x2x2",
 				},
 			},
-			mig: &tpuapi.ManagedInstanceGroup{},
+			mig:      &tpuapi.ManagedInstanceGroup{},
 			wantMode: "BULK",
 		},
 		{
@@ -1227,4 +1226,3 @@ func TestDefaultManagedInstanceGroup(t *testing.T) {
 		})
 	}
 }
-

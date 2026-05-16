@@ -54,7 +54,6 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 		t.Errorf("expected vbar agent image to be %s, got %s", expectedVbarImage, vbarAgent.Image)
 	}
 
-
 	affinity := ds.Spec.Template.Spec.Affinity
 	if affinity == nil || affinity.NodeAffinity == nil || affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution == nil {
 		t.Fatalf("expected node affinity to be set")
