@@ -39,6 +39,9 @@ type InstanceTemplateStatus struct {
 	// OperationName tracks the ongoing GCE operation (insert/delete) by name.
 	// +optional
 	OperationName string `json:"operationName,omitempty"`
+	// OperationType is the type of the pending GCE operation (e.g., "CREATE", "DELETE").
+	// +optional
+	OperationType string `json:"operationType,omitempty"`
 }
 
 // +genclient
