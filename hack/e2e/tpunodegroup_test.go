@@ -3,16 +3,19 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func TestTPUNodeGroup(t *testing.T) {
@@ -77,6 +80,60 @@ func TestTPUNodeGroup(t *testing.T) {
 		t.Fatalf("Expected NotFound error, got: %v", err)
 	}
 	t.Log("Verified WorkloadPolicy was not created.")
+
+	t.Log("=== Verifying Node Joining and Labeling ===")
+	if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 10*time.Minute, true, func(ctx context.Context) (bool, error) {
+		if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
+			return false, err
+		}
+		if ng.Status.NodeSummary != nil && ng.Status.NodeSummary.Ready == 1 {
+			t.Log("NodeSummary indicates 1 Ready node.")
+			return true, nil
+		}
+		if ng.Status.NodeSummary != nil {
+			t.Logf("Waiting for nodes to join. NodeSummary: Ready=%d, Reconciling=%d", ng.Status.NodeSummary.Ready, ng.Status.NodeSummary.Reconciling)
+		} else {
+			t.Log("Waiting for NodeSummary to be populated...")
+		}
+		return false, nil
+	}); err != nil {
+		t.Fatalf("Timeout or error waiting for node to join: %v", err)
+	}
+
+	var nodeList corev1.NodeList
+	if err := k8sClient.List(ctx, &nodeList, client.MatchingLabels{
+		"cloud.google.com/tpu-node-group": "default-test-nodegroup",
+	}); err != nil {
+		t.Fatalf("Failed to list nodes by TPUNodeGroup label: %v", err)
+	}
+	if len(nodeList.Items) != 1 {
+		t.Fatalf("Expected exactly 1 node with TPUNodeGroup label, found %d", len(nodeList.Items))
+	}
+	node := nodeList.Items[0]
+	t.Logf("Found node: %s", node.Name)
+
+	ready := false
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+			ready = true
+			break
+		}
+	}
+	if !ready {
+		t.Fatalf("Node %s is not Ready", node.Name)
+	}
+
+	expectedLabels := map[string]string{
+		"cloud.google.com/gke-tpu-accelerator":   "tpu7x",
+		"cloud.google.com/gke-accelerator-count": "4",
+	}
+	for k, expectedVal := range expectedLabels {
+		val, ok := node.Labels[k]
+		if !ok || val != expectedVal {
+			t.Fatalf("Node %s label mismatch for %s. Expected %s, got %s", node.Name, k, expectedVal, val)
+		}
+		t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
+	}
 
 	t.Log("=== Teardown Verification ===")
 	t.Log("Deleting TPUNodeGroup CR...")
@@ -234,8 +291,14 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		t.Logf("ManagedInstanceGroup %s is ready.", migName)
 
 		t.Log("=== Verifying GCP resource creation ===")
-		project := "gsc-nexus-xteam-shared-testing"
-		zone := "us-central1-c"
+		project := os.Getenv("E2E_PROJECT")
+		if project == "" {
+			project = "gsc-nexus-xteam-shared-testing"
+		}
+		zone := os.Getenv("E2E_ZONE")
+		if zone == "" {
+			zone = "us-central1-c"
+		}
 		cmd := exec.Command("gcloud", "compute", "instance-groups", "managed", "describe", migName, "--project", project, "--zone", zone)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
@@ -243,5 +306,60 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 			t.Fatalf("GCP Managed Instance Group not found or error: %v, stderr: %s", err, stderr.String())
 		}
 		t.Log("GCP resource verified.")
+
+		t.Log("=== Verifying Node Joining and Labeling (Multi-Host) ===")
+		if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 10*time.Minute, true, func(ctx context.Context) (bool, error) {
+			if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
+				return false, err
+			}
+			if ng.Status.NodeSummary != nil && ng.Status.NodeSummary.Ready == 2 {
+				t.Log("NodeSummary indicates 2 Ready nodes.")
+				return true, nil
+			}
+			if ng.Status.NodeSummary != nil {
+				t.Logf("Waiting for nodes to join. NodeSummary: Ready=%d, Reconciling=%d", ng.Status.NodeSummary.Ready, ng.Status.NodeSummary.Reconciling)
+			} else {
+				t.Log("Waiting for NodeSummary to be populated...")
+			}
+			return false, nil
+		}); err != nil {
+			t.Fatalf("Timeout or error waiting for nodes to join: %v", err)
+		}
+
+		var nodeList corev1.NodeList
+		if err := k8sClient.List(ctx, &nodeList, client.MatchingLabels{
+			"cloud.google.com/tpu-node-group": "default-test-multihost",
+		}); err != nil {
+			t.Fatalf("Failed to list nodes by TPUNodeGroup label: %v", err)
+		}
+		if len(nodeList.Items) != 2 {
+			t.Fatalf("Expected exactly 2 nodes with TPUNodeGroup label, found %d", len(nodeList.Items))
+		}
+
+		for _, node := range nodeList.Items {
+			ready := false
+			for _, cond := range node.Status.Conditions {
+				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+					ready = true
+					break
+				}
+			}
+			if !ready {
+				t.Fatalf("Node %s is not Ready", node.Name)
+			}
+
+			expectedLabels := map[string]string{
+				"cloud.google.com/gke-tpu-accelerator":   "tpu7x",
+				"cloud.google.com/gke-accelerator-count": "4",
+				"cloud.google.com/gke-tpu-topology":      "2x2x2",
+			}
+			for k, expectedVal := range expectedLabels {
+				val, ok := node.Labels[k]
+				if !ok || val != expectedVal {
+					t.Fatalf("Node %s label mismatch for %s. Expected %s, got %s", node.Name, k, expectedVal, val)
+				}
+				t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
+			}
+		}
 	})
 }

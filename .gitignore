@@ -1,2 +1,5 @@
 *.txt
 controller-manager
+hack/e2e/remote-kubeconfig.yaml
+hack/e2e/local-env.sh
+

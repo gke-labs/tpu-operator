@@ -3,6 +3,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -19,8 +20,14 @@ func TestWorkloadPolicy(t *testing.T) {
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/workloadpolicy/testdata/test_workloadpolicy.yaml")
 	crName := "test-workloadpolicy"
-	project := "gsc-nexus-xteam-shared-testing"
-	region := "us-central1"
+	project := os.Getenv("E2E_PROJECT")
+	if project == "" {
+		project = "gsc-nexus-xteam-shared-testing"
+	}
+	region := os.Getenv("E2E_REGION")
+	if region == "" {
+		region = "us-central1"
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()

@@ -9,14 +9,17 @@ spec:
   nodeCount: 2
   acceleratorConnectionMode: static
   topology: "2x2x2"
+  bootstrapKubernetes:
+    version: "1.31"
+    controlPlaneIP: "10.128.15.234"
   instanceConfig:
     machineType: tpu7x-standard-4t
     image: projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320
     bootDiskSizeGB: 250
-    diskType: pd-ssd
+    diskType: hyperdisk-balanced
     subnetwork: regions/us-central1/subnetworks/default
     provisioningModel: RESERVATION_BOUND
-    reservation: test-reservation
+    reservation: cloudtpu-20260414000000-1337732930
     metadata:
       key1: value1
     networkTags:

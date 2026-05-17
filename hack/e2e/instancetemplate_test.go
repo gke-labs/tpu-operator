@@ -3,6 +3,7 @@ package e2e
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,10 @@ func TestInstanceTemplate(t *testing.T) {
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/instancetemplate/testdata/test_template.yaml")
 	crName := "tpu-node-group-test-template"
-	project := "gsc-nexus-xteam-shared-testing"
+	project := os.Getenv("E2E_PROJECT")
+	if project == "" {
+		project = "gsc-nexus-xteam-shared-testing"
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()

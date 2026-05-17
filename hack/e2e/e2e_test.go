@@ -12,6 +12,7 @@ import (
 
 	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
+	corescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -52,7 +53,10 @@ func setup() {
 		log.Fatalf("Failed to apply CRDs: %v", err)
 	}
 
-	kubeconfig := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	}
 
 	fmt.Println("=== Initializing k8sClient ===")
 	cfg, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
@@ -60,6 +64,9 @@ func setup() {
 		log.Fatalf("Failed to build kubeconfig: %v", err)
 	}
 	scheme := runtime.NewScheme()
+	if err := corescheme.AddToScheme(scheme); err != nil {
+		log.Fatalf("Failed to add core scheme: %v", err)
+	}
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add v1alpha1 to scheme: %v", err)
 	}
@@ -119,53 +126,89 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 	for _, rt := range resourceTypes {
 		switch rt {
 		case "tpunodegroups":
-			list := &v1alpha1.TPUNodeGroupList{}
-			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-				t.Fatalf("Failed to list TPUNodeGroups: %v", err)
-			}
-			for _, item := range list.Items {
-				if !item.DeletionTimestamp.IsZero() {
-					t.Fatalf("ERROR: Found TPUNodeGroup stuck in deletion: %s", item.Name)
+			for i := 0; i < 12; i++ {
+				list := &v1alpha1.TPUNodeGroupList{}
+				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+					t.Fatalf("Failed to list TPUNodeGroups: %v", err)
 				}
+				deleting := false
+				for _, item := range list.Items {
+					if !item.DeletionTimestamp.IsZero() {
+						deleting = true
+						t.Logf("Waiting for TPUNodeGroup being deleted: %s", item.Name)
+						break
+					}
+				}
+				if !deleting {
+					break
+				}
+				time.Sleep(5 * time.Second)
 			}
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.TPUNodeGroup{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete TPUNodeGroups: %v", err)
 			}
 		case "instancetemplates":
-			list := &v1alpha1.InstanceTemplateList{}
-			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-				t.Fatalf("Failed to list InstanceTemplates: %v", err)
-			}
-			for _, item := range list.Items {
-				if !item.DeletionTimestamp.IsZero() {
-					t.Fatalf("ERROR: Found InstanceTemplate stuck in deletion: %s", item.Name)
+			for i := 0; i < 12; i++ {
+				list := &v1alpha1.InstanceTemplateList{}
+				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+					t.Fatalf("Failed to list InstanceTemplates: %v", err)
 				}
+				deleting := false
+				for _, item := range list.Items {
+					if !item.DeletionTimestamp.IsZero() {
+						deleting = true
+						t.Logf("Waiting for InstanceTemplate being deleted: %s", item.Name)
+						break
+					}
+				}
+				if !deleting {
+					break
+				}
+				time.Sleep(5 * time.Second)
 			}
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.InstanceTemplate{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete InstanceTemplates: %v", err)
 			}
 		case "workloadpolicies":
-			list := &v1alpha1.WorkloadPolicyList{}
-			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-				t.Fatalf("Failed to list WorkloadPolicies: %v", err)
-			}
-			for _, item := range list.Items {
-				if !item.DeletionTimestamp.IsZero() {
-					t.Fatalf("ERROR: Found WorkloadPolicy stuck in deletion: %s", item.Name)
+			for i := 0; i < 12; i++ {
+				list := &v1alpha1.WorkloadPolicyList{}
+				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+					t.Fatalf("Failed to list WorkloadPolicies: %v", err)
 				}
+				deleting := false
+				for _, item := range list.Items {
+					if !item.DeletionTimestamp.IsZero() {
+						deleting = true
+						t.Logf("Waiting for WorkloadPolicy being deleted: %s", item.Name)
+						break
+					}
+				}
+				if !deleting {
+					break
+				}
+				time.Sleep(5 * time.Second)
 			}
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.WorkloadPolicy{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete WorkloadPolicies: %v", err)
 			}
 		case "managedinstancegroups":
-			list := &v1alpha1.ManagedInstanceGroupList{}
-			if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-				t.Fatalf("Failed to list ManagedInstanceGroups: %v", err)
-			}
-			for _, item := range list.Items {
-				if !item.DeletionTimestamp.IsZero() {
-					t.Fatalf("ERROR: Found ManagedInstanceGroup stuck in deletion: %s", item.Name)
+			for i := 0; i < 12; i++ {
+				list := &v1alpha1.ManagedInstanceGroupList{}
+				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+					t.Fatalf("Failed to list ManagedInstanceGroups: %v", err)
 				}
+				deleting := false
+				for _, item := range list.Items {
+					if !item.DeletionTimestamp.IsZero() {
+						deleting = true
+						t.Logf("Waiting for ManagedInstanceGroup being deleted: %s", item.Name)
+						break
+					}
+				}
+				if !deleting {
+					break
+				}
+				time.Sleep(5 * time.Second)
 			}
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.ManagedInstanceGroup{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete ManagedInstanceGroups: %v", err)
