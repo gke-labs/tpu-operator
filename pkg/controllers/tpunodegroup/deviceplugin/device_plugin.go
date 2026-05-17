@@ -65,6 +65,7 @@ func ensureServiceAccount(ctx context.Context, kubeClientset kubernetes.Interfac
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal service account YAML: %w", err)
 	}
+	sa.Namespace = group.Namespace
 
 	_, err = kubeClientset.CoreV1().ServiceAccounts(sa.Namespace).Get(ctx, sa.Name, metav1.GetOptions{})
 	if err != nil {

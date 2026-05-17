@@ -3,6 +3,7 @@ package tpunodegroup
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
@@ -14,11 +15,13 @@ import (
 
 const (
 	// labelTPUAccelerator is the label required by the device plugin DaemonSet.
-	labelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
+	labelTPUAccelerator      = "cloud.google.com/gke-tpu-accelerator"
+	// labelTPUAcceleratorCount is the label identifying the number of TPU chips.
+	labelTPUAcceleratorCount = "cloud.google.com/gke-accelerator-count"
 	// labelTPUNodeGroup is the label identifying the TPUNodeGroup the node belongs to.
-	labelTPUNodeGroup   = "cloud.google.com/tpu-node-group"
+	labelTPUNodeGroup        = "cloud.google.com/tpu-node-group"
 	// labelTPUTopology is the label identifying the topology of the TPU slice.
-	labelTPUTopology    = "cloud.google.com/gke-tpu-topology"
+	labelTPUTopology         = "cloud.google.com/gke-tpu-topology"
 )
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
@@ -26,7 +29,7 @@ const (
 func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.IGMClient, group *tpuapi.TPUNodeGroup) error {
 	// 1. Get list of expected instances from MIG
 	// TODO(b/500810349): Get actual MIG name from status or child CR when available.
-	migName := group.Name
+	migName := group.ManagedInstanceGroupName()
 	instances, err := igmClient.ListManagedInstances(ctx, group.Spec.Project, group.Spec.NodeLocation, migName)
 	if err != nil {
 		return fmt.Errorf("failed to list managed instances: %w", err)
@@ -98,8 +101,12 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 	if acceleratorType == "" {
 		return nil // Skip if we cannot determine accelerator type
 	}
+	countStr := strconv.Itoa(chipsPerNode(group))
 	needsUpdate := false
 	if val, ok := node.Labels[labelTPUAccelerator]; !ok || val != acceleratorType {
+		needsUpdate = true
+	}
+	if val, ok := node.Labels[labelTPUAcceleratorCount]; !ok || val != countStr {
 		needsUpdate = true
 	}
 	if val, ok := node.Labels[labelTPUNodeGroup]; !ok || val != tpuNodeGroupLabelValue {
@@ -122,6 +129,7 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 	// Apply labels using Patch to avoid conflicts
 	oldNode := node.DeepCopy()
 	node.Labels[labelTPUAccelerator] = acceleratorType
+	node.Labels[labelTPUAcceleratorCount] = countStr
 	node.Labels[labelTPUNodeGroup] = tpuNodeGroupLabelValue
 	if group.Spec.Topology != "" {
 		node.Labels[labelTPUTopology] = group.Spec.Topology

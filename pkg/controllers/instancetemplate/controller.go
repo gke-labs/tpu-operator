@@ -90,6 +90,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			} else {
 				err := fmt.Errorf("GCE operation failed: %s (code %d): %v", opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
 				logger.Error(err, "GCE operation failed", "operation", instanceTemplate.Status.OperationName)
+				instanceTemplate.Status.OperationName = ""
 				return ctrl.Result{}, err
 			}
 		} else {

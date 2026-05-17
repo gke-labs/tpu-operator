@@ -85,6 +85,8 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			} else {
 				err := fmt.Errorf("GCE operation failed: %s (code %d): %v", opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
 				logger.Error(err, "GCE operation failed", "operation", mig.Status.OperationName)
+				mig.Status.OperationName = ""
+				mig.Status.OperationType = ""
 				return ctrl.Result{}, err
 			}
 		} else {

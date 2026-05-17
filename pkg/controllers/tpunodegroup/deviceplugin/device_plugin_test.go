@@ -95,7 +95,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
 		}
 
-		sa, err := k8sFakeClient.CoreV1().ServiceAccounts("kube-system").Get(context.Background(), "tpu-device-plugin-sa", metav1.GetOptions{})
+		sa, err := k8sFakeClient.CoreV1().ServiceAccounts(group.Namespace).Get(context.Background(), "tpu-device-plugin-sa", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("failed to get ServiceAccount: %v", err)
 		}

@@ -89,6 +89,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			} else {
 				err := fmt.Errorf("GCE operation failed: %s (code %d): %v", opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
 				logger.Error(err, "GCE operation failed", "operation", workloadPolicy.Status.OperationName)
+				workloadPolicy.Status.OperationName = ""
 				return ctrl.Result{}, err
 			}
 		} else {
