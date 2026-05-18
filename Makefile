@@ -16,3 +16,8 @@ generate:
 test:
 	@echo "Running unit tests..."
 	go test -v ./pkg/...
+
+.PHONY: e2e-test
+e2e-test:
+	@echo "Running E2E tests..."
+	go test -v -tags=e2e ./hack/e2e/...

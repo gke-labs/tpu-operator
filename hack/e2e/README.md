@@ -42,14 +42,19 @@ gcloud auth application-default login
 ```
 
 ### 2. Run Test Suite
-Run all tests within this directory:
+Run all E2E tests:
 ```bash
-go test -v ./hack/e2e/...
+go test -v -tags=e2e ./hack/e2e/...
+```
+
+Alternatively, you can use the Makefile target:
+```bash
+make e2e-test
 ```
 
 *To run a specific test case:*
 ```bash
-go test -v ./hack/e2e/... -run TestTPUNodeGroup_MultiHost
+go test -v -tags=e2e ./hack/e2e/... -run TestTPUNodeGroup_MultiHost
 ```
 
 ## 🔍 Debugging & Troubleshooting
