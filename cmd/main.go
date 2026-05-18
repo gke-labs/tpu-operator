@@ -13,11 +13,15 @@ import (
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/tpunodegroup"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/controllers/workloadpolicy"
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	"k8s.io/klog/v2/klogr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -59,7 +63,18 @@ func main() {
 	}
 	defer gceManager.Close()
 
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				&tpuv1alpha1.TPUNodeGroup{}:        {},
+				&tpuv1alpha1.InstanceTemplate{}:    {},
+				&tpuv1alpha1.ManagedInstanceGroup{}: {},
+				&tpuv1alpha1.WorkloadPolicy{}:       {},
+				&corev1.Node{}:                      {},
+				&appsv1.DaemonSet{}:                 {},
+			},
+		},
+	})
 	if err != nil {
 		setupLog.Error(err, "Error creating manager")
 		os.Exit(1)
