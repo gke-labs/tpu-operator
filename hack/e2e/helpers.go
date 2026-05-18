@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"testing"
 	"time"
 
@@ -61,10 +62,6 @@ func waitForDeletion(ctx context.Context, k8sClient client.Client, key client.Ob
 }
 
 func verifyTPUWorkload(t *testing.T, ctx context.Context, k8sClient client.Client, groupLabelValue string, expectedNodes int) {
-	if expectedNodes != 1 {
-		t.Fatalf("Phase 1 only supports expectedNodes == 1, got %d", expectedNodes)
-	}
-
 	var nodeList corev1.NodeList
 	if err := k8sClient.List(ctx, &nodeList, client.MatchingLabels{
 		"cloud.google.com/tpu-node-group": groupLabelValue,
@@ -74,27 +71,109 @@ func verifyTPUWorkload(t *testing.T, ctx context.Context, k8sClient client.Clien
 	if len(nodeList.Items) != expectedNodes {
 		t.Fatalf("Expected %d nodes, found %d", expectedNodes, len(nodeList.Items))
 	}
-	nodeIP := ""
-	for _, addr := range nodeList.Items[0].Status.Addresses {
-		if addr.Type == corev1.NodeInternalIP {
-			nodeIP = addr.Address
-			break
+
+	// Sort nodes by name to ensure deterministic IP list
+	sort.Slice(nodeList.Items, func(i, j int) bool {
+		return nodeList.Items[i].Name < nodeList.Items[j].Name
+	})
+
+	nodeIPs := make([]string, expectedNodes)
+	for i, node := range nodeList.Items {
+		ip := ""
+		for _, addr := range node.Status.Addresses {
+			if addr.Type == corev1.NodeInternalIP {
+				ip = addr.Address
+				break
+			}
 		}
+		if ip == "" {
+			t.Fatalf("Failed to find InternalIP for node %s", node.Name)
+		}
+		nodeIPs[i] = ip
 	}
-	if nodeIP == "" {
-		t.Fatalf("Failed to find InternalIP for node %s", nodeList.Items[0].Name)
-	}
-	t.Logf("Found TPU Node IP: %s", nodeIP)
+	t.Logf("Found TPU Node IPs: %v", nodeIPs)
 
 	jobName := "tpu-verify-" + groupLabelValue
-	completions := int32(1)
-	parallelism := int32(1)
+	completions := int32(expectedNodes)
+	parallelism := int32(expectedNodes)
 
-	// For single host, we just run local JAX check
+	// Create Headless Service for multi-host coordinator discovery
+	if expectedNodes > 1 {
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      jobName + "-svc",
+				Namespace: "default",
+			},
+			Spec: corev1.ServiceSpec{
+				ClusterIP: "None",
+				Selector: map[string]string{
+					"job-name": jobName,
+				},
+				Ports: []corev1.ServicePort{
+					{Name: "coordinator", Port: 1234},
+					{Name: "runtime-1", Port: 8470},
+					{Name: "runtime-2", Port: 8471},
+				},
+			},
+		}
+		t.Logf("Creating Headless Service %s-svc...", jobName)
+		if err := k8sClient.Create(ctx, svc); err != nil {
+			t.Fatalf("Failed to create Headless Service: %v", err)
+		}
+		t.Cleanup(func() {
+			t.Logf("Cleaning up Headless Service %s-svc...", jobName)
+			_ = k8sClient.Delete(context.Background(), svc)
+		})
+	}
+
+	// Construct TPU env vars
+	tpuProcessAddresses := ""
+	tpuWorkerHostnames := ""
+	for i, ip := range nodeIPs {
+		if i > 0 {
+			tpuProcessAddresses += ","
+			tpuWorkerHostnames += ","
+		}
+		tpuProcessAddresses += fmt.Sprintf("%s:8471", ip)
+		tpuWorkerHostnames += fmt.Sprintf("%s:8471", ip)
+	}
+
+	coordinatorAddress := fmt.Sprintf("%s:1234", nodeIPs[0])
+	if expectedNodes > 1 {
+		// Use Headless Service DNS for coordinator
+		coordinatorAddress = fmt.Sprintf("%s-0.%s-svc.default.svc.cluster.local:1234", jobName, jobName)
+	}
+
+	topology := "2x2x1"
+	if expectedNodes > 1 {
+		topology = "2x2x2" // Assuming 2x2x2 for 2 nodes in multi-host E2E
+	}
+
+	// JAX command supporting multi-host
 	jaxCommand := `
+import os
+
+# Map K8s Indexed Job index to JAX/TPU env vars BEFORE importing jax
+if "JOB_COMPLETION_INDEX" in os.environ:
+    os.environ["CLOUD_TPU_TASK_ID"] = os.environ["JOB_COMPLETION_INDEX"]
+    os.environ["JAX_PROCESS_ID"] = os.environ["JOB_COMPLETION_INDEX"]
+    os.environ["TPU_WORKER_ID"] = os.environ["JOB_COMPLETION_INDEX"]
+
 import jax
+
+expected_nodes = int(os.environ.get("JAX_PROCESS_COUNT", "1"))
+if expected_nodes > 1:
+    process_id = int(os.environ["JAX_PROCESS_ID"])
+    coordinator_address = os.environ["JAX_COORDINATOR_ADDRESS"]
+    print(f"Initializing JAX distributed: coordinator={coordinator_address}, total_processes={expected_nodes}, process_id={process_id}")
+    jax.distributed.initialize(
+        coordinator_address=coordinator_address,
+        num_processes=expected_nodes,
+        process_id=process_id,
+    )
+
 print("Devices:", jax.devices())
-expected_devices = 8
+expected_devices = expected_nodes * 8
 assert len(jax.devices()) == expected_devices, f"Expected {expected_devices} devices, got {len(jax.devices())}"
 print("TPU OK")
 `
@@ -118,6 +197,7 @@ print("TPU OK")
 				Spec: corev1.PodSpec{
 					RestartPolicy: corev1.RestartPolicyNever,
 					HostNetwork:   true,
+					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					NodeSelector: map[string]string{
 						"cloud.google.com/tpu-node-group": groupLabelValue,
 					},
@@ -138,14 +218,12 @@ print("TPU OK")
 								jaxCommand,
 							},
 							Env: []corev1.EnvVar{
-								{Name: "JAX_PROCESS_COUNT", Value: "1"},
-								{Name: "JAX_PROCESS_ID", Value: "0"},
-								{Name: "TPU_WORKER_ID", Value: "0"},
-								{Name: "TPU_TOPOLOGY", Value: "2x2x1"},
+								{Name: "JAX_PROCESS_COUNT", Value: fmt.Sprintf("%d", expectedNodes)},
+								{Name: "TPU_TOPOLOGY", Value: topology},
 								{Name: "TPU_ACCELERATOR_TYPE", Value: "tpu7x-4"},
-								{Name: "JAX_COORDINATOR_ADDRESS", Value: fmt.Sprintf("%s:1234", nodeIP)},
-								{Name: "TPU_PROCESS_ADDRESSES", Value: fmt.Sprintf("%s:8470", nodeIP)},
-								{Name: "TPU_WORKER_HOSTNAMES", Value: fmt.Sprintf("%s:8471", nodeIP)},
+								{Name: "JAX_COORDINATOR_ADDRESS", Value: coordinatorAddress},
+								{Name: "TPU_PROCESS_ADDRESSES", Value: tpuProcessAddresses},
+								{Name: "TPU_WORKER_HOSTNAMES", Value: tpuWorkerHostnames},
 							},
 							SecurityContext: &corev1.SecurityContext{
 								Privileged: &privileged,
@@ -165,6 +243,14 @@ print("TPU OK")
 		},
 	}
 
+	if expectedNodes > 1 {
+		job.Spec.CompletionMode = func() *batchv1.CompletionMode {
+			m := batchv1.IndexedCompletion
+			return &m
+		}()
+		job.Spec.Template.Spec.Subdomain = jobName + "-svc"
+	}
+
 	t.Logf("Creating TPU Verification Job %s...", jobName)
 	if err := k8sClient.Create(ctx, job); err != nil {
 		t.Fatalf("Failed to create Job: %v", err)
@@ -177,8 +263,13 @@ print("TPU OK")
 		})
 	})
 
+	timeout := 5 * time.Minute
+	if expectedNodes > 1 {
+		timeout = 10 * time.Minute
+	}
+
 	t.Log("Waiting for Job to complete successfully...")
-	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
+	if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		actualJob := &batchv1.Job{}
 		if err := k8sClient.Get(ctx, types.NamespacedName{Name: jobName, Namespace: "default"}, actualJob); err != nil {
 			return false, err

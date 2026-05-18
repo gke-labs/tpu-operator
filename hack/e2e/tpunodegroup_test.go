@@ -364,5 +364,8 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 				t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
 			}
 		}
+
+		t.Log("=== Verifying TPU Workloads (Multi-Host) ===")
+		verifyTPUWorkload(t, ctx, k8sClient, "default-test-multihost", 2)
 	})
 }
