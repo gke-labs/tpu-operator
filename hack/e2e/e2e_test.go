@@ -22,6 +22,7 @@ import (
 	corescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 )
 
 var controllerCmd *exec.Cmd
@@ -91,6 +92,64 @@ func setup() {
 	if err != nil {
 		log.Fatalf("Failed to create k8sClient: %v", err)
 	}
+
+	fmt.Println("=== Running E2E Target Cluster Safety Check ===")
+	manifestPath := filepath.Join(repoRoot, "pkg/controllers/tpunodegroup/testdata/test_nodegroup.yaml")
+	yamlBytes, err := os.ReadFile(manifestPath)
+	if err != nil {
+		log.Fatalf("Safety Check Error: Failed to read test manifest at %s: %v", manifestPath, err)
+	}
+	var ng v1alpha1.TPUNodeGroup
+	if err := yaml.Unmarshal(yamlBytes, &ng); err != nil {
+		log.Fatalf("Safety Check Error: Failed to unmarshal test manifest: %v", err)
+	}
+
+	expectedIP := ""
+	if ng.Spec.BootstrapKubernetes != nil {
+		expectedIP = ng.Spec.BootstrapKubernetes.ControlPlaneIP
+	}
+	if expectedIP == "" {
+		log.Fatalf("Safety Check Error: ControlPlaneIP must be specified in %s", manifestPath)
+	}
+
+	var nodeList corev1.NodeList
+	if err := k8sClient.List(context.Background(), &nodeList); err != nil {
+		log.Fatalf("Safety Check Error: Failed to list nodes: %v", err)
+	}
+
+	var controlPlaneNode *corev1.Node
+	for i := range nodeList.Items {
+		node := &nodeList.Items[i]
+		if _, ok := node.Labels["node-role.kubernetes.io/control-plane"]; ok {
+			controlPlaneNode = node
+			break
+		}
+		if _, ok := node.Labels["node-role.kubernetes.io/master"]; ok {
+			controlPlaneNode = node
+			break
+		}
+	}
+
+	if controlPlaneNode == nil {
+		log.Fatalf("Safety Check Error: No control-plane or master nodes found in K8s cluster. Ensure KUBECONFIG is configured correctly.")
+	}
+
+	actualIP := ""
+	for _, addr := range controlPlaneNode.Status.Addresses {
+		if addr.Type == corev1.NodeInternalIP {
+			actualIP = addr.Address
+			break
+		}
+	}
+
+	if actualIP == "" {
+		log.Fatalf("Safety Check Error: Failed to find InternalIP for control-plane node %s", controlPlaneNode.Name)
+	}
+
+	if actualIP != expectedIP {
+		log.Fatalf("SAFETY ERROR: E2E test suite is running against a K8s cluster whose control-plane IP (%s) does NOT match the expected TPUNodeGroup controlPlaneIP (%s). Please ensure KUBECONFIG is set to the correct cluster (e.g. hack/e2e/remote-kubeconfig.yaml) and the SSH tunnel is active.", actualIP, expectedIP)
+	}
+	fmt.Printf("Safety check passed: Confirmed E2E is running against target cluster (Control Plane: %s, IP: %s)\n\n", controlPlaneNode.Name, actualIP)
 
 	fmt.Println("=== Building Controller Binary ===")
 	buildCmd := exec.Command("go", "build", "-o", controllerBinPath, "cmd/main.go")
