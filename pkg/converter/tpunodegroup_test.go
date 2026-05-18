@@ -331,47 +331,7 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 				},
 			},
 		},
-		{
-			name: "with InstanceTemplateURI in spec",
-			tpuNodeGroup: &api.TPUNodeGroup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group",
-					Namespace: "my-namespace",
-					UID:       "my-uid",
-				},
-				Spec: api.TPUNodeGroupSpec{
-					Project:             "my-project",
-					NodeLocation:        "us-central1-a",
-					NodeCount:           4,
-					InstanceTemplateURI: ptr.To("https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/spec-template"),
-				},
-			},
-			template: nil,
-			policy:   nil,
-			want: &api.ManagedInstanceGroup{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-mig",
-					Namespace: "my-namespace",
-					OwnerReferences: []metav1.OwnerReference{
-						{
-							APIVersion:         "tpu.google.com/v1alpha1",
-							Kind:               "TPUNodeGroup",
-							Name:               "my-tpu-group",
-							UID:                "my-uid",
-							Controller:         ptr.To(true),
-							BlockOwnerDeletion: ptr.To(true),
-						},
-					},
-				},
-				Spec: api.ManagedInstanceGroupSpec{
-					Project:          "my-project",
-					Location:         "us-central1-a",
-					InstanceTemplate: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/spec-template",
-					TargetSize:       4,
-					WorkloadPolicy:   nil,
-				},
-			},
-		},
+
 	}
 
 	for _, tt := range tests {
