@@ -199,8 +199,6 @@ func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance) map[
 	return updates
 }
 
-
-
 // generateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
 func generateBootstrapToken(ctx context.Context, k8sClient client.Client) (string, error) {
 	tokenID := strings.ToLower(rand.String(6))
@@ -299,3 +297,4 @@ func mergeMetadataItems(gceInst *computepb.Instance, tokenUpdates, sliceUpdates 
 
 	return merged, fingerprint, true
 }
+

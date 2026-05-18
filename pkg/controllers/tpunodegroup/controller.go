@@ -358,7 +358,9 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		return nil
 	}
 
-	r.defaultInstanceTemplate(template)
+	if err := r.defaultInstanceTemplate(template, group); err != nil {
+		return err
+	}
 
 	existing := &tpuapi.InstanceTemplate{}
 	err := r.Get(ctx, client.ObjectKey{Namespace: template.Namespace, Name: template.Name}, existing)
@@ -517,9 +519,9 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 // defaultInstanceTemplate populates default values for an InstanceTemplate prior to reconciliation.
-func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.InstanceTemplate) {
+func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.InstanceTemplate, group *tpuapi.TPUNodeGroup) error {
 	if template == nil {
-		return
+		return nil
 	}
 	if template.Spec.InstanceConfig.ProvisioningModel == nil {
 		if template.Spec.InstanceConfig.Reservation != nil {
@@ -528,6 +530,21 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 			template.Spec.InstanceConfig.ProvisioningModel = ptr.To("STANDARD")
 		}
 	}
+
+	// Always include the startup script.
+	if template.Spec.Metadata == nil {
+		template.Spec.Metadata = make(map[string]string)
+	}
+	version := "1.31"
+	if group.Spec.BootstrapKubernetes != nil {
+		if group.Spec.BootstrapKubernetes.Version == nil {
+			return fmt.Errorf("version must be specified when bootstrapKubernetes is enabled")
+		}
+		version = *group.Spec.BootstrapKubernetes.Version
+	}
+	script := renderStartupScript(version)
+	template.Spec.Metadata["startup-script"] = script
+	return nil
 }
 
 // defaultManagedInstanceGroup populates default values for a ManagedInstanceGroup prior to reconciliation.
