@@ -1,3 +1,5 @@
+//go:build e2e
+
 package e2e
 
 import (
@@ -19,7 +21,7 @@ import (
 )
 
 func TestTPUNodeGroup(t *testing.T) {
-	cleanResources(t, []string{"tpunodegroups", "instancetemplates"})
+	cleanResources(t, []string{"tpunodegroups", "instancetemplates", "jobs", "nodes"})
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/tpunodegroup/testdata/test_nodegroup.yaml")
 	crName := "test-nodegroup"
@@ -135,6 +137,9 @@ func TestTPUNodeGroup(t *testing.T) {
 		t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
 	}
 
+	t.Log("=== Verifying TPU Workload (Single-Host) ===")
+	verifyTPUWorkload(t, ctx, k8sClient, "default-test-nodegroup", 1)
+
 	t.Log("=== Teardown Verification ===")
 	t.Log("Deleting TPUNodeGroup CR...")
 	if err := k8sClient.Delete(ctx, ng); err != nil {
@@ -148,7 +153,7 @@ func TestTPUNodeGroup(t *testing.T) {
 }
 
 func TestTPUNodeGroup_MultiHost(t *testing.T) {
-	cleanResources(t, []string{"tpunodegroups", "instancetemplates", "workloadpolicies", "managedinstancegroups"})
+	cleanResources(t, []string{"tpunodegroups", "instancetemplates", "workloadpolicies", "managedinstancegroups", "jobs", "nodes"})
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/tpunodegroup/testdata/test_nodegroup_multi_host.yaml")
 	crName := "test-multihost"
@@ -361,5 +366,8 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 				t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
 			}
 		}
+
+		t.Log("=== Verifying TPU Workloads (Multi-Host) ===")
+		verifyTPUWorkload(t, ctx, k8sClient, "default-test-multihost", 2)
 	})
 }
