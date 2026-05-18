@@ -24,17 +24,17 @@ func acceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
 	case strings.HasPrefix(machineType, "ct6e-"):
 		return "tpu-v6e-slice"
 	case strings.HasPrefix(machineType, "ct5lp-"):
-		if group.Spec.Topology != "" {
+		if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
 			return "tpu-v5-lite-podslice"
 		}
 		return "tpu-v5-lite-device"
 	case strings.HasPrefix(machineType, "ct5p-"):
-		if group.Spec.Topology != "" {
+		if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
 			return "tpu-v5-podslice"
 		}
 		return "tpu-v5-device"
 	case strings.HasPrefix(machineType, "ct4p-"):
-		if group.Spec.Topology != "" {
+		if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
 			return "tpu-v4-podslice"
 		}
 		return "tpu-v4-device"

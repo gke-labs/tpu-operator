@@ -114,6 +114,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Project:              "test-project",
 					NodeLocation:         "us-central1-a",
 					NodeCount:            1,
+					Topology:             "2x2x1",
 					TargetSizePolicyMode: "INDIVIDUAL",
 					BootstrapKubernetes: &tpuapi.BootstrapConfig{
 
@@ -467,6 +468,43 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Reason:  "Ready",
 					Message: "WorkloadPolicy provisioned successfully",
 				},
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
+
+		{
+			name: "reconcile_workload_policy_skip_single_host_with_topology",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
 				{
 					Type:    "InstanceTemplateReady",
 					Status:  metav1.ConditionFalse,

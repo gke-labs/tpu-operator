@@ -273,8 +273,8 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 // It is only needed for multi-host slices where topology is specified.
 func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
 	// WorkloadPolicy is only needed for multi-host slices where topology is specified.
-	if group.Spec.Topology == "" {
-		r.Log.Info("Skipping WorkloadPolicy reconciliation as topology is not specified")
+	if group.Spec.Topology == "" || group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeIndividual {
+		r.Log.Info("Skipping WorkloadPolicy reconciliation as topology is not specified or target policy mode is INDIVIDUAL")
 		return nil
 	}
 
@@ -429,7 +429,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	}
 
 	// 2. Fetch WorkloadPolicy if needed
-	if group.Spec.Topology != "" {
+	if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
 		policy = &tpuapi.WorkloadPolicy{}
 		policyName := group.WorkloadPolicyName()
 		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, policy)
@@ -540,4 +540,6 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 	}
 	return nil
 }
+
+
 

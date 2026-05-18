@@ -8,10 +8,11 @@ import (
 
 func TestAcceleratorLabelValue(t *testing.T) {
 	tests := []struct {
-		name        string
-		machineType string
-		topology    string
-		want        string
+		name                 string
+		machineType          string
+		topology             string
+		targetSizePolicyMode string
+		want                 string
 	}{
 		{
 			name:        "tpu7x",
@@ -29,10 +30,18 @@ func TestAcceleratorLabelValue(t *testing.T) {
 			want:        "tpu-v5-lite-device",
 		},
 		{
-			name:        "ct5lp-podslice",
-			machineType: "ct5lp-hightpu-4t",
-			topology:    "4x4",
-			want:        "tpu-v5-lite-podslice",
+			name:                 "ct5lp-podslice",
+			machineType:          "ct5lp-hightpu-4t",
+			topology:             "4x4",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeBulk,
+			want:                 "tpu-v5-lite-podslice",
+		},
+		{
+			name:                 "ct5lp-podslice-single-host",
+			machineType:          "ct5lp-hightpu-4t",
+			topology:             "4x4",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "tpu-v5-lite-device",
 		},
 		{
 			name:        "unknown",
@@ -48,7 +57,8 @@ func TestAcceleratorLabelValue(t *testing.T) {
 					InstanceConfig: &tpuapi.InstanceConfig{
 						MachineType: tt.machineType,
 					},
-					Topology: tt.topology,
+					Topology:             tt.topology,
+					TargetSizePolicyMode: tt.targetSizePolicyMode,
 				},
 			}
 			got := acceleratorLabelValue(group)

@@ -292,7 +292,9 @@ func TestSliceMetadata(t *testing.T) {
 			InstanceConfig: &tpuapi.InstanceConfig{
 				MachineType: "ct5lp-hightpu-4t",
 			},
-			Topology: "2x2x2",
+			Topology:             "2x2x2",
+			NodeCount:            2,
+			TargetSizePolicyMode: tpuapi.TargetSizePolicyModeBulk,
 		},
 	}
 
@@ -362,7 +364,8 @@ func TestSliceMetadata_TopologyRemoval(t *testing.T) {
 			InstanceConfig: &tpuapi.InstanceConfig{
 				MachineType: "ct5lp-hightpu-4t",
 			},
-			Topology: "", // Empty topology in spec
+			Topology:             "", // Empty topology in spec
+			TargetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
 		},
 	}
 
@@ -390,5 +393,55 @@ func TestSliceMetadata_TopologyRemoval(t *testing.T) {
 	// Verify that other labels are preserved
 	if val, ok := gotMap["foo"]; !ok || val != "bar" {
 		t.Errorf("Expected foo=bar, got %v", val)
+	}
+}
+
+func TestSliceMetadata_SingleHost(t *testing.T) {
+	parseLabels := func(s string) map[string]string {
+		m := make(map[string]string)
+		for _, part := range strings.Split(s, ",") {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				m[kv[0]] = kv[1]
+			}
+		}
+		return m
+	}
+
+	group := &tpuapi.TPUNodeGroup{
+		Spec: tpuapi.TPUNodeGroupSpec{
+			InstanceConfig: &tpuapi.InstanceConfig{
+				MachineType: "ct5lp-hightpu-4t",
+			},
+			Topology:             "2x2x2",
+			NodeCount:            1, // Single-host slice with topology
+			TargetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+		},
+	}
+
+	gceInst := &computepb.Instance{
+		Metadata: &computepb.Metadata{
+			Items: []*computepb.Items{
+				{Key: proto.String("kube-labels"), Value: proto.String("foo=bar")},
+			},
+		},
+	}
+
+	got := sliceMetadata(group, gceInst)
+	gotLabels, ok := got["kube-labels"]
+	if !ok {
+		t.Fatalf("sliceMetadata did not return kube-labels")
+	}
+
+	gotMap := parseLabels(gotLabels)
+
+	// Should return tpu-v5-lite-device even though topology is 2x2x2 because it is single-host.
+	if val, ok := gotMap["cloud.google.com/gke-tpu-accelerator"]; !ok || val != "tpu-v5-lite-device" {
+		t.Errorf("Expected cloud.google.com/gke-tpu-accelerator to be tpu-v5-lite-device, got %s", val)
+	}
+
+	// Should still propagate the topology label to GCE metadata as specified in the spec
+	if val, ok := gotMap["cloud.google.com/gke-tpu-topology"]; !ok || val != "2x2x2" {
+		t.Errorf("Expected cloud.google.com/gke-tpu-topology to be 2x2x2, got %s", val)
 	}
 }
