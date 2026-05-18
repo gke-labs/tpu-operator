@@ -2,10 +2,15 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 func TestInstanceTemplate(t *testing.T) {
@@ -16,39 +21,36 @@ func TestInstanceTemplate(t *testing.T) {
 	crName := "tpu-node-group-test-template"
 	project := "gsc-nexus-xteam-shared-testing"
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
 	t.Log("=== Applying Test Manifest ===")
-	cmd := exec.Command("kubectl", "apply", "-f", manifest, "--request-timeout=30s")
-	if err := cmd.Run(); err != nil {
+	it := &v1alpha1.InstanceTemplate{}
+	if err := applyManifest(ctx, k8sClient, manifest, it); err != nil {
 		t.Fatalf("Failed to apply manifest: %v", err)
 	}
 
 	t.Log("=== Waiting for InstanceTemplate to become Ready ===")
-	timeout := 120 * time.Second
-	interval := 5 * time.Second
-	start := time.Now()
+	key := types.NamespacedName{Name: crName, Namespace: "default"}
+	err := waitForCondition(ctx, k8sClient, key, it, func(obj *v1alpha1.InstanceTemplate) []metav1.Condition {
+		return obj.Status.Conditions
+	}, "Ready", metav1.ConditionTrue, 120*time.Second)
 
-	for {
-		if time.Since(start) > timeout {
-			t.Fatal("Timeout waiting for InstanceTemplate to become Ready")
-		}
-
-		// Check ready status
-		cmd = exec.Command("kubectl", "get", "instancetemplate", crName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}", "--request-timeout=30s")
-		ready, _ := cmd.Output()
-
-		cmd = exec.Command("kubectl", "get", "instancetemplate", crName, "-o", "jsonpath={.status.uri}", "--request-timeout=30s")
-		uri, _ := cmd.Output()
-
-		if string(ready) == "True" && len(uri) > 0 {
-			t.Logf("InstanceTemplate is Ready. URI: %s", string(uri))
-			break
-		}
-
-		time.Sleep(interval)
+	if err != nil {
+		t.Fatalf("Timeout or error waiting for InstanceTemplate to become Ready: %v", err)
 	}
 
+	// Fetch updated to get URI
+	if err := k8sClient.Get(ctx, key, it); err != nil {
+		t.Fatalf("Failed to get updated InstanceTemplate: %v", err)
+	}
+	if len(it.Status.URI) == 0 {
+		t.Fatal("InstanceTemplate is Ready but URI is empty")
+	}
+	t.Logf("InstanceTemplate is Ready. URI: %s", it.Status.URI)
+
 	t.Log("=== Verifying GCP Resource Creation ===")
-	cmd = exec.Command("gcloud", "compute", "instance-templates", "describe", crName, "--project", project)
+	cmd := exec.Command("gcloud", "compute", "instance-templates", "describe", crName, "--project", project)
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("GCP Instance Template not found or error: %v", err)
 	}
@@ -56,21 +58,22 @@ func TestInstanceTemplate(t *testing.T) {
 
 	t.Log("=== Teardown Verification ===")
 	t.Log("Deleting InstanceTemplate CR...")
-	cmd = exec.Command("kubectl", "delete", "instancetemplate", crName, "--timeout=300s", "--request-timeout=30s")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to delete InstanceTemplate CR: %v\nStdout: %s\nStderr: %s", err, stdout.String(), stderr.String())
+	if err := k8sClient.Delete(ctx, it); err != nil {
+		t.Fatalf("Failed to delete InstanceTemplate CR: %v", err)
+	}
+
+	t.Log("Waiting for CR deletion...")
+	if err := waitForDeletion(ctx, k8sClient, key, it, 300*time.Second); err != nil {
+		t.Fatalf("Failed or timed out waiting for CR deletion: %v", err)
 	}
 
 	t.Log("Verifying GCP resource deletion...")
 	cmd = exec.Command("gcloud", "compute", "instance-templates", "describe", crName, "--project", project)
-	stderr.Reset()
+	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	err := cmd.Run()
-	if err == nil {
+	if err := cmd.Run(); err == nil {
 		t.Fatal("GCP Instance Template still exists after CR deletion!")
 	}
 	t.Log("GCP Instance Template deleted successfully.")
 }
+

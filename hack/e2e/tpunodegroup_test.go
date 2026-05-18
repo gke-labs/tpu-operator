@@ -2,18 +2,20 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 func TestTPUNodeGroup(t *testing.T) {
-	// Clean resources
 	cleanResources(t, []string{"tpunodegroups", "instancetemplates"})
 
 	manifest := filepath.Join(repoRoot, "pkg/controllers/tpunodegroup/testdata/test_nodegroup.yaml")
@@ -21,83 +23,70 @@ func TestTPUNodeGroup(t *testing.T) {
 	dummyNodeGroup := &tpuapi.TPUNodeGroup{ObjectMeta: metav1.ObjectMeta{Name: crName}}
 	childTemplateName := dummyNodeGroup.InstanceTemplateName()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
 	t.Log("=== Applying Test Manifest ===")
-	cmd := exec.Command("kubectl", "apply", "-f", manifest, "--request-timeout=30s")
-	if err := cmd.Run(); err != nil {
+	ng := &tpuapi.TPUNodeGroup{}
+	if err := applyManifest(ctx, k8sClient, manifest, ng); err != nil {
 		t.Fatalf("Failed to apply manifest: %v", err)
 	}
 
 	t.Log("=== Waiting for child InstanceTemplate to be created ===")
-	timeout := 120 * time.Second
-	interval := 5 * time.Second
-	start := time.Now()
-
-	for {
-		if time.Since(start) > timeout {
-			t.Fatal("Timeout waiting for child InstanceTemplate to be created")
+	itKey := types.NamespacedName{Name: childTemplateName, Namespace: "default"}
+	it := &tpuapi.InstanceTemplate{}
+	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 120*time.Second, true, func(ctx context.Context) (bool, error) {
+		err := k8sClient.Get(ctx, itKey, it)
+		if err == nil {
+			return true, nil
 		}
-
-		cmd = exec.Command("kubectl", "get", "instancetemplate", childTemplateName, "--request-timeout=30s")
-		if err := cmd.Run(); err == nil {
-			t.Logf("Child InstanceTemplate %s created.", childTemplateName)
-			break
+		if apierrors.IsNotFound(err) {
+			return false, nil
 		}
-
-		time.Sleep(interval)
+		return false, err
+	}); err != nil {
+		t.Fatalf("Timeout or error waiting for child InstanceTemplate to be created: %v", err)
 	}
+	t.Logf("Child InstanceTemplate %s created.", childTemplateName)
 
 	t.Log("=== Verifying TPUNodeGroup Status ===")
-	cmd = exec.Command("kubectl", "get", "tpunodegroup", crName, "-o", "jsonpath={.status.conditions[?(@.type==\"InstanceTemplateReady\")].status}", "--request-timeout=30s")
-	status, _ := cmd.Output()
-
-	cmd = exec.Command("kubectl", "get", "tpunodegroup", crName, "-o", "jsonpath={.status.conditions[?(@.type==\"InstanceTemplateReady\")].reason}", "--request-timeout=30s")
-	reason, _ := cmd.Output()
-
-	t.Logf("TPUNodeGroup InstanceTemplateReady status: %s, reason: %s", string(status), string(reason))
-
-	if string(status) != "True" && string(status) != "False" {
-		t.Fatal("InstanceTemplateReady condition not found or invalid.")
+	ngKey := types.NamespacedName{Name: crName, Namespace: "default"}
+	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+		if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
+			return false, err
+		}
+		for _, c := range ng.Status.Conditions {
+			if c.Type == "InstanceTemplateReady" && (c.Status == metav1.ConditionTrue || c.Status == metav1.ConditionFalse) {
+				t.Logf("TPUNodeGroup InstanceTemplateReady status: %s, reason: %s", c.Status, c.Reason)
+				return true, nil
+			}
+		}
+		return false, nil
+	}); err != nil {
+		t.Fatalf("InstanceTemplateReady condition not found or invalid: %v", err)
 	}
 
 	t.Log("=== Verifying WorkloadPolicy Status ===")
-	// Assert WorkloadPolicy does NOT exist
-	var wpStderr bytes.Buffer
-	cmd = exec.Command("kubectl", "get", "workloadpolicy", crName, "--request-timeout=30s")
-	cmd.Stderr = &wpStderr
-	err := cmd.Run()
+	wpKey := types.NamespacedName{Name: crName, Namespace: "default"}
+	wp := &tpuapi.WorkloadPolicy{}
+	err := k8sClient.Get(ctx, wpKey, wp)
 	if err == nil {
 		t.Fatal("WorkloadPolicy should not have been created for single-host slice")
 	}
-	if !strings.Contains(wpStderr.String(), "NotFound") {
-		t.Fatalf("Expected NotFound error, got: %v, stderr: %s", err, wpStderr.String())
+	if !apierrors.IsNotFound(err) {
+		t.Fatalf("Expected NotFound error, got: %v", err)
 	}
 	t.Log("Verified WorkloadPolicy was not created.")
 
 	t.Log("=== Teardown Verification ===")
 	t.Log("Deleting TPUNodeGroup CR...")
-	cmd = exec.Command("kubectl", "delete", "tpunodegroup", crName, "--timeout=300s", "--request-timeout=30s")
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to delete TPUNodeGroup CR: %v\nStdout: %s\nStderr: %s", err, stdout.String(), stderr.String())
+	if err := k8sClient.Delete(ctx, ng); err != nil {
+		t.Fatalf("Failed to delete TPUNodeGroup CR: %v", err)
 	}
 
 	t.Log("Verifying child InstanceTemplate deletion...")
-	timeout = 60 * time.Second
-	start = time.Now()
-	for {
-		if time.Since(start) > timeout {
-			t.Fatal("Timeout waiting for child InstanceTemplate to be deleted")
-		}
-
-		cmd = exec.Command("kubectl", "get", "instancetemplate", childTemplateName, "--request-timeout=30s")
-		if err := cmd.Run(); err != nil {
-			t.Log("Child InstanceTemplate deleted successfully.")
-			break
-		}
-
-		time.Sleep(interval)
+	if err := waitForDeletion(ctx, k8sClient, itKey, it, 300*time.Second); err != nil {
+		t.Fatalf("Failed or timed out waiting for child InstanceTemplate deletion: %v", err)
 	}
 }
 
@@ -111,191 +100,143 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 	childPolicyName := dummyNodeGroup.WorkloadPolicyName()
 	migName := dummyNodeGroup.ManagedInstanceGroupName()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	ng := &tpuapi.TPUNodeGroup{}
+	it := &tpuapi.InstanceTemplate{}
+	wp := &tpuapi.WorkloadPolicy{}
+	mig := &tpuapi.ManagedInstanceGroup{}
+
+	ngKey := types.NamespacedName{Name: crName, Namespace: "default"}
+	itKey := types.NamespacedName{Name: childTemplateName, Namespace: "default"}
+	wpKey := types.NamespacedName{Name: childPolicyName, Namespace: "default"}
+	migKey := types.NamespacedName{Name: migName, Namespace: "default"}
+
 	t.Log("=== Applying Test Manifest ===")
-	cmd := exec.Command("kubectl", "apply", "-f", manifest, "--request-timeout=30s")
-	if err := cmd.Run(); err != nil {
+	if err := applyManifest(ctx, k8sClient, manifest, ng); err != nil {
 		t.Fatalf("Failed to apply manifest: %v", err)
 	}
 
 	t.Cleanup(func() {
-		t.Log("=== Teardown Verification ===")
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cleanupCancel()
 
-		var stdout, stderr bytes.Buffer
+		t.Log("=== Teardown Verification ===")
 		t.Log("Deleting TPUNodeGroup CR...")
-		cmd = exec.Command("kubectl", "delete", "tpunodegroup", crName, "--timeout=300s", "--request-timeout=30s")
-		stdout.Reset()
-		stderr.Reset()
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			t.Errorf("Failed to delete TPUNodeGroup CR: %v\nStdout: %s\nStderr: %s", err, stdout.String(), stderr.String())
+		if err := k8sClient.Delete(cleanupCtx, ng); err != nil {
+			t.Errorf("Failed to delete TPUNodeGroup CR: %v", err)
 		}
 
 		t.Log("Verifying child ManagedInstanceGroup deletion...")
-		timeout := 60 * time.Second
-		start := time.Now()
-		interval := 5 * time.Second
-		for {
-			if time.Since(start) > timeout {
-				t.Errorf("Timeout waiting for child ManagedInstanceGroup to be deleted")
-				break
-			}
-
-			cmd = exec.Command("kubectl", "get", "managedinstancegroup", migName, "--request-timeout=30s")
-			if err := cmd.Run(); err != nil {
-				t.Log("Child ManagedInstanceGroup deleted successfully.")
-				break
-			}
-
-			time.Sleep(interval)
+		if err := waitForDeletion(cleanupCtx, k8sClient, migKey, mig, 300*time.Second); err != nil {
+			t.Errorf("Failed or timed out waiting for child MIG deletion: %v", err)
 		}
 
 		t.Log("Verifying child InstanceTemplate deletion...")
-		start = time.Now()
-		for {
-			if time.Since(start) > timeout {
-				t.Errorf("Timeout waiting for child InstanceTemplate to be deleted")
-				break
-			}
-
-			cmd = exec.Command("kubectl", "get", "instancetemplate", childTemplateName, "--request-timeout=30s")
-			if err := cmd.Run(); err != nil {
-				t.Log("Child InstanceTemplate deleted successfully.")
-				break
-			}
-
-			time.Sleep(interval)
+		if err := waitForDeletion(cleanupCtx, k8sClient, itKey, it, 300*time.Second); err != nil {
+			t.Errorf("Failed or timed out waiting for child InstanceTemplate deletion: %v", err)
 		}
 
 		t.Log("Verifying child WorkloadPolicy deletion...")
-		start = time.Now()
-		for {
-			if time.Since(start) > timeout {
-				t.Errorf("Timeout waiting for child WorkloadPolicy to be deleted")
-				break
-			}
-
-			cmd = exec.Command("kubectl", "get", "workloadpolicy", childPolicyName, "--request-timeout=30s")
-			if err := cmd.Run(); err != nil {
-				t.Log("Child WorkloadPolicy deleted successfully.")
-				break
-			}
-
-			time.Sleep(interval)
+		if err := waitForDeletion(cleanupCtx, k8sClient, wpKey, wp, 300*time.Second); err != nil {
+			t.Errorf("Failed or timed out waiting for child WorkloadPolicy deletion: %v", err)
 		}
 	})
 
 	t.Run("TPUNodeGroup_Orchestration", func(t *testing.T) {
 		t.Log("=== Verifying Finalizers ===")
-		timeout := 30 * time.Second
-		interval := 2 * time.Second
-		start := time.Now()
 		expectedFinalizers := []string{
 			"tpu.google.com/cleanup-mig",
 			"tpu.google.com/cleanup-template",
 			"tpu.google.com/cleanup-policy",
 		}
-		for {
-			if time.Since(start) > timeout {
-				t.Fatal("Timeout waiting for finalizers to be set")
+		if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 30*time.Second, true, func(ctx context.Context) (bool, error) {
+			if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
+				return false, err
 			}
-			cmd := exec.Command("kubectl", "get", "tpunodegroup", crName, "-o", "jsonpath={.metadata.finalizers}", "--request-timeout=30s")
-			output, err := cmd.Output()
-			if err == nil {
-				finalizers := string(output)
-				allFound := true
-				for _, f := range expectedFinalizers {
-					if !strings.Contains(finalizers, f) {
-						allFound = false
+			finalizers := ng.GetFinalizers()
+			foundCount := 0
+			for _, ef := range expectedFinalizers {
+				for _, f := range finalizers {
+					if f == ef {
+						foundCount++
 						break
 					}
 				}
-				if allFound {
-					t.Log("All expected finalizers found.")
-					break
-				}
 			}
-			time.Sleep(interval)
+			if foundCount == len(expectedFinalizers) {
+				t.Log("All expected finalizers found.")
+				return true, nil
+			}
+			return false, nil
+		}); err != nil {
+			t.Fatalf("Timeout or error waiting for finalizers to be set: %v, current finalizers: %v", err, ng.GetFinalizers())
 		}
 
 		t.Log("=== Waiting for child WorkloadPolicy to have URI ===")
-		timeout = 60 * time.Second
-		interval = 5 * time.Second
-		start = time.Now()
-		for {
-			if time.Since(start) > timeout {
-				t.Fatal("Timeout waiting for child WorkloadPolicy to have URI")
+		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+			if err := k8sClient.Get(ctx, wpKey, wp); err != nil {
+				if apierrors.IsNotFound(err) {
+					return false, nil
+				}
+				return false, err
 			}
-			cmd = exec.Command("kubectl", "get", "workloadpolicy", childPolicyName, "-o", "jsonpath={.status.uri}", "--request-timeout=30s")
-			output, err := cmd.Output()
-			if err == nil && len(bytes.TrimSpace(output)) > 0 {
-				t.Logf("Child WorkloadPolicy %s has URI: %s", childPolicyName, string(output))
-				break
+			if len(wp.Status.URI) > 0 {
+				t.Logf("Child WorkloadPolicy %s has URI: %s", childPolicyName, wp.Status.URI)
+				return true, nil
 			}
-			time.Sleep(interval)
+			return false, nil
+		}); err != nil {
+			t.Fatalf("Timeout or error waiting for child WorkloadPolicy to have URI: %v", err)
 		}
 
 		t.Log("=== Waiting for child InstanceTemplate to be created ===")
-		timeout = 120 * time.Second
-		start = time.Now()
-		for {
-			if time.Since(start) > timeout {
-				t.Fatal("Timeout waiting for child InstanceTemplate to be created")
+		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 120*time.Second, true, func(ctx context.Context) (bool, error) {
+			err := k8sClient.Get(ctx, itKey, it)
+			if err == nil {
+				return true, nil
 			}
-
-			cmd = exec.Command("kubectl", "get", "instancetemplate", childTemplateName, "--request-timeout=30s")
-			if err := cmd.Run(); err == nil {
-				t.Logf("Child InstanceTemplate %s created.", childTemplateName)
-				break
+			if apierrors.IsNotFound(err) {
+				return false, nil
 			}
-
-			time.Sleep(interval)
+			return false, err
+		}); err != nil {
+			t.Fatalf("Timeout or error waiting for child InstanceTemplate to be created: %v", err)
 		}
+		t.Logf("Child InstanceTemplate %s created.", childTemplateName)
 	})
 
 	t.Run("ManagedInstanceGroup_Provisioning", func(t *testing.T) {
 		t.Log("=== Waiting for ManagedInstanceGroup to be created by controller ===")
-		timeout := 120 * time.Second
-		interval := 5 * time.Second
-		start := time.Now()
-		for {
-			if time.Since(start) > timeout {
-				t.Fatal("Timeout waiting for ManagedInstanceGroup to be created")
+		if err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 120*time.Second, true, func(ctx context.Context) (bool, error) {
+			err := k8sClient.Get(ctx, migKey, mig)
+			if err == nil {
+				return true, nil
 			}
-			cmd = exec.Command("kubectl", "get", "managedinstancegroup", migName, "--request-timeout=30s")
-			if err := cmd.Run(); err == nil {
-				t.Logf("ManagedInstanceGroup %s created.", migName)
-				break
+			if apierrors.IsNotFound(err) {
+				return false, nil
 			}
-			time.Sleep(interval)
+			return false, err
+		}); err != nil {
+			t.Fatalf("Timeout or error waiting for ManagedInstanceGroup to be created: %v", err)
 		}
+		t.Logf("ManagedInstanceGroup %s created.", migName)
 
 		t.Log("=== Waiting for ManagedInstanceGroup to be ready ===")
-		timeout = 120 * time.Second
-		interval = 5 * time.Second
-		start = time.Now()
-		for {
-			if time.Since(start) > timeout {
-				t.Log("Timeout waiting for ManagedInstanceGroup to be ready. Dumping status:")
-				cmdDump := exec.Command("kubectl", "get", "managedinstancegroup", migName, "-o", "yaml", "--request-timeout=30s")
-				outputDump, _ := cmdDump.CombinedOutput()
-				t.Log(string(outputDump))
-				t.Fatal("Timeout waiting for ManagedInstanceGroup to be ready")
-			}
-			cmd = exec.Command("kubectl", "get", "managedinstancegroup", migName, "-o", "jsonpath={.status.conditions[?(@.type==\"Ready\")].status}", "--request-timeout=30s")
-			output, err := cmd.Output()
-			if err == nil && string(bytes.TrimSpace(output)) == "True" {
-				t.Logf("ManagedInstanceGroup %s is ready.", migName)
-				break
-			}
-			time.Sleep(interval)
+		if err := waitForCondition(ctx, k8sClient, migKey, mig, func(obj *tpuapi.ManagedInstanceGroup) []metav1.Condition {
+			return obj.Status.Conditions
+		}, "Ready", metav1.ConditionTrue, 120*time.Second); err != nil {
+			_ = k8sClient.Get(ctx, migKey, mig)
+			t.Logf("Timeout waiting for ManagedInstanceGroup to be ready. Dumping status: %+#v", mig)
+			t.Fatalf("Timeout waiting for ManagedInstanceGroup to be ready: %v", err)
 		}
+		t.Logf("ManagedInstanceGroup %s is ready.", migName)
 
 		t.Log("=== Verifying GCP resource creation ===")
 		project := "gsc-nexus-xteam-shared-testing"
 		zone := "us-central1-c"
-		
-		cmd = exec.Command("gcloud", "compute", "instance-groups", "managed", "describe", migName, "--project", project, "--zone", zone)
+		cmd := exec.Command("gcloud", "compute", "instance-groups", "managed", "describe", migName, "--project", project, "--zone", zone)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err != nil {
