@@ -44,10 +44,10 @@ type TPUNodeGroupSpec struct {
 	AcceleratorConnectionMode string `json:"acceleratorConnectionMode"`
 
 	// Topology specifies the physical arrangement of the TPU chips.
-	// Required for multi-host slices. If omitted, assumes single-host.
-	// +optional
+	// Required for both single-host and multi-host slices to enable proper node labeling.
+	// +required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Topology is immutable"
-	Topology string `json:"topology,omitempty"`
+	Topology string `json:"topology"`
 
 	// BootstrapKubernetes defines if and how the controller should install K8s components.
 	// +optional

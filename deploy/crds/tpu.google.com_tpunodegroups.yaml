@@ -192,7 +192,7 @@ spec:
               topology:
                 description: |-
                   Topology specifies the physical arrangement of the TPU chips.
-                  Required for multi-host slices. If omitted, assumes single-host.
+                  Required for both single-host and multi-host slices to enable proper node labeling.
                 type: string
                 x-kubernetes-validations:
                 - message: Topology is immutable
@@ -204,6 +204,7 @@ spec:
             - nodeLocation
             - project
             - targetSizePolicyMode
+            - topology
             type: object
             x-kubernetes-validations:
             - message: targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1

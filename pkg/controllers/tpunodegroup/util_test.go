@@ -15,19 +15,25 @@ func TestAcceleratorLabelValue(t *testing.T) {
 		want                 string
 	}{
 		{
-			name:        "tpu7x",
-			machineType: "tpu7x-standard-4t",
-			want:        "tpu7x",
+			name:                 "tpu7x",
+			machineType:          "tpu7x-standard-4t",
+			topology:             "2x2x1",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "tpu7x",
 		},
 		{
-			name:        "ct6e",
-			machineType: "ct6e-standard-4t",
-			want:        "tpu-v6e-slice",
+			name:                 "ct6e",
+			machineType:          "ct6e-standard-4t",
+			topology:             "2x2x1",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "tpu-v6e-slice",
 		},
 		{
-			name:        "ct5lp-device",
-			machineType: "ct5lp-hightpu-4t",
-			want:        "tpu-v5-lite-device",
+			name:                 "ct5lp-device",
+			machineType:          "ct5lp-hightpu-4t",
+			topology:             "2x2x1",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "tpu-v5-lite-device",
 		},
 		{
 			name:                 "ct5lp-podslice",
@@ -44,9 +50,11 @@ func TestAcceleratorLabelValue(t *testing.T) {
 			want:                 "tpu-v5-lite-device",
 		},
 		{
-			name:        "unknown",
-			machineType: "unknown-type",
-			want:        "",
+			name:                 "unknown",
+			machineType:          "unknown-type",
+			topology:             "2x2x1",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "",
 		},
 	}
 
@@ -89,6 +97,8 @@ func TestChipsPerNode(t *testing.T) {
 					InstanceConfig: &tpuapi.InstanceConfig{
 						MachineType: tt.machineType,
 					},
+					Topology:  "2x2x1",
+					NodeCount: 1,
 				},
 			}
 			got := chipsPerNode(group)
