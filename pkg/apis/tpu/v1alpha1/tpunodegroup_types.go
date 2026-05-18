@@ -33,6 +33,7 @@ type TPUNodeGroupSpec struct {
 	// AcceleratorConnectionMode dictates how the chips are interconnected.
 	// Currently, the only valid value is static. (Immutable)
 	// +required
+	// +kubebuilder:validation:Enum=STATIC
 	AcceleratorConnectionMode string `json:"acceleratorConnectionMode"`
 
 	// Topology specifies the physical arrangement of the TPU chips.
@@ -60,12 +61,14 @@ type ServiceAccount struct {
 type InstanceConfig struct {
 	// MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
 	// +required
+	// +kubebuilder:validation:XValidation:rule="self.matches('^(tpu7x-|tpu7-|ct6e-).*')",message="Only v6 and v7 TPU machine types are supported"
 	MachineType string `json:"machineType"`
 
-	// ProvisioningModel specifies spot, reservation-bound
-	// Defaults to reservation-bound if the reservation field is specified.
-	// Defaults to on-demand if this field nor the reservation field is specified.
+	// ProvisioningModel specifies SPOT, RESERVATION_BOUND, or STANDARD.
+	// Defaults to RESERVATION_BOUND if the reservation field is specified.
+	// Defaults to STANDARD if neither this field nor the reservation field is specified.
 	// +optional
+	// +kubebuilder:validation:Enum=SPOT;RESERVATION_BOUND;STANDARD
 	ProvisioningModel *string `json:"provisioningModel,omitempty"`
 
 	// Reservation is the name of the reservation to consume.
@@ -150,6 +153,7 @@ type TPUNodeGroup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="TPUNodeGroup spec is immutable"
 	Spec   TPUNodeGroupSpec   `json:"spec,omitempty"`
 	Status TPUNodeGroupStatus `json:"status,omitempty"`
 }

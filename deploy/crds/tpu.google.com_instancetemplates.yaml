@@ -53,6 +53,9 @@ spec:
               machineType:
                 description: MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
                 type: string
+                x-kubernetes-validations:
+                - message: Only v6 and v7 TPU machine types are supported
+                  rule: self.matches('^(tpu7x-|tpu7-|ct6e-).*')
               maintenancePolicy:
                 default: TERMINATE
                 description: |-
@@ -77,9 +80,13 @@ spec:
                 type: string
               provisioningModel:
                 description: |-
-                  ProvisioningModel specifies spot, reservation-bound
-                  Defaults to reservation-bound if the reservation field is specified.
-                  Defaults to on-demand if this field nor the reservation field is specified.
+                  ProvisioningModel specifies SPOT, RESERVATION_BOUND, or STANDARD.
+                  Defaults to RESERVATION_BOUND if the reservation field is specified.
+                  Defaults to STANDARD if neither this field nor the reservation field is specified.
+                enum:
+                - SPOT
+                - RESERVATION_BOUND
+                - STANDARD
                 type: string
               reservation:
                 description: |-
