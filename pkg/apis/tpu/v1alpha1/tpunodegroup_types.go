@@ -10,6 +10,7 @@ import (
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
 	// +required
+	// +kubebuilder:validation:Pattern="^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
 	Project string `json:"project"`
 
 	// NodeLocation is the GCE Zone where the nodes will be provisioned.

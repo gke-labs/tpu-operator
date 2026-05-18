@@ -153,6 +153,7 @@ spec:
                 type: string
               project:
                 description: Project is the GCP project ID.
+                pattern: ^[a-z][a-z0-9-]{4,28}[a-z0-9]$
                 type: string
               topology:
                 description: |-
