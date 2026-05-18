@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -22,6 +21,10 @@ var devicePluginYAML []byte
 //go:embed service_account.yaml
 var serviceAccountYAML []byte
 
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=update;patch;get;list;watch
+// +kubebuilder:rbac:groups="",resources=nodes/status,verbs=update;patch;get;list;watch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+
 // BuildDevicePluginDaemonSet builds the DaemonSet for the TPU device plugin.
 func BuildDevicePluginDaemonSet(group *tpuapi.TPUNodeGroup) (*appsv1.DaemonSet, error) {
 	ds := &appsv1.DaemonSet{}
@@ -29,7 +32,6 @@ func BuildDevicePluginDaemonSet(group *tpuapi.TPUNodeGroup) (*appsv1.DaemonSet, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal device plugin YAML: %w", err)
 	}
-	ds.Namespace = group.Namespace
 
 	// Set owner reference so it gets deleted when TPUNodeGroup is deleted.
 	ds.OwnerReferences = []metav1.OwnerReference{
@@ -44,11 +46,6 @@ func Reconcile(ctx context.Context, kubeClientset kubernetes.Interface, group *t
 	logger := klog.FromContext(ctx)
 	logger.Info("Reconciling TPU Device Plugin")
 
-	err := ensureServiceAccount(ctx, kubeClientset, group)
-	if err != nil {
-		return fmt.Errorf("failed to ensure service account: %w", err)
-	}
-
 	ds, err := BuildDevicePluginDaemonSet(group)
 	if err != nil {
 		return fmt.Errorf("failed to build device plugin DaemonSet: %w", err)
@@ -57,29 +54,7 @@ func Reconcile(ctx context.Context, kubeClientset kubernetes.Interface, group *t
 	return ensureDaemonSet(ctx, kubeClientset, ds)
 }
 
-func ensureServiceAccount(ctx context.Context, kubeClientset kubernetes.Interface, group *tpuapi.TPUNodeGroup) error {
-	logger := klog.FromContext(ctx)
 
-	sa := &corev1.ServiceAccount{}
-	err := yaml.Unmarshal(serviceAccountYAML, sa)
-	if err != nil {
-		return fmt.Errorf("failed to unmarshal service account YAML: %w", err)
-	}
-	sa.Namespace = group.Namespace
-
-	_, err = kubeClientset.CoreV1().ServiceAccounts(sa.Namespace).Get(ctx, sa.Name, metav1.GetOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("Creating TPU Device Plugin ServiceAccount", "namespace", sa.Namespace, "name", sa.Name)
-			_, err = kubeClientset.CoreV1().ServiceAccounts(sa.Namespace).Create(ctx, sa, metav1.CreateOptions{})
-			return err
-		}
-		return fmt.Errorf("failed to get service account: %w", err)
-	}
-
-	logger.Info("TPU Device Plugin ServiceAccount already exists", "namespace", sa.Namespace, "name", sa.Name)
-	return nil
-}
 
 func ensureDaemonSet(ctx context.Context, kubeClientset kubernetes.Interface, ds *appsv1.DaemonSet) error {
 	logger := klog.FromContext(ctx)
