@@ -8,7 +8,7 @@ spec:
   nodeLocation: us-central1-c
   nodeCount: 1
   # Topology is omitted for single-host test cases. If specified, the controller assumes a multi-host slice.
-  acceleratorConnectionMode: static
+  acceleratorConnectionMode: STATIC
   bootstrapKubernetes:
     version: "1.31"
     controlPlaneIP: "10.128.15.234"
