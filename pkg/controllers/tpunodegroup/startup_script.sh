@@ -102,5 +102,36 @@ EOF2
 
 echo "Unmasking kubelet and joining cluster..."
 sudo systemctl unmask kubelet
-# Fail loudly if join fails, so that GCE and the controller can detect the failure.
-kubeadm join --config /etc/kubernetes/kubeadm-join.yaml
+
+# Retry logic for kubeadm join to handle transient network issues or control plane startup delays.
+MAX_RETRIES=2
+attempt=0
+backoff=15
+
+while true; do
+  attempt=$((attempt + 1))
+  echo "Attempt $attempt of $MAX_RETRIES to join cluster..."
+
+  # Run kubeadm join. We use an if-statement so that 'set -e' doesn't exit the script on failure.
+  if kubeadm join --config /etc/kubernetes/kubeadm-join.yaml; then
+    echo "Successfully joined the cluster!"
+    break
+  fi
+
+  echo "Join attempt $attempt failed."
+
+  if [ $attempt -ge $MAX_RETRIES ]; then
+    echo "Exhausted all join retries. Failing."
+    exit 1
+  fi
+
+  echo "Resetting kubeadm state before retry..."
+  kubeadm reset --force
+
+  echo "Sleeping for ${backoff}s before next attempt..."
+  sleep $backoff
+  backoff=$((backoff * 2))
+  if [ $backoff -gt 120 ]; then
+    backoff=120
+  fi
+done
