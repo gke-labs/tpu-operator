@@ -11,6 +11,10 @@ import (
 	"time"
 
 	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	corescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
@@ -53,6 +57,13 @@ func setup() {
 		log.Fatalf("Failed to apply CRDs: %v", err)
 	}
 
+	fmt.Println("=== Applying E2E RBAC ===")
+	cmd = exec.Command("kubectl", "apply", "-f", "hack/e2e/tpu_device_plugin_rbac_e2e.yaml")
+	cmd.Dir = repoRoot
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("Failed to apply E2E RBAC: %v", err)
+	}
+
 	kubeconfig := os.Getenv("KUBECONFIG")
 	if kubeconfig == "" {
 		kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
@@ -66,6 +77,9 @@ func setup() {
 	scheme := runtime.NewScheme()
 	if err := corescheme.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add core scheme: %v", err)
+	}
+	if err := batchv1.AddToScheme(scheme); err != nil {
+		log.Fatalf("Failed to add batch scheme: %v", err)
 	}
 	if err := v1alpha1.AddToScheme(scheme); err != nil {
 		log.Fatalf("Failed to add v1alpha1 to scheme: %v", err)
@@ -117,6 +131,11 @@ func teardown() {
 		logFile.Close()
 	}
 	_ = os.Remove(controllerBinPath)
+
+	fmt.Println("=== Cleaning up E2E RBAC ===")
+	cleanupCmd := exec.Command("kubectl", "delete", "-f", "hack/e2e/tpu_device_plugin_rbac_e2e.yaml", "--ignore-not-found")
+	cleanupCmd.Dir = repoRoot
+	_ = cleanupCmd.Run()
 }
 
 func cleanResources(t *testing.T, resourceTypes []string) {
@@ -212,6 +231,41 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			}
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.ManagedInstanceGroup{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete ManagedInstanceGroups: %v", err)
+			}
+		case "jobs":
+			for i := 0; i < 12; i++ {
+				list := &batchv1.JobList{}
+				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
+					t.Fatalf("Failed to list Jobs: %v", err)
+				}
+				deleting := false
+				for _, item := range list.Items {
+					if !item.DeletionTimestamp.IsZero() {
+						deleting = true
+						t.Logf("Waiting for Job being deleted: %s", item.Name)
+						break
+					}
+				}
+				if !deleting {
+					break
+				}
+				time.Sleep(5 * time.Second)
+			}
+			background := metav1.DeletePropagationBackground
+			if err := k8sClient.DeleteAllOf(ctx, &batchv1.Job{}, client.InNamespace("default"), client.PropagationPolicy(background)); err != nil {
+				t.Fatalf("Failed to delete Jobs: %v", err)
+			}
+		case "nodes":
+			var nodeList corev1.NodeList
+			if err := k8sClient.List(ctx, &nodeList); err == nil {
+				for _, node := range nodeList.Items {
+					if _, ok := node.Labels["cloud.google.com/tpu-node-group"]; ok {
+						t.Logf("Deleting stale Node object: %s", node.Name)
+						if err := k8sClient.Delete(ctx, &node); err != nil && !errors.IsNotFound(err) {
+							t.Fatalf("Failed to delete stale Node %s: %v", node.Name, err)
+						}
+					}
+				}
 			}
 		default:
 			t.Fatalf("Unknown resource type in cleanup: %s", rt)
