@@ -15,9 +15,9 @@ func ToGCEManagedInstanceGroup(cr *tpuv1alpha1.ManagedInstanceGroup) *computepb.
 		TargetSize:       &cr.Spec.TargetSize,
 	}
 
-	if cr.Spec.TargetSizePolicyMode != nil {
+	if cr.Spec.TargetSizePolicyMode != "" {
 		igm.TargetSizePolicy = &computepb.InstanceGroupManagerTargetSizePolicy{
-			Mode: cr.Spec.TargetSizePolicyMode,
+			Mode: &cr.Spec.TargetSizePolicyMode,
 		}
 	}
 

@@ -248,9 +248,10 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 					UID:       "my-uid",
 				},
 				Spec: api.TPUNodeGroupSpec{
-					Project:      "my-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    4,
+					Project:              "my-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            4,
+					TargetSizePolicyMode: "BULK",
 				},
 			},
 			template: &api.InstanceTemplate{
@@ -279,11 +280,12 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 					},
 				},
 				Spec: api.ManagedInstanceGroupSpec{
-					Project:          "my-project",
-					Location:         "us-central1-a",
-					InstanceTemplate: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
-					TargetSize:       4,
-					WorkloadPolicy:   ptr.To("https://www.googleapis.com/compute/v1/projects/my-project/regions/us-central1/resourcePolicies/my-policy"),
+					Project:              "my-project",
+					Location:             "us-central1-a",
+					InstanceTemplate:     "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
+					TargetSize:           4,
+					WorkloadPolicy:       ptr.To("https://www.googleapis.com/compute/v1/projects/my-project/regions/us-central1/resourcePolicies/my-policy"),
+					TargetSizePolicyMode: "BULK",
 				},
 			},
 		},
@@ -296,9 +298,10 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 					UID:       "my-uid",
 				},
 				Spec: api.TPUNodeGroupSpec{
-					Project:      "my-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    4,
+					Project:              "my-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            4,
+					TargetSizePolicyMode: "BULK",
 				},
 			},
 			template: &api.InstanceTemplate{
@@ -323,15 +326,61 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 					},
 				},
 				Spec: api.ManagedInstanceGroupSpec{
-					Project:          "my-project",
-					Location:         "us-central1-a",
-					InstanceTemplate: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
-					TargetSize:       4,
-					WorkloadPolicy:   nil,
+					Project:              "my-project",
+					Location:             "us-central1-a",
+					InstanceTemplate:     "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
+					TargetSize:           4,
+					WorkloadPolicy:       nil,
+					TargetSizePolicyMode: "BULK",
 				},
 			},
 		},
-
+		{
+			name: "with targetSizePolicyMode",
+			tpuNodeGroup: &api.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-tpu-group",
+					Namespace: "my-namespace",
+					UID:       "my-uid",
+				},
+				Spec: api.TPUNodeGroupSpec{
+					Project:              "my-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            4,
+					TargetSizePolicyMode: "INDIVIDUAL",
+				},
+			},
+			template: &api.InstanceTemplate{
+				Status: api.InstanceTemplateStatus{
+					URI: "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
+				},
+			},
+			policy: nil,
+			want: &api.ManagedInstanceGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-tpu-group-mig",
+					Namespace: "my-namespace",
+					OwnerReferences: []metav1.OwnerReference{
+						{
+							APIVersion:         "tpu.google.com/v1alpha1",
+							Kind:               "TPUNodeGroup",
+							Name:               "my-tpu-group",
+							UID:                "my-uid",
+							Controller:         ptr.To(true),
+							BlockOwnerDeletion: ptr.To(true),
+						},
+					},
+				},
+				Spec: api.ManagedInstanceGroupSpec{
+					Project:              "my-project",
+					Location:             "us-central1-a",
+					InstanceTemplate:     "https://www.googleapis.com/compute/v1/projects/my-project/global/instanceTemplates/my-template",
+					TargetSize:           4,
+					WorkloadPolicy:       nil,
+					TargetSizePolicyMode: "INDIVIDUAL",
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {

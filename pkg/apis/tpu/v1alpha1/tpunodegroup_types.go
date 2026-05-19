@@ -6,6 +6,7 @@ import (
 
 
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
+// +kubebuilder:validation:XValidation:rule="self.nodeCount > 1 || self.targetSizePolicyMode == 'INDIVIDUAL'",message="targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1 or less"
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
 	// +required
@@ -52,6 +53,13 @@ type TPUNodeGroupSpec struct {
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="BootstrapKubernetes is immutable"
 	BootstrapKubernetes *BootstrapConfig `json:"bootstrapKubernetes,omitempty"`
+
+	// TargetSizePolicyMode specifies the mode of target size policy for the underlying MIG.
+	// Supported values are BULK and INDIVIDUAL.
+	// +kubebuilder:validation:Enum=BULK;INDIVIDUAL
+	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="TargetSizePolicyMode is immutable"
+	TargetSizePolicyMode string `json:"targetSizePolicyMode"`
 }
 
 // ServiceAccount defines the service account and scopes for the VM.

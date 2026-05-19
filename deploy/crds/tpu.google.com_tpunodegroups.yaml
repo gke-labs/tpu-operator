@@ -178,6 +178,17 @@ spec:
                 x-kubernetes-validations:
                 - message: Project is immutable
                   rule: self == oldSelf
+              targetSizePolicyMode:
+                description: |-
+                  TargetSizePolicyMode specifies the mode of target size policy for the underlying MIG.
+                  Supported values are BULK and INDIVIDUAL.
+                enum:
+                - BULK
+                - INDIVIDUAL
+                type: string
+                x-kubernetes-validations:
+                - message: TargetSizePolicyMode is immutable
+                  rule: self == oldSelf
               topology:
                 description: |-
                   Topology specifies the physical arrangement of the TPU chips.
@@ -192,7 +203,12 @@ spec:
             - nodeCount
             - nodeLocation
             - project
+            - targetSizePolicyMode
             type: object
+            x-kubernetes-validations:
+            - message: targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1
+                or less
+              rule: self.nodeCount > 1 || self.targetSizePolicyMode == 'INDIVIDUAL'
           status:
             description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
             properties:

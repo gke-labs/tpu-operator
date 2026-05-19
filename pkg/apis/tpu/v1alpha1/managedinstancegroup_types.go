@@ -39,9 +39,8 @@ type ManagedInstanceGroupSpec struct {
 
 	// TargetSizePolicyMode specifies the mode of target size policy.
 	// +kubebuilder:validation:Enum=BULK;INDIVIDUAL
-	// +kubebuilder:default="INDIVIDUAL"
-	// +optional
-	TargetSizePolicyMode *string `json:"targetSizePolicyMode,omitempty"`
+	// +required
+	TargetSizePolicyMode string `json:"targetSizePolicyMode"`
 
 	// DefaultActionOnFailure specifies the action to take on failure.
 	// +kubebuilder:validation:Enum=DO_NOTHING

@@ -81,9 +81,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Namespace: "default",
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			wantResult: reconcile.Result{},
@@ -110,9 +111,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 					BootstrapKubernetes: &tpuapi.BootstrapConfig{
 
 						ControlPlaneIP: "1.2.3.4",
@@ -141,10 +143,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: tpuapi.ManagedInstanceGroupSpec{
-						Project:          "test-project",
-						Location:         "us-central1-a",
-						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
-						TargetSize:       1,
+						Project:              "test-project",
+						Location:             "us-central1-a",
+						InstanceTemplate:     "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:           1,
+						TargetSizePolicyMode: "INDIVIDUAL",
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
@@ -198,9 +201,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			additionalObjects: []client.Object{
@@ -225,10 +229,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: tpuapi.ManagedInstanceGroupSpec{
-						Project:          "test-project",
-						Location:         "us-central1-a",
-						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
-						TargetSize:       1,
+						Project:              "test-project",
+						Location:             "us-central1-a",
+						InstanceTemplate:     "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:           1,
+						TargetSizePolicyMode: "INDIVIDUAL",
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-disabled-mig",
@@ -284,9 +289,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 					InstanceConfig: &tpuapi.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
@@ -318,9 +324,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 					InstanceConfig: &tpuapi.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
@@ -348,10 +355,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 						Namespace: "default",
 					},
 					Spec: tpuapi.ManagedInstanceGroupSpec{
-						Project:          "test-project",
-						Location:         "us-central1-a",
-						InstanceTemplate: "projects/test-project/global/instanceTemplates/my-template",
-						TargetSize:       1,
+						Project:              "test-project",
+						Location:             "us-central1-a",
+						InstanceTemplate:     "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:           1,
+						TargetSizePolicyMode: "INDIVIDUAL",
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
@@ -391,10 +399,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
-					Topology:     "2x2x1",
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            2,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "BULK",
 				},
 			},
 			wantResult: reconcile.Result{},
@@ -423,10 +432,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
-					Topology:     "2x2x1",
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            2,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "BULK",
 					InstanceConfig: &tpuapi.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
@@ -465,6 +475,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				},
 			},
 		},
+
 		{
 			name: "reconcile_workload_policy_skip",
 			request: reconcile.Request{
@@ -480,9 +491,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 					InstanceConfig: &tpuapi.InstanceConfig{
 						MachineType: "tpu7x-standard-4t",
 					},
@@ -515,9 +527,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			nodes: []corev1.Node{
@@ -557,9 +570,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			nodes: []corev1.Node{
@@ -593,9 +607,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			additionalObjects: []client.Object{
@@ -652,9 +667,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			additionalObjects: []client.Object{
@@ -691,9 +707,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			additionalObjects: []client.Object{
@@ -723,9 +740,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			additionalObjects: []client.Object{
@@ -755,16 +773,74 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					DeletionTimestamp: &metav1.Time{Time: time.Now()},
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
-					Project:      "test-project",
-					NodeLocation: "us-central1-a",
-					NodeCount:    1,
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
 				},
 			},
 			wantResult:  reconcile.Result{},
 			wantErr:     false,
 			wantDeleted: true,
 		},
-
+		{
+			name: "reconcile_mig_create",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "InstanceTemplate provisioned successfully",
+				},
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child ManagedInstanceGroup CR created; waiting for GCE resource provisioning",
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -1017,131 +1093,3 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 	}
 }
 
-func TestTPUNodeGroupReconciler_defaultManagedInstanceGroup(t *testing.T) {
-	tests := []struct {
-		name  string
-		mig   *tpuapi.ManagedInstanceGroup
-		group *tpuapi.TPUNodeGroup
-		want  *tpuapi.ManagedInstanceGroup
-	}{
-		{
-			name:  "nil mig",
-			mig:   nil,
-			group: &tpuapi.TPUNodeGroup{},
-			want:  nil,
-		},
-		{
-			name: "empty topology defaults to INDIVIDUAL",
-			mig: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{},
-			},
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{},
-			},
-			want: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{
-					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeIndividual),
-				},
-			},
-		},
-		{
-			name: "topology present defaults to BULK",
-			mig: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{},
-			},
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					Topology: "2x2x1",
-				},
-			},
-			want: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{
-					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeBulk),
-				},
-			},
-		},
-		{
-			name: "already set value is preserved",
-			mig: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{
-					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeBulk),
-				},
-			},
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					Topology: "",
-				},
-			},
-			want: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{
-					TargetSizePolicyMode: ptr.To(tpuapi.TargetSizePolicyModeBulk),
-				},
-			},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			r := &TPUNodeGroupReconciler{}
-			r.defaultManagedInstanceGroup(tc.mig, tc.group)
-
-			if diff := cmp.Diff(tc.want, tc.mig); diff != "" {
-				t.Errorf("defaultManagedInstanceGroup() mismatch (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestDefaultManagedInstanceGroup(t *testing.T) {
-	r := &TPUNodeGroupReconciler{}
-
-	tests := []struct {
-		name     string
-		group    *tpuapi.TPUNodeGroup
-		mig      *tpuapi.ManagedInstanceGroup
-		wantMode string
-	}{
-		{
-			name: "topology_empty_defaults_to_individual",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{},
-			},
-			mig:      &tpuapi.ManagedInstanceGroup{},
-			wantMode: "INDIVIDUAL",
-		},
-		{
-			name: "topology_not_empty_defaults_to_bulk",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					Topology: "2x2x2",
-				},
-			},
-			mig:      &tpuapi.ManagedInstanceGroup{},
-			wantMode: "BULK",
-		},
-		{
-			name: "existing_mode_preserved",
-			group: &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{},
-			},
-			mig: &tpuapi.ManagedInstanceGroup{
-				Spec: tpuapi.ManagedInstanceGroupSpec{
-					TargetSizePolicyMode: ptr.To("BULK"),
-				},
-			},
-			wantMode: "BULK",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r.defaultManagedInstanceGroup(tt.mig, tt.group)
-			if tt.mig.Spec.TargetSizePolicyMode == nil {
-				t.Fatal("TargetSizePolicyMode is nil")
-			}
-			if *tt.mig.Spec.TargetSizePolicyMode != tt.wantMode {
-				t.Errorf("got %s, want %s", *tt.mig.Spec.TargetSizePolicyMode, tt.wantMode)
-			}
-		})
-	}
-}

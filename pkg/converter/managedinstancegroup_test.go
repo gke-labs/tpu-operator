@@ -27,7 +27,7 @@ func TestToGCEManagedInstanceGroup(t *testing.T) {
 					InstanceTemplate:       "https://www.googleapis.com/compute/v1/projects/test-project/global/instanceTemplates/test-template",
 					TargetSize:             4,
 					WorkloadPolicy:         ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/regions/us-central1/resourcePolicies/test-policy"),
-					TargetSizePolicyMode:   ptr.To("BULK"),
+					TargetSizePolicyMode:   "BULK",
 					DefaultActionOnFailure: ptr.To("DO_NOTHING"),
 				},
 			},

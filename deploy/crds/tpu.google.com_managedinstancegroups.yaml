@@ -63,7 +63,6 @@ spec:
                 format: int32
                 type: integer
               targetSizePolicyMode:
-                default: INDIVIDUAL
                 description: TargetSizePolicyMode specifies the mode of target size
                   policy.
                 enum:
@@ -79,6 +78,7 @@ spec:
             - location
             - project
             - targetSize
+            - targetSizePolicyMode
             type: object
           status:
             description: ManagedInstanceGroupStatus defines the observed state of
