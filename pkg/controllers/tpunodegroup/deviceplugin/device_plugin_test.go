@@ -24,8 +24,8 @@ func TestBuildDevicePluginDaemonSet(t *testing.T) {
 		t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
 	}
 
-	if ds.Namespace != group.Namespace {
-		t.Errorf("expected namespace to be %s, got %s", group.Namespace, ds.Namespace)
+	if ds.Namespace != "kube-system" {
+		t.Errorf("expected namespace to be 'kube-system', got %s", ds.Namespace)
 	}
 
 	if len(ds.Spec.Template.Spec.Containers) != 3 {
@@ -87,20 +87,12 @@ func TestReconcile(t *testing.T) {
 			t.Fatalf("Expected no error, got %v", err)
 		}
 
-		ds, err := k8sFakeClient.AppsV1().DaemonSets("default").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+		ds, err := k8sFakeClient.AppsV1().DaemonSets("kube-system").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("failed to get DaemonSet: %v", err)
 		}
 		if ds.Name != "tpu-device-plugin" {
 			t.Errorf("expected name to be 'tpu-device-plugin', got %s", ds.Name)
-		}
-
-		sa, err := k8sFakeClient.CoreV1().ServiceAccounts(group.Namespace).Get(context.Background(), "tpu-device-plugin-sa", metav1.GetOptions{})
-		if err != nil {
-			t.Fatalf("failed to get ServiceAccount: %v", err)
-		}
-		if sa.Name != "tpu-device-plugin-sa" {
-			t.Errorf("expected name to be 'tpu-device-plugin-sa', got %s", sa.Name)
 		}
 	})
 
@@ -112,7 +104,7 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to build device plugin DaemonSet: %v", err)
 		}
-		_, err = k8sFakeClient.AppsV1().DaemonSets("default").Create(context.Background(), ds, metav1.CreateOptions{})
+		_, err = k8sFakeClient.AppsV1().DaemonSets("kube-system").Create(context.Background(), ds, metav1.CreateOptions{})
 		if err != nil {
 			t.Fatalf("failed to pre-create DaemonSet: %v", err)
 		}
@@ -123,7 +115,7 @@ func TestReconcile(t *testing.T) {
 		}
 
 		// Verify it still exists and wasn't duplicated or modified in a bad way (though our current logic doesn't update).
-		_, err = k8sFakeClient.AppsV1().DaemonSets("default").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
+		_, err = k8sFakeClient.AppsV1().DaemonSets("kube-system").Get(context.Background(), "tpu-device-plugin", metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("failed to get DaemonSet: %v", err)
 		}

@@ -61,9 +61,10 @@ func (r *TPUNodeGroupReconciler) WithRecorder(recorder record.EventRecorder) *TP
 	return r
 }
 
-// +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=tpu.google.com,resources=tpunodegroups/finalizers,verbs=update
+// +kubebuilder:rbac:groups=tpu.google.com,resources=*,verbs=*
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;patch;delete
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=create
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main entry point for reconciling a TPUNodeGroup.
 //

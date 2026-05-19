@@ -816,7 +816,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 
 			if tc.wantDaemonSet {
 				// Verify DaemonSet creation in the fake kubeclientset
-				_, err := k8sFakeClient.AppsV1().DaemonSets("default").Get(t.Context(), "tpu-device-plugin", metav1.GetOptions{})
+				_, err := k8sFakeClient.AppsV1().DaemonSets("kube-system").Get(t.Context(), "tpu-device-plugin", metav1.GetOptions{})
 				if err != nil {
 					if errors.IsNotFound(err) {
 						t.Errorf("Expected DaemonSet 'tpu-device-plugin' to be created, but it was not found")
