@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - crds/tpu.google.com_instancetemplates.yaml
+  - crds/tpu.google.com_managedinstancegroups.yaml
+  - crds/tpu.google.com_tpunodegroups.yaml
+  - crds/tpu.google.com_workloadpolicies.yaml
+  - namespace.yaml
+  - controller/
+  - deviceplugin/
+
+images:
+  - name: tpu-node-group-controller
+    newName: CONTROLLER_IMAGE
+    newTag: TAG

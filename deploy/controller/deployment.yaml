@@ -19,7 +19,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: {{CONTROLLER_IMAGE}}
+        image: tpu-node-group-controller
         name: manager
         resources:
           limits:
