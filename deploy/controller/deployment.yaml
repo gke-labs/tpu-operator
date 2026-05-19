@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tpu-node-group-controller-manager
+  namespace: tpu-node-group
+  labels:
+    control-plane: tpu-node-group-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: tpu-node-group-controller
+  template:
+    metadata:
+      labels:
+        control-plane: tpu-node-group-controller
+    spec:
+      serviceAccountName: tpu-node-group-controller-manager
+      containers:
+      - command:
+        - /manager
+        image: {{CONTROLLER_IMAGE}}
+        name: manager
+        resources:
+          limits:
+            cpu: 100m
+            memory: 30Mi
+          requests:
+            cpu: 100m
+            memory: 20Mi
+        volumeMounts:
+        - name: gcp-credentials
+          mountPath: /etc/gcp
+          readOnly: true
+      volumes:
+      - name: gcp-credentials
+        secret:
+          secretName: tpu-node-group-credentials
+          optional: true
