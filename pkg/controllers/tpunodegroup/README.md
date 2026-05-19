@@ -13,7 +13,6 @@ When a user submits a `TPUNodeGroup` Custom Resource (CR), the controller’s go
 5.  **CR Status Reflected**: 
     *   `TPUNodeGroup` conditions show `Ready: True`, `Reconciling: False`, and `Failed: False`.
     *   The `nodes` status summary shows `readyNodes` equal to `totalNodes`.
-    *   Individual `TPUNodeState` CRs exist for each VM, reflecting `RUNNING` infrastructure and healthy Kubernetes node registration.
 
 ## 🚀 Step-by-Step Workflow
 
@@ -21,7 +20,7 @@ To achieve this desired state, the controller executes a structured lifecycle re
 
 ### Phase 1: Intent & Child Resource Orchestration (Upper Layer)
 The controller processes the `TPUNodeGroup` spec and orchestrates the creation of child Custom Resources in a strict dependency order:
-1.  **Create `ResourcePolicy` CR**: Created first if the topology requires a placement policy (essential for multi-host TPU slices to ensure optimal network proximity).
+1.  **Create `WorkloadPolicy` CR**: Created first if the topology requires a placement policy (essential for multi-host TPU slices to ensure optimal network proximity).
 2.  **Create `InstanceTemplate` CR**: Defines machine type, OS image, and base metadata.
 3.  **Create `ManagedInstanceGroup` CR**: Created only after the template and policy are ready. It references both and enforces TPU-specific flags (e.g., `--target-size-policy-mode=bulk` and `--default-action-on-vm-failure=do-nothing`).
 
@@ -32,13 +31,13 @@ The controller processes the `TPUNodeGroup` spec and orchestrates the creation o
 
 ### Phase 3: Bootstrapping & Node Join
 Once the child MIG reports that GCE VMs are in a `RUNNING` state:
-1.  **Token Injection**: The controller generates a cluster join token and injects it into the VMs (enabling a secure "pull" model for bootstrapping).
-2.  **Individual State Tracking**: The controller generates `TPUNodeState` CRs for each VM (`{group-name}-{vm-name}`) to track GCE instance status and Kubernetes join status independently.
+1.  **Metadata & Token Injection**: The controller generates a cluster join token and computes required TPU labels (accelerator type, count, topology), injecting them into the GCE VM metadata.
+2.  **Node Labeling**: The controller monitors the cluster for joining nodes, matches them to GCE instances, and ensures they are labeled with appropriate TPU labels in Kubernetes.
 3.  **Awaiting Readiness**: The controller waits for Kubernetes `Node` objects to register and for the TPU Device Plugin to mark the nodes healthy.
 4.  **Finalize Ready State**: Once all nodes are ready (or `minReadyNodes` is met for single-host topologies), the controller sets the `Ready` condition to `True`.
 
 ### Phase 4: Graceful Teardown (On Deletion)
 When a `TPUNodeGroup` CR is marked for deletion, the controller executes a safe teardown sequence before releasing its finalizer:
-1.  **Cordon and Drain**: Cordon and drain the corresponding Kubernetes nodes to gracefully evict active training workloads.
-2.  **Reverse Teardown**: Delete child CRs in reverse dependency order (`ManagedInstanceGroup` -> `InstanceTemplate` -> `ResourcePolicy`).
+1.  **Cordon**: Cordon the corresponding Kubernetes nodes (adds `NoSchedule` taint) to prevent new pods from being scheduled.
+2.  **Reverse Teardown**: Delete child CRs in reverse dependency order (`ManagedInstanceGroup` -> `InstanceTemplate` -> `WorkloadPolicy`).
 3.  **Finalizer Removal**: Once child controllers confirm all GCE resources are destroyed, the `TPUNodeGroup` controller removes its finalizer, allowing the CR to be garbage collected.
