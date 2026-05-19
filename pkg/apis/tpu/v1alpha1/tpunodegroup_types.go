@@ -153,7 +153,6 @@ type TPUNodeGroup struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="TPUNodeGroup spec is immutable"
 	Spec   TPUNodeGroupSpec   `json:"spec,omitempty"`
 	Status TPUNodeGroupStatus `json:"status,omitempty"`
 }
