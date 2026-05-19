@@ -33,10 +33,7 @@ func BuildDevicePluginDaemonSet(group *tpuapi.TPUNodeGroup) (*appsv1.DaemonSet, 
 		return nil, fmt.Errorf("failed to unmarshal device plugin YAML: %w", err)
 	}
 
-	// Set owner reference so it gets deleted when TPUNodeGroup is deleted.
-	ds.OwnerReferences = []metav1.OwnerReference{
-		*metav1.NewControllerRef(group, tpuapi.SchemeGroupVersion.WithKind("TPUNodeGroup")),
-	}
+
 
 	return ds, nil
 }
