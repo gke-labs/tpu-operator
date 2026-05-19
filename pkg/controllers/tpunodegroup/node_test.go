@@ -151,17 +151,19 @@ func TestEnsureNodeLabel(t *testing.T) {
 	}
 
 	tests := []struct {
-		name        string
-		machineType string
-		topology    string
-		initialNode *corev1.Node
-		wantLabels  map[string]string
-		wantErr     bool
+		name                 string
+		machineType          string
+		topology             string
+		targetSizePolicyMode string
+		initialNode          *corev1.Node
+		wantLabels           map[string]string
+		wantErr              bool
 	}{
 		{
-			name:        "label_missing",
-			machineType: "ct4p-hightpu-4t",
-			topology:    "2x2x2",
+			name:                 "label_missing",
+			machineType:          "ct4p-hightpu-4t",
+			topology:             "2x2x2",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeBulk,
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
 			},
@@ -174,9 +176,10 @@ func TestEnsureNodeLabel(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "labels_already_correct",
-			machineType: "ct4p-hightpu-4t",
-			topology:    "2x2x2",
+			name:                 "labels_already_correct",
+			machineType:          "ct4p-hightpu-4t",
+			topology:             "2x2x2",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeBulk,
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
@@ -197,9 +200,10 @@ func TestEnsureNodeLabel(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "accelerator_label_different_value",
-			machineType: "ct4p-hightpu-4t",
-			topology:    "2x2x2",
+			name:                 "accelerator_label_different_value",
+			machineType:          "ct4p-hightpu-4t",
+			topology:             "2x2x2",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeBulk,
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "test-node",
@@ -215,9 +219,10 @@ func TestEnsureNodeLabel(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "group_label_different_value",
-			machineType: "ct4p-hightpu-4t",
-			topology:    "2x2x2",
+			name:                 "group_label_different_value",
+			machineType:          "ct4p-hightpu-4t",
+			topology:             "2x2x2",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeBulk,
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
@@ -237,8 +242,9 @@ func TestEnsureNodeLabel(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "accelerator_type_unknown_skips",
-			machineType: "unknown-type",
+			name:                 "accelerator_type_unknown_skips",
+			machineType:          "unknown-type",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
 			initialNode: &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
 			},
@@ -258,11 +264,23 @@ func TestEnsureNodeLabel(t *testing.T) {
 				},
 				Spec: tpuapi.TPUNodeGroupSpec{
 					InstanceConfig: &tpuapi.InstanceConfig{
-						MachineType: "ct4p-hightpu-4t",
+						MachineType: tc.machineType,
 					},
-					Topology: "2x2x2",
+					Topology:             tc.topology,
+					NodeCount:            2,
+					TargetSizePolicyMode: tc.targetSizePolicyMode,
 				},
 			}
+
+			// Save initial labels for "no change" assertion
+			var initialLabels map[string]string
+			if tc.initialNode.Labels != nil {
+				initialLabels = make(map[string]string)
+				for k, v := range tc.initialNode.Labels {
+					initialLabels[k] = v
+				}
+			}
+
 			err := ensureNodeLabels(t.Context(), cl, tc.initialNode, group)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ensureNodeLabels() error = %v, wantErr %v", err, tc.wantErr)
@@ -270,7 +288,7 @@ func TestEnsureNodeLabel(t *testing.T) {
 
 			wantLabels := tc.wantLabels
 			if wantLabels == nil {
-				wantLabels = tc.initialNode.Labels
+				wantLabels = initialLabels
 			}
 
 			if diff := cmp.Diff(wantLabels, tc.initialNode.Labels); diff != "" {

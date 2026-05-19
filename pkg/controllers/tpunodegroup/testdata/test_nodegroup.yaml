@@ -7,7 +7,8 @@ spec:
   project: gsc-nexus-xteam-shared-testing
   nodeLocation: us-central1-c
   nodeCount: 1
-  # Topology is omitted for single-host test cases. If specified, the controller assumes a multi-host slice.
+  topology: 2x2x1 # Specified topology for single-host slice.
+  targetSizePolicyMode: INDIVIDUAL
   acceleratorConnectionMode: STATIC
   bootstrapKubernetes:
     version: "1.31"

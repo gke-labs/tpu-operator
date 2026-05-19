@@ -118,11 +118,12 @@ func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, template *api.Inst
 			},
 		},
 		Spec: api.ManagedInstanceGroupSpec{
-			Project:          tpuNodeGroup.Spec.Project,
-			Location:         tpuNodeGroup.Spec.NodeLocation,
-			InstanceTemplate: templateURL,
-			TargetSize:       tpuNodeGroup.Spec.NodeCount,
-			WorkloadPolicy:   wp,
+			Project:              tpuNodeGroup.Spec.Project,
+			Location:             tpuNodeGroup.Spec.NodeLocation,
+			InstanceTemplate:     templateURL,
+			TargetSize:           tpuNodeGroup.Spec.NodeCount,
+			WorkloadPolicy:       wp,
+			TargetSizePolicyMode: tpuNodeGroup.Spec.TargetSizePolicyMode,
 		},
 	}
 

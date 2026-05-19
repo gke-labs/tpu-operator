@@ -262,11 +262,6 @@ func (in *ManagedInstanceGroupSpec) DeepCopyInto(out *ManagedInstanceGroupSpec) 
 		*out = new(string)
 		**out = **in
 	}
-	if in.TargetSizePolicyMode != nil {
-		in, out := &in.TargetSizePolicyMode, &out.TargetSizePolicyMode
-		*out = new(string)
-		**out = **in
-	}
 	if in.DefaultActionOnFailure != nil {
 		in, out := &in.DefaultActionOnFailure, &out.DefaultActionOnFailure
 		*out = new(string)

@@ -91,15 +91,15 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 
 // ensureNodeLabels adds required labels to the node if they are missing.
 func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1.Node, group *tpuapi.TPUNodeGroup) error {
-	if node.Labels == nil {
-		node.Labels = make(map[string]string)
-	}
-
 	tpuNodeGroupLabelValue := fmt.Sprintf("%s-%s", group.Namespace, group.Name)
 
 	acceleratorType := acceleratorLabelValue(group)
 	if acceleratorType == "" {
 		return nil // Skip if we cannot determine accelerator type
+	}
+
+	if node.Labels == nil {
+		node.Labels = make(map[string]string)
 	}
 	countStr := strconv.Itoa(chipsPerNode(group))
 	needsUpdate := false

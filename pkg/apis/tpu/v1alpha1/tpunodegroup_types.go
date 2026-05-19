@@ -6,6 +6,7 @@ import (
 
 
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
+// +kubebuilder:validation:XValidation:rule="self.nodeCount > 1 || self.targetSizePolicyMode == 'INDIVIDUAL'",message="targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1 or less"
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
 	// +required
@@ -43,15 +44,22 @@ type TPUNodeGroupSpec struct {
 	AcceleratorConnectionMode string `json:"acceleratorConnectionMode"`
 
 	// Topology specifies the physical arrangement of the TPU chips.
-	// Required for multi-host slices. If omitted, assumes single-host.
-	// +optional
+	// Required for both single-host and multi-host slices to enable proper node labeling.
+	// +required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Topology is immutable"
-	Topology string `json:"topology,omitempty"`
+	Topology string `json:"topology"`
 
 	// BootstrapKubernetes defines if and how the controller should install K8s components.
 	// +optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="BootstrapKubernetes is immutable"
 	BootstrapKubernetes *BootstrapConfig `json:"bootstrapKubernetes,omitempty"`
+
+	// TargetSizePolicyMode specifies the mode of target size policy for the underlying MIG.
+	// Supported values are BULK and INDIVIDUAL.
+	// +kubebuilder:validation:Enum=BULK;INDIVIDUAL
+	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="TargetSizePolicyMode is immutable"
+	TargetSizePolicyMode string `json:"targetSizePolicyMode"`
 }
 
 // ServiceAccount defines the service account and scopes for the VM.
