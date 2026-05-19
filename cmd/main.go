@@ -15,6 +15,7 @@ import (
 	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
@@ -63,7 +64,22 @@ func main() {
 	}
 	defer gceManager.Close()
 
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		setupLog.Error(err, "Error adding corev1 scheme")
+		os.Exit(1)
+	}
+	if err := appsv1.AddToScheme(scheme); err != nil {
+		setupLog.Error(err, "Error adding appsv1 scheme")
+		os.Exit(1)
+	}
+	if err := tpuv1alpha1.AddToScheme(scheme); err != nil {
+		setupLog.Error(err, "Error adding tpuv1alpha1 scheme")
+		os.Exit(1)
+	}
+
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
 				&tpuv1alpha1.TPUNodeGroup{}:        {},
@@ -77,11 +93,6 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "Error creating manager")
-		os.Exit(1)
-	}
-
-	if err := tpuv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
-		setupLog.Error(err, "Error adding scheme")
 		os.Exit(1)
 	}
 
