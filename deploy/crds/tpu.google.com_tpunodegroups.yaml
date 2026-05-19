@@ -46,6 +46,9 @@ spec:
                 enum:
                 - STATIC
                 type: string
+                x-kubernetes-validations:
+                - message: AcceleratorConnectionMode is immutable
+                  rule: self == oldSelf
               bootstrapKubernetes:
                 description: BootstrapKubernetes defines if and how the controller
                   should install K8s components.
@@ -61,6 +64,8 @@ spec:
                 - controlPlaneIP
                 type: object
                 x-kubernetes-validations:
+                - message: BootstrapKubernetes is immutable
+                  rule: self == oldSelf
                 - message: Version must be set to 1.31
                   rule: has(self.version) && self.version == '1.31'
               instanceConfig:
@@ -141,28 +146,46 @@ spec:
                 required:
                 - machineType
                 type: object
+                x-kubernetes-validations:
+                - message: InstanceConfig is immutable
+                  rule: self == oldSelf
               minNodeCount:
                 description: MinNodeCount is the minimum required for a single-host
                   slice.
                 format: int32
                 type: integer
+                x-kubernetes-validations:
+                - message: MinNodeCount is immutable
+                  rule: self == oldSelf
               nodeCount:
                 description: NodeCount is the total number of VMs desired.
                 format: int32
                 type: integer
+                x-kubernetes-validations:
+                - message: NodeCount is immutable
+                  rule: self == oldSelf
               nodeLocation:
                 description: NodeLocation is the GCE Zone where the nodes will be
                   provisioned.
                 type: string
+                x-kubernetes-validations:
+                - message: NodeLocation is immutable
+                  rule: self == oldSelf
               project:
                 description: Project is the GCP project ID.
                 pattern: ^[a-z][a-z0-9-]{4,28}[a-z0-9]$
                 type: string
+                x-kubernetes-validations:
+                - message: Project is immutable
+                  rule: self == oldSelf
               topology:
                 description: |-
                   Topology specifies the physical arrangement of the TPU chips.
                   Required for multi-host slices. If omitted, assumes single-host.
                 type: string
+                x-kubernetes-validations:
+                - message: Topology is immutable
+                  rule: self == oldSelf
             required:
             - acceleratorConnectionMode
             - instanceConfig

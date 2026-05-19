@@ -10,39 +10,47 @@ type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
 	// +required
 	// +kubebuilder:validation:Pattern="^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Project is immutable"
 	Project string `json:"project"`
 
 	// NodeLocation is the GCE Zone where the nodes will be provisioned.
 	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="NodeLocation is immutable"
 	NodeLocation string `json:"nodeLocation"`
 
 	// TODO(b/513637092): Handle bring your own instance template URI.
 
 	// InstanceConfig allows the controller to generate an instance template.
 	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="InstanceConfig is immutable"
 	InstanceConfig *InstanceConfig `json:"instanceConfig"`
 
 	// NodeCount is the total number of VMs desired.
 	// +required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="NodeCount is immutable"
 	NodeCount int32 `json:"nodeCount"`
 
 	// MinNodeCount is the minimum required for a single-host slice.
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="MinNodeCount is immutable"
 	MinNodeCount int32 `json:"minNodeCount"`
 
 	// AcceleratorConnectionMode dictates how the chips are interconnected.
 	// Currently, the only valid value is static. (Immutable)
 	// +required
 	// +kubebuilder:validation:Enum=STATIC
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="AcceleratorConnectionMode is immutable"
 	AcceleratorConnectionMode string `json:"acceleratorConnectionMode"`
 
 	// Topology specifies the physical arrangement of the TPU chips.
 	// Required for multi-host slices. If omitted, assumes single-host.
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Topology is immutable"
 	Topology string `json:"topology,omitempty"`
 
 	// BootstrapKubernetes defines if and how the controller should install K8s components.
 	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="BootstrapKubernetes is immutable"
 	BootstrapKubernetes *BootstrapConfig `json:"bootstrapKubernetes,omitempty"`
 }
 
