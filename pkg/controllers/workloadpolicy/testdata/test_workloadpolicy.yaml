@@ -1,0 +1,10 @@
+apiVersion: tpu.google.com/v1alpha1
+kind: WorkloadPolicy
+metadata:
+  name: test-workloadpolicy
+  namespace: default
+spec:
+  project: gsc-nexus-xteam-shared-testing
+  region: us-central1
+  acceleratorTopology: "2x2x1"
+  type: HIGH_THROUGHPUT

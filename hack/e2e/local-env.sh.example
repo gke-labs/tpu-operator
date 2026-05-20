@@ -1,0 +1,12 @@
+# Local environment overrides for GCE E2E tests.
+# Copy this file to local-env.sh and fill in your values.
+# DO NOT commit local-env.sh to version control.
+
+# The name of the GCE VM running the Kubernetes control plane.
+CONTROL_PLANE_NODE="your-control-plane-node"
+
+# The GCP project where the cluster is running.
+PROJECT="your-gcp-project"
+
+# The GCE zone where the control plane VM is located.
+ZONE="us-central1-c"
