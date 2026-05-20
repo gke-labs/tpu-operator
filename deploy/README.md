@@ -1,34 +1,38 @@
 # Deployment Manifests
 
-This directory contains manifests for deploying the TPU Node Group Controller and the TPU Device Plugin.
+This directory contains manifests for deploying the TPU Node Group Controller and the TPU Device Plugin using Kustomize.
 
 ## Installation
 
-To install the controller and device plugin, follow these steps:
+The project uses Kustomize to manage modular manifests for different components.
 
-1.  **Apply CRDs**:
-    Ensure you have the Custom Resource Definitions applied.
-    ```bash
-    kubectl apply -f crds/
-    ```
+### 1. Apply CRDs
+Ensure you have the Custom Resource Definitions applied:
+```bash
+kubectl apply -f crds/
+```
 
-2.  **Apply Generated RBAC Roles**:
-    The RBAC roles are generated from code markers and are stored in the `rbac` directory.
-    ```bash
-    kubectl apply -f rbac/controller/role.yaml
-    kubectl apply -f rbac/deviceplugin/role.yaml
-    ```
+### 2. Apply All Components (Namespace, RBAC, Controller, Device Plugin)
+The recommended way to deploy is using the root kustomization:
+```bash
+kubectl apply -k .
+```
+This will create the `tpu-node-group-system` namespace and deploy both the controller and the device plugin with their respective RBAC roles.
 
-3.  **Apply Main Manifests**:
-    Apply the `install.yaml` file which contains the Namespace, ServiceAccounts, RoleBindings, and the Controller Deployment.
-    ```bash
-    kubectl apply -f install.yaml
-    ```
+### 3. Individual Component Deployment
+You can also deploy components individually if needed:
+```bash
+# Controller only
+kubectl apply -k controller/
+
+# Device Plugin only
+kubectl apply -k deviceplugin/
+```
 
 ## Regeneration
 
-If you update the RBAC markers in the controller or device plugin code, you must regenerate the roles using:
+If you update the RBAC markers in the code, regenerate the roles and CRDs using:
 ```bash
 make manifests
 ```
-from the root of the repository. This will update the files in `deploy/crds` and `deploy/rbac`.
+This will update the files in `deploy/crds`, `deploy/controller`, and `deploy/deviceplugin`.
