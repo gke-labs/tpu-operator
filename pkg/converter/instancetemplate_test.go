@@ -104,8 +104,8 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 	if gceTemplate.Properties.Scheduling.ProvisioningModel == nil || *gceTemplate.Properties.Scheduling.ProvisioningModel != *cr.Spec.ProvisioningModel {
 		t.Errorf("Expected ProvisioningModel %q, got %q", *cr.Spec.ProvisioningModel, *gceTemplate.Properties.Scheduling.ProvisioningModel)
 	}
-	if gceTemplate.Properties.Scheduling.InstanceTerminationAction == nil || *gceTemplate.Properties.Scheduling.InstanceTerminationAction != "DELETE" {
-		t.Errorf("Expected InstanceTerminationAction %q, got %q", "DELETE", *gceTemplate.Properties.Scheduling.InstanceTerminationAction)
+	if gceTemplate.Properties.Scheduling.InstanceTerminationAction == nil || *gceTemplate.Properties.Scheduling.InstanceTerminationAction != "STOP" {
+		t.Errorf("Expected InstanceTerminationAction %q, got %q", "STOP", *gceTemplate.Properties.Scheduling.InstanceTerminationAction)
 	}
 
 	if gceTemplate.Properties.ReservationAffinity == nil {
