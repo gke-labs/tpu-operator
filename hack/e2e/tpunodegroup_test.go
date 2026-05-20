@@ -298,7 +298,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		t.Log("=== Verifying GCP resource creation ===")
 		project := os.Getenv("E2E_PROJECT")
 		if project == "" {
-			project = "gsc-nexus-xteam-shared-testing"
+			t.Fatal("E2E_PROJECT environment variable must be set")
 		}
 		zone := os.Getenv("E2E_ZONE")
 		if zone == "" {

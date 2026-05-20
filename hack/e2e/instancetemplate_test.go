@@ -24,7 +24,7 @@ func TestInstanceTemplate(t *testing.T) {
 	crName := "tpu-node-group-test-template"
 	project := os.Getenv("E2E_PROJECT")
 	if project == "" {
-		project = "gsc-nexus-xteam-shared-testing"
+		t.Fatal("E2E_PROJECT environment variable must be set")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)

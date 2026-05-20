@@ -28,7 +28,7 @@ const (
 // and mutates NodeSummary in memory.
 func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.IGMClient, group *tpuapi.TPUNodeGroup) error {
 	// 1. Get list of expected instances from MIG
-	// TODO(b/500810349): Get actual MIG name from status or child CR when available.
+	// TODO: Get actual MIG name from status or child CR when available.
 	migName := group.ManagedInstanceGroupName()
 	instances, err := igmClient.ListManagedInstances(ctx, group.Spec.Project, group.Spec.NodeLocation, migName)
 	if err != nil {
@@ -62,7 +62,7 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 			for _, cond := range node.Status.Conditions {
 				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
 					readyCount++
-					// TODO(b/500810349): Cleanup bootstrap token secret for this node after it has joined.
+					// TODO: Cleanup bootstrap token secret for this node after it has joined.
 					break
 				}
 			}
@@ -85,7 +85,7 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 	group.Status.NodeSummary.Ready = int32(readyCount)
 	group.Status.NodeSummary.Reconciling = group.Spec.NodeCount - int32(readyCount)
 
-	// TODO(b/500810349): Use providerID for lookup in the future.
+	// TODO: Use providerID for lookup in the future.
 	return nil
 }
 

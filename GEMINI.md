@@ -1,7 +1,7 @@
 ---
 name: TPU Node Group Controller Agent Guide
 description: Guiding document for AI agents working on the TPU Node Group project.
-last_updated: 2026-05-07
+last_updated: 2026-05-20
 ---
 
 # TPU Node Group Controller
@@ -29,9 +29,11 @@ tpu-node-group/
 │   ├── apis/               # API definitions (Group/Version)
 │   ├── controllers/
 │   │   ├── tpunodegroup/    # Main controller logic
-│   │   └── instancetemplate/ # InstanceTemplate controller logic
-│   ├── gce/                # GCE provider interactions
-│   └── generated/          # Auto-generated client code (client-go)
+│   │   ├── instancetemplate/ # InstanceTemplate controller logic
+│   │   ├── managedinstancegroup/ # ManagedInstanceGroup controller logic
+│   │   └── workloadpolicy/  # WorkloadPolicy controller logic
+│   ├── converter/          # Type conversion utilities
+│   └── gce/                # GCE provider interactions
 ├── hack/                   # Helper scripts and boilerplates
 ├── docs/                   # Task-specific documentation & controller basics
 └── Makefile                # Build and generation tasks
@@ -42,21 +44,19 @@ tpu-node-group/
 ### Development Commands
 | Task | Command |
 | :--- | :--- |
-| **Run Tests** | `go test ./...` |
-| **Generate Clients** | `make codegen-client` |
+| **Run Tests** | `make test` |
+| **Run E2E Tests** | `make e2e-test` |
+| **Generate Code** | `make generate` |
 | **Generate CRDs** | `make manifests` |
 | **Update Dependencies** | `go mod tidy && go mod vendor` |
 
 ### Source Control
 *   **Git**: Use `git` for all version control operations.
 *   **Vendor**: Ignore `vendor/` in diffs by default: `git show <commit> -- . ':!vendor'`.
-*   **Commits**: Follow [STYLE.md](STYLE.md) for Conventional Commits and Buganizer linking (e.g., `Bug: b/12345`).
+*   **Commits**: Follow [STYLE.md](STYLE.md) for commit message guidelines.
 
 ## 📖 Key References
 
 *   [STYLE.md](STYLE.md): Coding standards (Go, Markdown, Commits).
-*   [DESIGN.md](DESIGN.md): Architectural decisions and project roadmap.
-*   **Go Readability**: Trigger the `go_readability` skill to review changes before finalizing.
 
-## ⚠️ Critical Reminder
-This repository is **NOT** Google3. Do not use Piper, CitC, or Blaze. Use Git, Go modules, and Make. Cross-reference Google3 code only via `/google/src/files/head/depot/google3/...`.
+

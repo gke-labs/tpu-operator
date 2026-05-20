@@ -2,21 +2,17 @@
 
 ## Go
 
-For a distilled guide to Go style and readability, see the [Go Readability skill][go-readability-skill]. Note that Google3-specific parts of this skill do not apply to this repository.
-
-We recommend triggering the `go_readability` skill to review your Go code changes.
+For Go style, please follow the standard Go guidelines and use `gofmt`.
 
 ## Markdown
 
-Please follow [g3doc style guide][g3doc-style]. Please use [mdformat][mdformat]
-to format the markdown files.
+Please use standard markdown formatting.
 
 ## Commit Message
 
 Please follow [Conventional Commits][conventional-commits] for your git commit
-messages, and refer to the following guides for writing good commit messages:
+messages, and refer to the following guide for writing good commit messages:
 
--   [Writing Good CL Descriptions][cl-description-rule]
 -   [The seven rules of a great Git commit message][commit-message-rule].
 
 The commit message should be structured as follows:
@@ -58,16 +54,6 @@ the consumers of your library:
     -   focus on *what* and *why*, instead of *how*
     -   wrap at 72 chars
 
-### Linking a Buganizer Issue on the Commit Message
-
-You MUST always include a Buganizer issue ID in the commit message. If you are unsure which bug ID to use, ask the user for clarification.
-
-GKE Gerrit enables go/gitwatcher, so if your commit message contains a buganizer issue in the form of 'b/xxxxxx', the issue will be updated once the commit is merged. For consistency, please use a git-trailer format to link the issue. For example:
-
-```text
-Bug: b/234567
-```
-
 ### Gerrit Footers and Agent Tracking
 
 When amending commits for Gerrit review, ensure that the `Change-Id` footer is preserved without duplication. To prevent the Gerrit `commit-msg` hook from appending a duplicate `Change-Id`, place an **empty line** immediately before the `Change-Id` line, keeping it in its own paragraph at the very end of the commit message.
@@ -76,26 +62,13 @@ Additionally, if AI agents append conversation tracking IDs (`CONV=`), include o
 
 Example:
 ```text
-Bug: b/234567
+Issue: #123
 CONV=3480ad33-79f1-43a5-bf23-7201ad96c2d0
 
 Change-Id: I6ce475e821c12e68955a416038c7294f94edf587
 ```
 
-## TODO Style
 
-When adding TODOs in the codebase, always include a Buganizer issue ID in the format `TODO(b/xxxxx):`. This ensures that TODOs are tracked and can be followed up on.
-
-Example:
-```go
-// TODO(b/123456): Implement this feature.
-```
-
-
-[g3doc-style]: https://g3doc.corp.google.com/corp/g3doc/docs/reference/style.md
-[mdformat]: https://g3doc.corp.google.com/devtools/markdown/mdformat/g3doc/index.md
 [conventional-commits]: https://www.conventionalcommits.org/en/v1.0.0
 [git-interpret-trailers]: https://git-scm.com/docs/git-interpret-trailers
-[cl-description-rule]: https://goto.google.com/cl-descriptions
 [commit-message-rule]: https://chris.beams.io/posts/git-commit/
-[go-readability-skill]: /google/src/files/head/depot/google3/learning/gemini/agents/skills/go_readability/SKILL.md

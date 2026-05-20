@@ -24,7 +24,7 @@ func TestWorkloadPolicy(t *testing.T) {
 	crName := "test-workloadpolicy"
 	project := os.Getenv("E2E_PROJECT")
 	if project == "" {
-		project = "gsc-nexus-xteam-shared-testing"
+		t.Fatal("E2E_PROJECT environment variable must be set")
 	}
 	region := os.Getenv("E2E_REGION")
 	if region == "" {

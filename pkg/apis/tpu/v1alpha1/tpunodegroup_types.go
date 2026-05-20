@@ -19,7 +19,7 @@ type TPUNodeGroupSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="NodeLocation is immutable"
 	NodeLocation string `json:"nodeLocation"`
 
-	// TODO(b/513637092): Handle bring your own instance template URI.
+	// TODO: Handle bring your own instance template URI.
 
 	// InstanceConfig allows the controller to generate an instance template.
 	// +required
