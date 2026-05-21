@@ -107,145 +107,31 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Handle deletion
 	if !tpuNodeGroup.DeletionTimestamp.IsZero() {
-		logger.Info("TPUNodeGroup is being deleted")
-
-		hasAnyFinalizer := controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerMIG) ||
-			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerTemplate) ||
-			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerPolicy) ||
-			controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerNodes)
-
-		if hasAnyFinalizer {
-			logger.Info("Cordoning nodes")
-			if err := cordonNodes(ctx, logger, r.Client, &tpuNodeGroup); err != nil {
-				return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
-			}
-
-			// Process finalizers sequentially
-
-			// 1. MIG
-			if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerMIG) {
-				logger.Info("Ensuring ManagedInstanceGroup is deleted")
-				done, err := ensureManagedInstanceGroupDeleted(ctx, r.Client, &tpuNodeGroup)
-				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to delete MIG: %w", err)
-				}
-				if !done {
-					logger.Info("Waiting for ManagedInstanceGroup to be deleted")
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-				controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerMIG)
-				if err := r.Update(ctx, &tpuNodeGroup); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to remove MIG finalizer: %w", err)
-				}
-				return ctrl.Result{}, nil // Return and reconcile again
-			}
-
-			// 2. Template
-			if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerTemplate) {
-				logger.Info("Ensuring InstanceTemplate is deleted")
-				done, err := ensureInstanceTemplateDeleted(ctx, r.Client, &tpuNodeGroup)
-				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
-				}
-				if !done {
-					logger.Info("Waiting for InstanceTemplate to be deleted")
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-				controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerTemplate)
-				if err := r.Update(ctx, &tpuNodeGroup); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to remove Template finalizer: %w", err)
-				}
-				return ctrl.Result{}, nil // Return and reconcile again
-			}
-
-			// 3. Policy
-			if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerPolicy) {
-				logger.Info("Ensuring WorkloadPolicy is deleted")
-				done, err := ensureWorkloadPolicyDeleted(ctx, r.Client, &tpuNodeGroup)
-				if err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
-				}
-				if !done {
-					logger.Info("Waiting for WorkloadPolicy to be deleted")
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
-				}
-				controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerPolicy)
-				if err := r.Update(ctx, &tpuNodeGroup); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to remove Policy finalizer: %w", err)
-				}
-				return ctrl.Result{}, nil // Return and reconcile again
-			}
-
-			// 4. Nodes
-			if controllerutil.ContainsFinalizer(&tpuNodeGroup, finalizerNodes) {
-				logger.Info("Deleting stale Node objects")
-				if err := deleteNodeObjects(ctx, logger, r.Client, &tpuNodeGroup); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
-				}
-				controllerutil.RemoveFinalizer(&tpuNodeGroup, finalizerNodes)
-				if err := r.Update(ctx, &tpuNodeGroup); err != nil {
-					return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)
-				}
-				return ctrl.Result{}, nil // Return and reconcile again
-			}
-		}
-		return ctrl.Result{}, nil
+		return handleDeletion(ctx, logger, r.Client, &tpuNodeGroup)
 	}
 
 	// Add finalizers if not present
-	updated := false
-	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerMIG) {
-		updated = true
+	updated, err := r.ensureFinalizers(ctx, &tpuNodeGroup)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerTemplate) {
-		updated = true
-	}
-	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerPolicy) {
-		updated = true
-	}
-	if controllerutil.AddFinalizer(&tpuNodeGroup, finalizerNodes) {
-		updated = true
-	}
-
 	if updated {
-		if err := r.Update(ctx, &tpuNodeGroup); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizers: %w", err)
-		}
 		return ctrl.Result{}, nil // Return and let it reconcile again with finalizers
 	}
 
 	// Step 1: Reconcile Workload Policy
 	if err := r.reconcileWorkloadPolicy(ctx, &tpuNodeGroup); err != nil {
-		var waitErr *WaitingForChildError
-		if errors.As(err, &waitErr) {
-			logger.Info(waitErr.Error())
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile workload policy: %w", err)
+		return interpretWaitingOrError(logger, err, "failed to reconcile workload policy")
 	}
 
 	// Step 2: Reconcile Instance Template
 	if err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
-		var waitErr *WaitingForChildError
-		if errors.As(err, &waitErr) {
-			// We do not return an error or an explicit requeue timer here.
-			// Because the controller is configured with .Owns(&tpuapi.InstanceTemplate{}),
-			// any status update to the child CR (e.g., Status.URI being populated)
-			// will automatically trigger a new reconciliation request for the parent TPUNodeGroup.
-			logger.Info(waitErr.Error())
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
+		return interpretWaitingOrError(logger, err, "failed to reconcile instance template")
 	}
 
 	// Step 3: Reconcile Managed Instance Group
 	if err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
-		var waitErr *WaitingForChildError
-		if errors.As(err, &waitErr) {
-			logger.Info(waitErr.Error())
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
+		return interpretWaitingOrError(logger, err, "failed to reconcile MIG")
 	}
 
 	// Step 4: Inject Metadata
@@ -269,6 +155,48 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// ensureFinalizers ensures that the required finalizers are present on the TPUNodeGroup.
+// It returns true if the object was updated, and false otherwise.
+func (r *TPUNodeGroupReconciler) ensureFinalizers(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
+	patchBase := group.DeepCopy()
+	updated := false
+	if controllerutil.AddFinalizer(group, finalizerMIG) {
+		updated = true
+	}
+	if controllerutil.AddFinalizer(group, finalizerTemplate) {
+		updated = true
+	}
+	if controllerutil.AddFinalizer(group, finalizerPolicy) {
+		updated = true
+	}
+	if controllerutil.AddFinalizer(group, finalizerNodes) {
+		updated = true
+	}
+
+	if !updated {
+		return false, nil
+	}
+
+	if err := r.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		return false, fmt.Errorf("failed to patch finalizers: %w", err)
+	}
+	return true, nil
+}
+
+// interpretWaitingOrError handles errors from child reconcilers, specifically WaitingForChildError.
+// We do not return an error or an explicit requeue timer when waiting for a child resource.
+// Because the controller is configured with .Owns() for these child CRs in SetupWithManager,
+// any status update to the child CR (e.g., Status.URI being populated) will automatically
+// trigger a new reconciliation request for the parent TPUNodeGroup.
+func interpretWaitingOrError(logger logr.Logger, err error, message string) (ctrl.Result, error) {
+	var waitErr *WaitingForChildError
+	if errors.As(err, &waitErr) {
+		logger.Info(waitErr.Error())
+		return ctrl.Result{}, nil
+	}
+	return ctrl.Result{}, fmt.Errorf("%s: %w", message, err)
 }
 
 // reconcileWorkloadPolicy orchestrates the child WorkloadPolicy CR.
