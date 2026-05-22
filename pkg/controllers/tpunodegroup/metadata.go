@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
-	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	tpuapi "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/gce"
 	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

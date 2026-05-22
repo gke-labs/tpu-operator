@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"

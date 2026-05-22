@@ -22,8 +22,8 @@ import (
 
 	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
-	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	tpuapi "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/gce"
 	"k8s.io/utils/ptr"
 )
 

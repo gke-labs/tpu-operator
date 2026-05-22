@@ -15,9 +15,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/converter"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	tpuv1alpha1 "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/converter"
+	"github.com/gke-labs/tpu-operator/pkg/gce"
 )
 
 const finalizerName = "tpu.google.com/managedinstancegroup-cleanup"
