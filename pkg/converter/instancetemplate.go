@@ -4,7 +4,7 @@ import (
 	"sort"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	tpuv1alpha1 "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	"k8s.io/utils/ptr"
 )
 
@@ -34,8 +34,10 @@ func ToGCEInstanceTemplate(cr *tpuv1alpha1.InstanceTemplate) *computepb.Instance
 			// TODO: This is a shortcut to avoid GCE error when provisioning model is RESERVATION_BOUND or SPOT.
 			// Proper fix should introduce a new field in InstanceTemplateSpec to track terminate action and do proper defaulting in controller.
 			switch *cr.Spec.ProvisioningModel {
-			case "RESERVATION_BOUND", "SPOT":
+			case "RESERVATION_BOUND":
 				scheduling.InstanceTerminationAction = ptr.To("DELETE")
+			case "SPOT":
+				scheduling.InstanceTerminationAction = ptr.To("STOP")
 			}
 		}
 		properties.Scheduling = scheduling

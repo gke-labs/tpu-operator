@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
-	tpuapi "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	tpuapi "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 const tpuNodeGroupLabel = "cloud.google.com/tpu-node-group"
@@ -144,4 +147,104 @@ func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client
 	}
 
 	return errors.Join(errs...)
+}
+
+// handleDeletion handles the deletion of the TPUNodeGroup and its child resources.
+// It returns a ctrl.Result and an error. If the result is non-empty or error is non-nil,
+// the caller should return immediately.
+func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (ctrl.Result, error) {
+	if group.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("TPUNodeGroup is being deleted")
+
+	hasAnyFinalizer := controllerutil.ContainsFinalizer(group, finalizerMIG) ||
+		controllerutil.ContainsFinalizer(group, finalizerTemplate) ||
+		controllerutil.ContainsFinalizer(group, finalizerPolicy) ||
+		controllerutil.ContainsFinalizer(group, finalizerNodes)
+
+	if !hasAnyFinalizer {
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("Cordoning nodes")
+	if err := cordonNodes(ctx, logger, k8sClient, group); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
+	}
+
+	// Process finalizers sequentially
+
+	// 1. MIG
+	if controllerutil.ContainsFinalizer(group, finalizerMIG) {
+		logger.Info("Ensuring ManagedInstanceGroup is deleted")
+		done, err := ensureManagedInstanceGroupDeleted(ctx, k8sClient, group)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete MIG: %w", err)
+		}
+		if !done {
+			logger.Info("Waiting for ManagedInstanceGroup to be deleted")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		patchBase := group.DeepCopy()
+		controllerutil.RemoveFinalizer(group, finalizerMIG)
+		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove MIG finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil // Return and reconcile again
+	}
+
+	// 2. Template
+	if controllerutil.ContainsFinalizer(group, finalizerTemplate) {
+		logger.Info("Ensuring InstanceTemplate is deleted")
+		done, err := ensureInstanceTemplateDeleted(ctx, k8sClient, group)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
+		}
+		if !done {
+			logger.Info("Waiting for InstanceTemplate to be deleted")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		patchBase := group.DeepCopy()
+		controllerutil.RemoveFinalizer(group, finalizerTemplate)
+		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove Template finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil // Return and reconcile again
+	}
+
+	// 3. Policy
+	if controllerutil.ContainsFinalizer(group, finalizerPolicy) {
+		logger.Info("Ensuring WorkloadPolicy is deleted")
+		done, err := ensureWorkloadPolicyDeleted(ctx, k8sClient, group)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
+		}
+		if !done {
+			logger.Info("Waiting for WorkloadPolicy to be deleted")
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		patchBase := group.DeepCopy()
+		controllerutil.RemoveFinalizer(group, finalizerPolicy)
+		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove Policy finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil // Return and reconcile again
+	}
+
+	// 4. Nodes
+	if controllerutil.ContainsFinalizer(group, finalizerNodes) {
+		logger.Info("Deleting stale Node objects")
+		if err := deleteNodeObjects(ctx, logger, k8sClient, group); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
+		}
+		patchBase := group.DeepCopy()
+		controllerutil.RemoveFinalizer(group, finalizerNodes)
+		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil // Return and reconcile again
+	}
+
+	return ctrl.Result{}, nil
 }

@@ -1,8 +1,6 @@
-# tpu-operator
+# Provisioning TPUs on GCE Self-Managed Kubernetes
 
-A Kubernetes operator designed to automate the lifecycle of TPU slices within self-managed clusters on Google Compute Engine (GCE).
-
-## Overview
+## Overview: What the Controller Does for You
 
 When running self-managed Kubernetes on Google Compute Engine (GCE), provisioning TPU slices manually requires orchestrating multiple GCE APIs, managing complex metadata for hardware discovery, and bootstrapping nodes.
 
@@ -34,7 +32,9 @@ You can assign the roles/compute.admin role, or for least-privilege environments
 * compute.instanceTemplates.\*
 * compute.resourcePolicies.\*
 * compute.instanceGroupManagers.\*
+* compute.instanceGroups.\*
 * compute.instances.\*
+* compute.subnetworks.get
 
 ### Set Up Kubernetes Control Plane (GCE VM)
 
@@ -137,7 +137,7 @@ kubectl apply -k deploy/
 4. Verify the Controller is Running:
 
 ```shell
-kubectl get pods -n kube-system
+kubectl get pods -n tpu-node-group
 ```
 
 *Note: If you are running a single-node cluster (control plane only), you may need to untaint the node to allow the controller to run: `kubectl taint nodes --all node-role.kubernetes.io/control-plane-`*
@@ -258,9 +258,6 @@ spec:
         cloud.google.com/gke-tpu-accelerator: $ACCELERATOR
       tolerations:
       - key: "google.com/tpu"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node.kubernetes.io/disk-pressure"
         operator: "Exists"
         effect: "NoSchedule"
       containers:
@@ -397,16 +394,3 @@ kubectl create secret generic tpu-node-group-credentials \
           value: /etc/gcp/key.json
 ```
 
-## Contributing
-
-This project is licensed under the [Apache 2.0 License](LICENSE).
-
-We welcome contributions! Please see [docs/contributing.md](docs/contributing.md) for more information.
-
-We follow [Google's Open Source Community Guidelines](https://opensource.google.com/conduct/).
-
-## Disclaimer
-
-This is not an officially supported Google product.
-
-This project is not eligible for the Google Open Source Software Vulnerability Rewards Program.
