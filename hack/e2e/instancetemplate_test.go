@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )

@@ -34,7 +34,9 @@ You can assign the roles/compute.admin role, or for least-privilege environments
 * compute.instanceTemplates.\*
 * compute.resourcePolicies.\*
 * compute.instanceGroupManagers.\*
+* compute.instanceGroups.\*
 * compute.instances.\*
+* compute.subnetworks.get
 
 ### Set Up Kubernetes Control Plane (GCE VM)
 
@@ -137,7 +139,7 @@ kubectl apply -k deploy/
 4. Verify the Controller is Running:
 
 ```shell
-kubectl get pods -n kube-system
+kubectl get pods -n tpu-node-group
 ```
 
 *Note: If you are running a single-node cluster (control plane only), you may need to untaint the node to allow the controller to run: `kubectl taint nodes --all node-role.kubernetes.io/control-plane-`*
@@ -258,9 +260,6 @@ spec:
         cloud.google.com/gke-tpu-accelerator: $ACCELERATOR
       tolerations:
       - key: "google.com/tpu"
-        operator: "Exists"
-        effect: "NoSchedule"
-      - key: "node.kubernetes.io/disk-pressure"
         operator: "Exists"
         effect: "NoSchedule"
       containers:

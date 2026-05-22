@@ -18,8 +18,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
-	"gke-internal.googlesource.com/tpu-node-group/pkg/gce"
+	tpuv1alpha1 "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/gce"
 )
 
 func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {

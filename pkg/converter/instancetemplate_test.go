@@ -5,7 +5,7 @@ import (
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/google/go-cmp/cmp"
-	tpuv1alpha1 "gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	tpuv1alpha1 "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )
@@ -104,8 +104,8 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 	if gceTemplate.Properties.Scheduling.ProvisioningModel == nil || *gceTemplate.Properties.Scheduling.ProvisioningModel != *cr.Spec.ProvisioningModel {
 		t.Errorf("Expected ProvisioningModel %q, got %q", *cr.Spec.ProvisioningModel, *gceTemplate.Properties.Scheduling.ProvisioningModel)
 	}
-	if gceTemplate.Properties.Scheduling.InstanceTerminationAction == nil || *gceTemplate.Properties.Scheduling.InstanceTerminationAction != "DELETE" {
-		t.Errorf("Expected InstanceTerminationAction %q, got %q", "DELETE", *gceTemplate.Properties.Scheduling.InstanceTerminationAction)
+	if gceTemplate.Properties.Scheduling.InstanceTerminationAction == nil || *gceTemplate.Properties.Scheduling.InstanceTerminationAction != "STOP" {
+		t.Errorf("Expected InstanceTerminationAction %q, got %q", "STOP", *gceTemplate.Properties.Scheduling.InstanceTerminationAction)
 	}
 
 	if gceTemplate.Properties.ReservationAffinity == nil {

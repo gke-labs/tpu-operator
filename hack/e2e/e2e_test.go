@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"gke-internal.googlesource.com/tpu-node-group/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -61,11 +61,23 @@ func setup() {
 		log.Fatalf("Failed to apply CRDs: %v", err)
 	}
 
-	fmt.Println("=== Applying E2E RBAC ===")
-	cmd = exec.Command("kubectl", "apply", "-f", "hack/e2e/tpu_device_plugin_rbac_e2e.yaml")
+	fmt.Println("=== Cleaning up Stale Device Plugin DaemonSet ===")
+	cmd = exec.Command("kubectl", "delete", "daemonset", "tpu-device-plugin", "-n", "kube-system", "--ignore-not-found")
 	cmd.Dir = repoRoot
 	if err := cmd.Run(); err != nil {
-		log.Fatalf("Failed to apply E2E RBAC: %v", err)
+		log.Fatalf("Failed to delete stale device plugin DaemonSet: %v", err)
+	}
+
+	fmt.Println("=== Reseting Device Plugin RBAC State ===")
+	cleanupCmd := exec.Command("kubectl", "delete", "-k", "deploy/deviceplugin", "--ignore-not-found")
+	cleanupCmd.Dir = repoRoot
+	_ = cleanupCmd.Run()
+
+	fmt.Println("=== Applying Device Plugin Production RBAC & SA via Kustomize ===")
+	applyCmd := exec.Command("kubectl", "apply", "-k", "deploy/deviceplugin")
+	applyCmd.Dir = repoRoot
+	if err := applyCmd.Run(); err != nil {
+		log.Fatalf("Failed to apply device plugin components: %v", err)
 	}
 
 	kubeconfig := os.Getenv("KUBECONFIG")
@@ -194,8 +206,8 @@ func teardown() {
 	}
 	_ = os.Remove(controllerBinPath)
 
-	fmt.Println("=== Cleaning up E2E RBAC ===")
-	cleanupCmd := exec.Command("kubectl", "delete", "-f", "hack/e2e/tpu_device_plugin_rbac_e2e.yaml", "--ignore-not-found")
+	fmt.Println("=== Cleaning up Device Plugin Production RBAC & SA via Kustomize ===")
+	cleanupCmd := exec.Command("kubectl", "delete", "-k", "deploy/deviceplugin", "--ignore-not-found")
 	cleanupCmd.Dir = repoRoot
 	_ = cleanupCmd.Run()
 }
@@ -211,7 +223,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.TPUNodeGroup{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete TPUNodeGroups: %v", err)
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
 				list := &v1alpha1.TPUNodeGroupList{}
 				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
 					return false, err
