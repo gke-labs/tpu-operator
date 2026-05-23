@@ -159,7 +159,7 @@ func setup() {
 	}
 
 	if actualIP != expectedIP {
-		log.Fatalf("SAFETY ERROR: E2E test suite is running against a K8s cluster whose control-plane IP (%s) does NOT match the expected TPUNodeGroup controlPlaneIP (%s). Please ensure KUBECONFIG is set to the correct cluster (e.g. hack/e2e/remote-kubeconfig.yaml) and the SSH tunnel is active.", actualIP, expectedIP)
+		log.Fatalf("SAFETY ERROR: E2E test suite is running against a K8s cluster whose control-plane IP (%s) does NOT match the expected TPUNodeGroup controlPlaneIP (%s). Please ensure KUBECONFIG is set to the correct cluster (e.g. e2e/remote-kubeconfig.yaml) and the SSH tunnel is active.", actualIP, expectedIP)
 	}
 	fmt.Printf("Safety check passed: Confirmed E2E is running against target cluster (Control Plane: %s, IP: %s)\n\n", controlPlaneNode.Name, actualIP)
 

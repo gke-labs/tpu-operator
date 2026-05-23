@@ -40,7 +40,7 @@ fi
 echo "Localizing kubeconfig to use localhost:${LOCAL_PORT} and skip TLS verify..."
 # Use sed to replace the server and add insecure-skip-tls-verify
 # We also remove the certificate-authority-data to avoid conflicts with localhost cert
-sed -i "s|server: https://.*:6443|server: https://127.0.0.1:${LOCAL_PORT}|" "${KUBECONFIG_PATH}"
+sed -i "s|server: https://.*:[0-9]*|server: https://127.0.0.1:${LOCAL_PORT}|" "${KUBECONFIG_PATH}"
 sed -i "/certificate-authority-data:/d" "${KUBECONFIG_PATH}"
 # Insert insecure-skip-tls-verify: true into the cluster section
 sed -i "/cluster:/a \    insecure-skip-tls-verify: true" "${KUBECONFIG_PATH}"
@@ -48,15 +48,25 @@ sed -i "/cluster:/a \    insecure-skip-tls-verify: true" "${KUBECONFIG_PATH}"
 # 3. Establish SSH Tunnel
 echo "Establishing SSH tunnel to ${CONTROL_PLANE_NODE}:${LOCAL_PORT}..."
 # Kill existing tunnel if any
-pkill -f "ssh.*-L ${LOCAL_PORT}:localhost:${LOCAL_PORT}"
+pkill -f "ssh.*-L ${LOCAL_PORT}:localhost:${LOCAL_PORT}" || true
 
 gcloud compute ssh "${CONTROL_PLANE_NODE}" \
   --project="${PROJECT}" \
   --zone="${ZONE}" \
-  -- -L "${LOCAL_PORT}:localhost:6443" -N -f
+  -- -L "${LOCAL_PORT}:localhost:6443" -N -f -o ServerAliveInterval=30 -o ServerAliveCountMax=3
 
-if [ $? -ne 0 ]; then
-  echo "Error: Failed to establish SSH tunnel."
+echo "Waiting for tunnel to be ready..."
+for i in {1..15}; do
+  if nc -z 127.0.0.1 "${LOCAL_PORT}"; then
+    echo "Tunnel is ready!"
+    break
+  fi
+  echo "Still waiting for tunnel..."
+  sleep 2
+done
+
+if ! nc -z 127.0.0.1 "${LOCAL_PORT}"; then
+  echo "Error: Failed to establish SSH tunnel or tunnel is not reachable."
   exit 1
 fi
 
