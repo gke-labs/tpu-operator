@@ -13,11 +13,39 @@ From your perspective, you simply provide a TPUNodeGroup CR declaring your desir
    * Instance Template: Defines the VM configuration (machine type, image, disks, metadata, etc.) used by the Managed Instance Group.
    * Managed Instance Group (MIG): Responsible for actually provisioning and managing the lifecycle of the Virtual Machines. For multi-host slices, users must explicitly configure `targetSizePolicyMode: "BULK"` in the TPUNodeGroup CR. The controller then configures the MIG to use "bulk mode", which guarantees atomic provisioning. This ensures GCE will only create the VMs if it can successfully allocate the entire slice at once, preventing partial, unusable setups.
 2. Inject TPU Metadata: Automatically inject TPU configuration metadata needed by the TPU Device Plugin (like kube-labels and accelerator\_topology\_id) into the VMs via the MIG.
-3. Bootstrap Kubernetes: The controller handles the bootstrapping of the Kubernetes nodes. The controller generates a bootstrap token (creating a corresponding Kubernetes Secret) and injects it into the GCE metadata of the instances. The startup script then fetches these configurations to execute the `kubeadm join` command, securely attaching the new TPU VMs directly to your self-managed control plane. *(Note: This feature is primarily provided to facilitate rapid prototyping and testing. For production environments, it is expected that users will leverage their existing mechanisms for node bootstrapping, such as custom OS images or configuration management tools)*.
+3. Secure "Pull-Model" Bootstrapping: To handle long GCE provisioning times (where standard short-lived kubeadm tokens might expire), the controller implements a **Pull Model**. Instead of injecting tokens at VM creation, the controller waits for the VM state to be `RUNNING`, then injects a dynamic, short-lived join token into Instance Metadata. A startup script on the VM polls for this token, ensuring a secure and reliable cluster join even after extended provisioning delays. (Note: This feature is primarily provided to facilitate rapid prototyping and testing. For production environments, it is expected that users will leverage their existing mechanisms for node bootstrapping, such as custom OS images or configuration management tools).
 4. Deploy the TPU Device Plugin: The controller automatically deploys a streamlined, open-source TPU device plugin to your cluster as a DaemonSet. This plugin acts as the bridge between the raw TPU hardware and the Kubernetes scheduler. It discovers the attached TPU chips, registers them as schedulable resources (e.g., google.com/tpu), and handles local hardware health monitoring.
 5. Handle Graceful Teardown: When the TPUNodeGroup CR is deleted, the controller orchestrates a graceful teardown using a Kubernetes Finalizer. It cordons the nodes, deletes the GCE resources (MIG, Instance Template, and Workload Policy) in reverse order, and removes stale Node objects from the cluster.
 
 *Note: The current release supports v6e and v7x TPU generations.*
+
+---
+
+## Design Philosophy: Reference Bootstrapping
+
+This project is intended as a **Reference Implementation** for experimental and testing purposes. 
+
+**Core Assumption:** We assume that production customers already have mature solutions for their node infrastructure and lifecycle. For those who need a rapid, "turn-key" way to experiment with TPUs on self-managed clusters, we provide a **Reference Bootstrapping** flow using standard Kubernetes mechanics.
+
+## Architecture: The Composite Pattern
+
+This controller is designed using the **Composite Pattern** to maximize modularity and reusability. Instead of a single monolithic state machine, the project is structured as a parent controller that orchestrates three dedicated child Custom Resources:
+
+*   **ResourcePolicy Controller:** Manages GCE Resource Policies (Workload Policies) for ICI networking.
+*   **InstanceTemplate Controller:** Manages GCE Instance Templates.
+*   **ManagedInstanceGroup Controller:** Manages GCE MIGs, with specific support for bulk allocation.
+
+All infrastructure resources are managed asynchronously via official **Google Cloud Go Client Libraries**. This architecture allows the `TPUNodeGroup` controller to focus solely on high-level workload orchestration and node lifecycle, leaving the low-level GCE "3C" (Compute) resource management to specialized, decoupled sub-controllers.
+
+### The Join-to-Workload Lifecycle
+
+When `bootstrapKubernetes` is enabled, the controller orchestrates the following configuration sequence:
+
+1.  **Controller (Token Generation):** The controller creates a **Bootstrap Secret** containing a kubeadm join token (type `bootstrap.kubernetes.io/token`) in the `kube-system` namespace.
+2.  **Controller (Metadata Injection):** The controller injects the **kubeadm Join Token**, **Control Plane IP**, and **CA Cert Hash** into the GCE Instance Metadata for each VM in the slice.
+3.  **GCE VM (Pull-Model Join):** The VM startup script "pulls" these three values from the metadata and executes the `kubeadm join` command to attach to the cluster.
+4.  **Controller (Node Labeling):** Once the worker node appears in the cluster, the controller automatically **labels the node properly** with TPU-specific metadata (e.g., topology, accelerator type).
+5.  **Controller (Device Plugin):** Finally, the controller ensures a **TPU Device Plugin DaemonSet** is scheduled on the newly labeled nodes to expose `google.com/tpu` resources.
 
 ---
 
@@ -365,7 +393,7 @@ The TPUNodeGroup controller needs GCP permissions to create and manage GCE resou
 
 ### Option 1: VM Attached Service Account
 
-If your Kubernetes control plane is running on a GCE VM, the controller can automatically use the VM's attached service account via Application Default Credentials (ADC).
+If your Kubernetes control plane or operator is running on a GCE VM, the controller transparently uses the VM's attached service account via **Application Default Credentials (ADC)**. This is the recommended approach for development within GCE, leveraging the existing node identity and predefined IAM scopes for GCE worker nodes.
 
 1. Ensure the GCE VM was created with the required IAM permissions (or `roles/compute.admin`).
 2. Ensure the VM has the `https://www.googleapis.com/auth/cloud-platform` scope enabled.
