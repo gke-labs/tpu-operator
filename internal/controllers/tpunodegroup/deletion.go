@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -222,6 +223,12 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		}
 		if !done {
 			logger.Info("Waiting for ManagedInstanceGroup to be deleted")
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    tpuapi.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  tpuapi.ReasonDeletingMIG,
+				Message: "Waiting for ManagedInstanceGroup to be deleted",
+			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		patchBase := group.DeepCopy()
@@ -241,6 +248,12 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		}
 		if !done {
 			logger.Info("Waiting for InstanceTemplate to be deleted")
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    tpuapi.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  tpuapi.ReasonDeletingTemplate,
+				Message: "Waiting for InstanceTemplate to be deleted",
+			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		patchBase := group.DeepCopy()
@@ -260,6 +273,12 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		}
 		if !done {
 			logger.Info("Waiting for WorkloadPolicy to be deleted")
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    tpuapi.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  tpuapi.ReasonDeletingPolicy,
+				Message: "Waiting for WorkloadPolicy to be deleted",
+			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		patchBase := group.DeepCopy()
@@ -273,6 +292,12 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	// 4. Nodes
 	if controllerutil.ContainsFinalizer(group, finalizerNodes) {
 		logger.Info("Deleting stale Node objects")
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    tpuapi.ConditionTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  tpuapi.ReasonDeletingNodes,
+			Message: "Deleting stale Node objects",
+		})
 		if err := deleteNodeObjects(ctx, logger, k8sClient, group); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
 		}
