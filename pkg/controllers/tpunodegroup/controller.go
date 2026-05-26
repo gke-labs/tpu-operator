@@ -17,7 +17,10 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 
+	appsv1 "k8s.io/api/apps/v1"
 	tpuapi "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/pkg/controllers/tpunodegroup/deviceplugin"
 	"github.com/gke-labs/tpu-operator/pkg/converter"
@@ -30,6 +33,7 @@ const (
 	finalizerTemplate = "tpu.google.com/cleanup-template"
 	finalizerPolicy   = "tpu.google.com/cleanup-policy"
 	finalizerNodes    = "tpu.google.com/cleanup-nodes"
+	finalizerDevicePlugin = "tpu.google.com/cleanup-device-plugin"
 )
 
 // TPUNodeGroupReconciler reconciles a TPUNodeGroup object.
@@ -172,6 +176,9 @@ func (r *TPUNodeGroupReconciler) ensureFinalizers(ctx context.Context, group *tp
 		updated = true
 	}
 	if controllerutil.AddFinalizer(group, finalizerNodes) {
+		updated = true
+	}
+	if controllerutil.AddFinalizer(group, finalizerDevicePlugin) {
 		updated = true
 	}
 
@@ -432,6 +439,36 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	return nil
 }
 
+// mapDaemonSetToTPUNodeGroups maps events on the shared TPU device plugin DaemonSet
+// to reconciliation requests for all active TPUNodeGroups.
+func (r *TPUNodeGroupReconciler) mapDaemonSetToTPUNodeGroups(ctx context.Context, obj client.Object) []reconcile.Request {
+	ds, ok := obj.(*appsv1.DaemonSet)
+	if !ok {
+		return nil
+	}
+	if ds.Name != deviceplugin.DevicePluginName || ds.Namespace != deviceplugin.DevicePluginNamespace {
+		return nil
+	}
+
+	// List all TPUNodeGroups cluster-wide
+	var list tpuapi.TPUNodeGroupList
+	if err := r.List(ctx, &list); err != nil {
+		r.Log.Error(err, "failed to list TPUNodeGroups in DaemonSet watch mapper")
+		return nil
+	}
+
+	var requests []reconcile.Request
+	for _, tg := range list.Items {
+		// Only reconcile active groups to heal the missing DaemonSet
+		if tg.DeletionTimestamp.IsZero() {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: client.ObjectKeyFromObject(&tg),
+			})
+		}
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.recorder = mgr.GetEventRecorderFor("TPUNodeGroupController")
@@ -440,6 +477,10 @@ func (r *TPUNodeGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&tpuapi.InstanceTemplate{}).
 		Owns(&tpuapi.WorkloadPolicy{}).
 		Owns(&tpuapi.ManagedInstanceGroup{}).
+		Watches(
+			&appsv1.DaemonSet{},
+			handler.EnqueueRequestsFromMapFunc(r.mapDaemonSetToTPUNodeGroups),
+		).
 		Complete(r)
 }
 

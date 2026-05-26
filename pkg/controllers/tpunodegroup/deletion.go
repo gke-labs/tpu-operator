@@ -8,8 +8,11 @@ import (
 
 	"github.com/go-logr/logr"
 	tpuapi "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/pkg/controllers/tpunodegroup/deviceplugin"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -149,6 +152,40 @@ func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client
 	return errors.Join(errs...)
 }
 
+// cleanupDevicePluginIfLastGroup deletes the shared TPU Device Plugin DaemonSet
+// if there are no other active TPUNodeGroups in the cluster.
+func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client, logger logr.Logger) (bool, error) {
+	// 1. List all TPUNodeGroups
+	var groupList tpuapi.TPUNodeGroupList
+	if err := k8sClient.List(ctx, &groupList); err != nil {
+		return false, fmt.Errorf("failed to list TPUNodeGroups: %w", err)
+	}
+
+	// 2. Check if there are any active groups (not being deleted)
+	for _, g := range groupList.Items {
+		if g.DeletionTimestamp.IsZero() {
+			logger.Info("Skipping device plugin deletion as active TPUNodeGroups still exist")
+			return true, nil
+		}
+	}
+
+	// 3. Delete DaemonSet
+	logger.Info("Deleting shared TPU Device Plugin DaemonSet (last group being deleted)")
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      deviceplugin.DevicePluginName,
+			Namespace: deviceplugin.DevicePluginNamespace,
+		},
+	}
+	if err := k8sClient.Delete(ctx, ds); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return false, fmt.Errorf("failed to delete device plugin DaemonSet: %w", err)
+		}
+	}
+
+	return true, nil
+}
+
 // handleDeletion handles the deletion of the TPUNodeGroup and its child resources.
 // It returns a ctrl.Result and an error. If the result is non-empty or error is non-nil,
 // the caller should return immediately.
@@ -162,7 +199,8 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	hasAnyFinalizer := controllerutil.ContainsFinalizer(group, finalizerMIG) ||
 		controllerutil.ContainsFinalizer(group, finalizerTemplate) ||
 		controllerutil.ContainsFinalizer(group, finalizerPolicy) ||
-		controllerutil.ContainsFinalizer(group, finalizerNodes)
+		controllerutil.ContainsFinalizer(group, finalizerNodes) ||
+		controllerutil.ContainsFinalizer(group, finalizerDevicePlugin)
 
 	if !hasAnyFinalizer {
 		return ctrl.Result{}, nil
@@ -242,6 +280,24 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		controllerutil.RemoveFinalizer(group, finalizerNodes)
 		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)
+		}
+		return ctrl.Result{}, nil // Return and reconcile again
+	}
+
+	// 5. Device Plugin
+	if controllerutil.ContainsFinalizer(group, finalizerDevicePlugin) {
+		logger.Info("Ensuring TPU Device Plugin is deleted if last group")
+		done, err := cleanupDevicePluginIfLastGroup(ctx, k8sClient, logger)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete TPU Device Plugin: %w", err)
+		}
+		if !done {
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+		patchBase := group.DeepCopy()
+		controllerutil.RemoveFinalizer(group, finalizerDevicePlugin)
+		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to remove Device Plugin finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
 	}

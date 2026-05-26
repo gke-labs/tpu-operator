@@ -15,6 +15,11 @@ import (
 	tpuapi "github.com/gke-labs/tpu-operator/pkg/apis/tpu/v1alpha1"
 )
 
+const (
+	DevicePluginName      = "tpu-device-plugin"
+	DevicePluginNamespace = "kube-system"
+)
+
 //go:embed device_plugin.yaml
 var devicePluginYAML []byte
 
