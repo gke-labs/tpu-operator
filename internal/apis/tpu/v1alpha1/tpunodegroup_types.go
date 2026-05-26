@@ -21,6 +21,9 @@ const (
 	ReasonDeletingPolicy = "DeletingPolicy"
 	// ReasonDeletingNodes indicates the controller is deleting stale nodes.
 	ReasonDeletingNodes = "DeletingNodes"
+
+	// ReasonReconcileError indicates that an error occurred during reconciliation.
+	ReasonReconcileError = "ReconcileError"
 )
 
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.

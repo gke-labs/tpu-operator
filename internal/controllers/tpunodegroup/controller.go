@@ -98,6 +98,14 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		if !tpuNodeGroup.DeletionTimestamp.IsZero() && len(tpuNodeGroup.Finalizers) == 0 {
 			return
 		}
+		if retErr != nil {
+			meta.SetStatusCondition(&tpuNodeGroup.Status.Conditions, metav1.Condition{
+				Type:    tpuapi.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  tpuapi.ReasonReconcileError,
+				Message: fmt.Sprintf("Error reconciling: %v", retErr),
+			})
+		}
 		if err := r.Status().Patch(ctx, &tpuNodeGroup, client.MergeFrom(base)); err != nil {
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
