@@ -389,6 +389,12 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Reason:  "Ready",
 					Message: "ManagedInstanceGroup provisioned successfully",
 				},
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonAwaitingNodeJoin,
+					Message: "Waiting for 1 of 1 nodes to join the cluster",
+				},
 			},
 		},
 		{

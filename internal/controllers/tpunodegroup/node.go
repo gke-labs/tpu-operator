@@ -9,6 +9,8 @@ import (
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -84,6 +86,15 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 	}
 	group.Status.NodeSummary.Ready = int32(readyCount)
 	group.Status.NodeSummary.Reconciling = group.Spec.NodeCount - int32(readyCount)
+
+	if int32(readyCount) < group.Spec.NodeCount {
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    tpuapi.ConditionTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  tpuapi.ReasonAwaitingNodeJoin,
+			Message: fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", group.Spec.NodeCount-int32(readyCount), group.Spec.NodeCount),
+		})
+	}
 
 	// TODO: Use providerID for lookup in the future.
 	return nil
