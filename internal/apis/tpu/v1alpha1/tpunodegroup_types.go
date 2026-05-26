@@ -4,6 +4,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	// ConditionTypeReady is the type for the top-level Ready condition.
+	ConditionTypeReady = "Ready"
+
+	// ReasonAwaitingNodeJoin indicates the controller is waiting for nodes to join.
+	ReasonAwaitingNodeJoin = "AwaitingNodeJoin"
+	// ReasonReady indicates all nodes are ready.
+	ReasonReady = "Ready"
+
+	// ReasonDeletingMIG indicates the controller is deleting the MIG.
+	ReasonDeletingMIG = "DeletingMIG"
+	// ReasonDeletingTemplate indicates the controller is deleting the instance template.
+	ReasonDeletingTemplate = "DeletingTemplate"
+	// ReasonDeletingPolicy indicates the controller is deleting the workload policy.
+	ReasonDeletingPolicy = "DeletingPolicy"
+	// ReasonDeletingNodes indicates the controller is deleting stale nodes.
+	ReasonDeletingNodes = "DeletingNodes"
+)
 
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
 // +kubebuilder:validation:XValidation:rule="self.nodeCount > 1 || self.targetSizePolicyMode == 'INDIVIDUAL'",message="targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1 or less"
