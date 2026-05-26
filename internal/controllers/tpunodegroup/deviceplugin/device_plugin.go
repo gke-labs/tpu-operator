@@ -56,8 +56,6 @@ func Reconcile(ctx context.Context, kubeClientset kubernetes.Interface, group *t
 	return ensureDaemonSet(ctx, kubeClientset, ds)
 }
 
-
-
 func ensureDaemonSet(ctx context.Context, kubeClientset kubernetes.Interface, ds *appsv1.DaemonSet) error {
 	logger := klog.FromContext(ctx)
 

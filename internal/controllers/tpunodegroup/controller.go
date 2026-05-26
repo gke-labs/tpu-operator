@@ -158,6 +158,14 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// All steps successful
+	meta.SetStatusCondition(&tpuNodeGroup.Status.Conditions, metav1.Condition{
+		Type:    tpuapi.ConditionTypeReady,
+		Status:  metav1.ConditionTrue,
+		Reason:  tpuapi.ReasonReady,
+		Message: "All nodes are ready",
+	})
+
 	return ctrl.Result{}, nil
 }
 

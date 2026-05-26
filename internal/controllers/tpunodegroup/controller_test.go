@@ -56,6 +56,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantDeleted       bool
 		wantNodesDeleted  []string
 		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
+		prePopulateDevicePlugin bool
 	}{
 		{
 			name: "resource_not_found",
@@ -266,6 +267,21 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantStatus: &tpuapi.NodeSummary{
 				Ready:       1,
 				Reconciling: 0,
+			},
+			prePopulateDevicePlugin: true,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "ManagedInstanceGroup provisioned successfully",
+				},
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionTrue,
+					Reason:  tpuapi.ReasonReady,
+					Message: "All nodes are ready",
+				},
 			},
 			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
@@ -964,6 +980,22 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			}
 			cl := builder.Build()
 			k8sFakeClient := k8sfake.NewSimpleClientset()
+			if tc.prePopulateDevicePlugin {
+				ds := &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tpu-device-plugin",
+						Namespace: "kube-system",
+					},
+					Status: appsv1.DaemonSetStatus{
+						NumberReady:            1,
+						DesiredNumberScheduled: 1,
+					},
+				}
+				_, err := k8sFakeClient.AppsV1().DaemonSets("kube-system").Create(t.Context(), ds, metav1.CreateOptions{})
+				if err != nil {
+					t.Fatalf("Failed to pre-populate device plugin: %v", err)
+				}
+			}
 
 			igm := &gce.MockIGMClient{}
 			inst := &gce.MockInstanceClient{}
