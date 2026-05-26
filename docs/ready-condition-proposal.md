@@ -21,12 +21,6 @@ As the controller executes sequentially, the `Ready` condition will be updated w
 *   **`AwaitingNodeJoin`**: Set when waiting for GCE VMs to join the Kubernetes cluster as nodes.
     *   Status: `False`
     *   Message: "Waiting for X of Y nodes to join the cluster"
-*   **`LabelingNodes`**: Set when applying required TPU labels to nodes.
-    *   Status: `False`
-    *   Message: "Applying TPU labels to joined nodes"
-*   **`AwaitingDevicePlugin`**: Set when creating the TPU device plugin DaemonSet.
-    *   Status: `False`
-    *   Message: "Creating TPU device plugin DaemonSet"
 *   **`Ready`**: Set when all steps are successful.
     *   Status: `True`
     *   Message: "All nodes are ready"
@@ -47,7 +41,14 @@ During deletion (when `DeletionTimestamp` is not zero), the `Ready` condition wi
     *   Status: `False`
     *   Message: "Deleting stale Node objects"
 
-### 4. Implementation Details
+### 4. Failure Reasons
+When an error occurs during reconciliation, the `Ready` condition will be set to `Status: False` with the following reason:
+
+*   **`ReconcileError`**: Set when any step fails with an error.
+    *   Status: `False`
+    *   Message: "Error reconciling: <error-message>"
+
+### 5. Implementation Details
 
 #### API Definitions
 Add constants for the new condition types and reasons in `pkg/apis/tpu/v1alpha1/tpunodegroup_types.go`.
