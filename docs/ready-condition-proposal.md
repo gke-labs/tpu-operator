@@ -50,12 +50,12 @@ During deletion (when `DeletionTimestamp` is not zero), the `Ready` condition wi
 ### 4. Implementation Details
 
 #### API Definitions
-Add constants for the new condition types and reasons in `pkg/apis/tpu/v1alpha1/tpunodegroup_types.go`.
+Add constants for the new condition types and reasons in `internal/apis/tpu/v1alpha1/tpunodegroup_types.go`.
 
 #### Controller Logic
-*   Update `ReconcileNodes` in `pkg/controllers/tpunodegroup/node.go` to update the `Ready` condition with `Reason: AwaitingNodeJoin` or `LabelingNodes`.
-*   Update `Reconcile` in `pkg/controllers/tpunodegroup/controller.go` to check device plugin status and set `Ready` condition with `Reason: AwaitingDevicePlugin` or `Ready`.
-*   Update `handleDeletion` in `pkg/controllers/tpunodegroup/deletion.go` to update the `Ready` condition with deletion reasons.
+*   Update `ReconcileNodes` in `internal/controllers/tpunodegroup/node.go` to update the `Ready` condition with `Reason: AwaitingNodeJoin` or `LabelingNodes`.
+*   Update `Reconcile` in `internal/controllers/tpunodegroup/controller.go` to check device plugin status and set `Ready` condition with `Reason: AwaitingDevicePlugin` or `Ready`.
+*   Update `handleDeletion` in `internal/controllers/tpunodegroup/deletion.go` to update the `Ready` condition with deletion reasons.
 
 ## Alternatives Considered
 *   **Adding multiple new conditions** (`NodesReady`, `DevicePluginReady`): Rejected in favor of a cleaner status with a single `Ready` condition and descriptive reasons.

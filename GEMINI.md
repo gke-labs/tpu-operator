@@ -12,7 +12,7 @@ The TPU Node Group Controller is a Kubernetes operator that manages the lifecycl
 
 > [!IMPORTANT]
 > **Always follow these rules when contributing code:**
-> 1. **Test Before You Suggest**: After changing any production code, you MUST run all relevant unit tests (e.g., `go test ./pkg/controllers/...`).
+> 1. **Test Before You Suggest**: After changing any production code, you MUST run all relevant unit tests (e.g., `go test ./internal/controllers/...`).
 > 2. **Pattern Matching**: Before implementing a new feature, search the codebase for similar implementations and apply the same patterns.
 > 3. **Avoid Over-Verbosity**: Keep responses concise and focused on the task.
 > 4. **Gerrit Flow**: Preserve `Change-Id` in commit messages when amending.
@@ -25,7 +25,7 @@ tpu-node-group/
 │   └── controller-manager/  # Entry point (main.go)
 ├── deploy/
 │   └── crds/               # Auto-generated CRD manifests
-├── pkg/
+├── internal/
 │   ├── apis/               # API definitions (Group/Version)
 │   ├── controllers/
 │   │   ├── tpunodegroup/    # Main controller logic
