@@ -4,3 +4,7 @@ e2e/remote-kubeconfig.yaml
 e2e/local-env.sh
 
 e2e/kustomize
+
+# Intermediate file generated during test-run
+e2e/deploy/kustomization.yaml
+
