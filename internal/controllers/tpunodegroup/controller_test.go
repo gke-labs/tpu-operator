@@ -56,7 +56,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantDeleted       bool
 		wantNodesDeleted  []string
 		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
-		prePopulateDevicePlugin bool
+		kubeObjects       []runtime.Object
 	}{
 		{
 			name: "resource_not_found",
@@ -268,7 +268,18 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				Ready:       1,
 				Reconciling: 0,
 			},
-			prePopulateDevicePlugin: true,
+			kubeObjects: []runtime.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tpu-device-plugin",
+						Namespace: "kube-system",
+					},
+					Status: appsv1.DaemonSetStatus{
+						NumberReady:            1,
+						DesiredNumberScheduled: 1,
+					},
+				},
+			},
 			wantConditions: []metav1.Condition{
 				{
 					Type:    "ManagedInstanceGroupReady",
@@ -979,23 +990,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				builder = builder.WithStatusSubresource(tc.initialObject)
 			}
 			cl := builder.Build()
-			k8sFakeClient := k8sfake.NewSimpleClientset()
-			if tc.prePopulateDevicePlugin {
-				ds := &appsv1.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tpu-device-plugin",
-						Namespace: "kube-system",
-					},
-					Status: appsv1.DaemonSetStatus{
-						NumberReady:            1,
-						DesiredNumberScheduled: 1,
-					},
-				}
-				_, err := k8sFakeClient.AppsV1().DaemonSets("kube-system").Create(t.Context(), ds, metav1.CreateOptions{})
-				if err != nil {
-					t.Fatalf("Failed to pre-populate device plugin: %v", err)
-				}
-			}
+			k8sFakeClient := k8sfake.NewSimpleClientset(tc.kubeObjects...)
 
 			igm := &gce.MockIGMClient{}
 			inst := &gce.MockInstanceClient{}
