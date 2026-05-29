@@ -18,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/runtime"
 	corescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
@@ -223,18 +225,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.TPUNodeGroup{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete TPUNodeGroups: %v", err)
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 300*time.Second, true, func(ctx context.Context) (bool, error) {
-				list := &v1alpha1.TPUNodeGroupList{}
-				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-					return false, err
-				}
-				if len(list.Items) > 0 {
-					t.Logf("Waiting for %d TPUNodeGroups to be deleted...", len(list.Items))
-					return false, nil
-				}
-				return true, nil
-			})
-			if err != nil {
+			if err := waitForAllDeleted(ctx, k8sClient, &v1alpha1.TPUNodeGroupList{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed waiting for TPUNodeGroups deletion: %v", err)
 			}
 		case "instancetemplates":
@@ -242,18 +233,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.InstanceTemplate{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete InstanceTemplates: %v", err)
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-				list := &v1alpha1.InstanceTemplateList{}
-				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-					return false, err
-				}
-				if len(list.Items) > 0 {
-					t.Logf("Waiting for %d InstanceTemplates to be deleted...", len(list.Items))
-					return false, nil
-				}
-				return true, nil
-			})
-			if err != nil {
+			if err := waitForAllDeleted(ctx, k8sClient, &v1alpha1.InstanceTemplateList{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed waiting for InstanceTemplates deletion: %v", err)
 			}
 		case "workloadpolicies":
@@ -261,18 +241,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.WorkloadPolicy{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete WorkloadPolicies: %v", err)
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-				list := &v1alpha1.WorkloadPolicyList{}
-				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-					return false, err
-				}
-				if len(list.Items) > 0 {
-					t.Logf("Waiting for %d WorkloadPolicies to be deleted...", len(list.Items))
-					return false, nil
-				}
-				return true, nil
-			})
-			if err != nil {
+			if err := waitForAllDeleted(ctx, k8sClient, &v1alpha1.WorkloadPolicyList{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed waiting for WorkloadPolicies deletion: %v", err)
 			}
 		case "managedinstancegroups":
@@ -280,18 +249,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			if err := k8sClient.DeleteAllOf(ctx, &v1alpha1.ManagedInstanceGroup{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed to delete ManagedInstanceGroups: %v", err)
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-				list := &v1alpha1.ManagedInstanceGroupList{}
-				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-					return false, err
-				}
-				if len(list.Items) > 0 {
-					t.Logf("Waiting for %d ManagedInstanceGroups to be deleted...", len(list.Items))
-					return false, nil
-				}
-				return true, nil
-			})
-			if err != nil {
+			if err := waitForAllDeleted(ctx, k8sClient, &v1alpha1.ManagedInstanceGroupList{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed waiting for ManagedInstanceGroups deletion: %v", err)
 			}
 		case "jobs":
@@ -300,18 +258,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			if err := k8sClient.DeleteAllOf(ctx, &batchv1.Job{}, client.InNamespace("default"), client.PropagationPolicy(background)); err != nil {
 				t.Fatalf("Failed to delete Jobs: %v", err)
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-				list := &batchv1.JobList{}
-				if err := k8sClient.List(ctx, list, client.InNamespace("default")); err != nil {
-					return false, err
-				}
-				if len(list.Items) > 0 {
-					t.Logf("Waiting for %d Jobs to be deleted...", len(list.Items))
-					return false, nil
-				}
-				return true, nil
-			})
-			if err != nil {
+			if err := waitForAllDeleted(ctx, k8sClient, &batchv1.JobList{}, client.InNamespace("default")); err != nil {
 				t.Fatalf("Failed waiting for Jobs deletion: %v", err)
 			}
 		case "nodes":
@@ -327,25 +274,8 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 					}
 				}
 			}
-			err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
-				var nodeList corev1.NodeList
-				if err := k8sClient.List(ctx, &nodeList); err != nil {
-					return false, err
-				}
-				found := false
-				for _, node := range nodeList.Items {
-					if _, ok := node.Labels["cloud.google.com/tpu-node-group"]; ok {
-						found = true
-						break
-					}
-				}
-				if found {
-					t.Log("Waiting for stale Node objects to be deleted...")
-					return false, nil
-				}
-				return true, nil
-			})
-			if err != nil {
+			selector, _ := labels.Parse("cloud.google.com/tpu-node-group")
+			if err := waitForAllDeleted(ctx, k8sClient, &corev1.NodeList{}, client.MatchingLabelsSelector{Selector: selector}); err != nil {
 				t.Fatalf("Failed waiting for Node deletion: %v", err)
 			}
 		default:
