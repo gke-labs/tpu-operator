@@ -4,7 +4,9 @@ package e2e
 
 import (
 	"context"
+	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -13,31 +15,77 @@ import (
 	"time"
 
 	"github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	corescheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
 
-var controllerCmd *exec.Cmd
-var logFile *os.File
-var repoRoot string
-var k8sClient client.Client
-var controllerBinPath = "/tmp/tpu_controller_e2e_bin"
+var (
+	controllerCmd     *exec.Cmd
+	logFile           *os.File
+	repoRoot          string
+	k8sClient         client.Client
+	kubernetesClient  *kubernetes.Clientset
+	controllerBinPath = "/tmp/tpu_controller_e2e_bin"
+	skipTeardown      = flag.Bool("skip-teardown", false, "Skip teardown on failure for manual inspection")
+)
 
 func TestMain(m *testing.M) {
+	flag.Parse()
 	setup()
 	code := m.Run()
+	if code != 0 {
+		fmt.Println("=== E2E Tests Failed - Dumping Controller Logs ===")
+		dumpControllerLogs()
+		if *skipTeardown {
+			fmt.Println("=== SKIPPING TEARDOWN for manual inspection ===")
+			os.Exit(code)
+		}
+	}
 	teardown()
 	os.Exit(code)
+}
+
+func dumpControllerLogs() {
+	if k8sClient == nil || kubernetesClient == nil {
+		fmt.Println("Clients are nil, cannot dump logs")
+		return
+	}
+	ctx := context.Background()
+	var podList corev1.PodList
+	selector := labels.SelectorFromSet(labels.Set{"control-plane": "tpu-node-group-controller"})
+	err := k8sClient.List(ctx, &podList, client.InNamespace("tpu-node-group"), client.MatchingLabelsSelector{Selector: selector})
+	if err != nil {
+		fmt.Printf("Failed to list controller pods for log dumping: %v\n", err)
+		return
+	}
+
+	for _, pod := range podList.Items {
+		fmt.Printf("\n--- Logs for Controller Pod: %s ---\n", pod.Name)
+		req := kubernetesClient.CoreV1().Pods("tpu-node-group").GetLogs(pod.Name, &corev1.PodLogOptions{})
+		logs, err := req.Stream(ctx)
+		if err != nil {
+			fmt.Printf("Failed to get logs for pod %s: %v\n", pod.Name, err)
+			continue
+		}
+		defer logs.Close()
+		_, err = io.Copy(os.Stdout, logs)
+		if err != nil {
+			fmt.Printf("Failed to copy logs for pod %s: %v\n", pod.Name, err)
+		}
+		fmt.Printf("--- End of logs for %s ---\n", pod.Name)
+	}
 }
 
 func setup() {
@@ -106,6 +154,10 @@ func setup() {
 	if err != nil {
 		log.Fatalf("Failed to create k8sClient: %v", err)
 	}
+	kubernetesClient, err = kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Fatalf("Failed to create kubernetesClient: %v", err)
+	}
 
 	fmt.Println("=== Running E2E Target Cluster Safety Check ===")
 	manifestPath := filepath.Join(repoRoot, "internal/controllers/tpunodegroup/testdata/test_nodegroup.yaml")
@@ -165,53 +217,82 @@ func setup() {
 	}
 	fmt.Printf("Safety check passed: Confirmed E2E is running against target cluster (Control Plane: %s, IP: %s)\n\n", controlPlaneNode.Name, actualIP)
 
-	fmt.Println("=== Building Controller Binary ===")
-	buildCmd := exec.Command("go", "build", "-o", controllerBinPath, "cmd/main.go")
-	buildCmd.Dir = repoRoot
-	if err := buildCmd.Run(); err != nil {
-		log.Fatalf("Failed to build controller binary: %v", err)
+	fmt.Println("=== Preparing E2E Kustomize Deployment ===")
+	kustomizeCmd := exec.Command("make", "e2e-kustomize")
+	kustomizeCmd.Dir = repoRoot
+	if err := kustomizeCmd.Run(); err != nil {
+		log.Fatalf("Failed to generate e2e kustomization: %v", err)
 	}
 
-	fmt.Println("=== Starting Controller ===")
-	logPath := "/tmp/controller_e2e.log"
-	logFile, err = os.Create(logPath)
+	fmt.Println("=== Deploying Controller to Cluster ===")
+	deployCmd := exec.Command("kubectl", "apply", "-k", "e2e/deploy")
+	deployCmd.Dir = repoRoot
+	if err := deployCmd.Run(); err != nil {
+		log.Fatalf("Failed to deploy controller via kustomize: %v", err)
+	}
+
+	fmt.Println("=== Copying Image Pull Secret ===")
+	sourceSecret := &corev1.Secret{}
+	err = k8sClient.Get(context.Background(), types.NamespacedName{Name: "gcr-json-key", Namespace: "kube-system"}, sourceSecret)
 	if err != nil {
-		log.Fatalf("Failed to create log file: %v", err)
+		log.Fatalf("CRITICAL ERROR: Failed to find image pull secret 'gcr-json-key' in kube-system namespace. This is required for E2E. Error: %v", err)
 	}
 
-	controllerCmd = exec.Command(controllerBinPath, "--kube-config", kubeconfig)
-	controllerCmd.Dir = repoRoot
-	controllerCmd.Stdout = logFile
-	controllerCmd.Stderr = logFile
-
-	if err := controllerCmd.Start(); err != nil {
-		log.Fatalf("Failed to start controller: %v", err)
+	targetSecret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "v1",
+			Kind:       "Secret",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gcr-json-key",
+			Namespace: "tpu-node-group",
+		},
+		Data: sourceSecret.Data,
+		Type: sourceSecret.Type,
+	}
+	err = k8sClient.Patch(context.Background(), targetSecret, client.Apply, client.ForceOwnership, client.FieldOwner("e2e-test"))
+	if err != nil {
+		log.Fatalf("Failed to copy image pull secret to tpu-node-group namespace: %v", err)
 	}
 
-	fmt.Printf("Controller started with PID: %d, logs at %s\n", controllerCmd.Process.Pid, logPath)
-
-	// Give controller a moment to start
-	time.Sleep(3 * time.Second)
+	fmt.Println("=== Waiting for Controller to be Ready ===")
+	// Poll for controller deployment readiness
+	err = wait.PollUntilContextTimeout(context.Background(), 5*time.Second, 2*time.Minute, true, func(ctx context.Context) (bool, error) {
+		deployment := &appsv1.Deployment{}
+		err := k8sClient.Get(ctx, types.NamespacedName{Name: "tpu-node-group-controller-manager", Namespace: "tpu-node-group"}, deployment)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, err
+		}
+		if deployment.Status.ReadyReplicas > 0 {
+			fmt.Println("Controller deployment is ready!")
+			return true, nil
+		}
+		fmt.Printf("Waiting for controller deployment readiness... (Ready=%d)\n", deployment.Status.ReadyReplicas)
+		return false, nil
+	})
+	if err != nil {
+		log.Fatalf("Controller deployment failed to become ready within 2 minutes: %v", err)
+	}
 }
 
 func teardown() {
 	fmt.Println("=== Global Teardown ===")
-	if controllerCmd != nil && controllerCmd.Process != nil {
-		fmt.Printf("Terminating controller process (PID: %d)...\n", controllerCmd.Process.Pid)
-		if err := controllerCmd.Process.Kill(); err != nil {
-			fmt.Printf("Failed to kill controller process: %v\n", err)
-		}
-		_ = controllerCmd.Wait()
-	}
-	if logFile != nil {
-		logFile.Close()
-	}
-	_ = os.Remove(controllerBinPath)
+	fmt.Println("=== Cleaning up Controller Deployment via Kustomize ===")
+	cleanupDeployCmd := exec.Command("kubectl", "delete", "-k", "e2e/deploy", "--ignore-not-found")
+	cleanupDeployCmd.Dir = repoRoot
+	_ = cleanupDeployCmd.Run()
 
 	fmt.Println("=== Cleaning up Device Plugin Production RBAC & SA via Kustomize ===")
 	cleanupCmd := exec.Command("kubectl", "delete", "-k", "deploy/deviceplugin", "--ignore-not-found")
 	cleanupCmd.Dir = repoRoot
 	_ = cleanupCmd.Run()
+
+	if logFile != nil {
+		logFile.Close()
+	}
 }
 
 func cleanResources(t *testing.T, resourceTypes []string) {

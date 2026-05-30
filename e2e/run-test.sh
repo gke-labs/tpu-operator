@@ -28,4 +28,4 @@ source e2e/connect-gce-cluster.sh
 TEST_NAME="${1:-.}"
 
 echo "=== Running E2E test matching '${TEST_NAME}' with 20m timeout ==="
-go test -v ./e2e -tags=e2e -run "${TEST_NAME}" -timeout 20m
+go test -v ./e2e -tags=e2e -run "${TEST_NAME}" -timeout 20m "${@:2}"
