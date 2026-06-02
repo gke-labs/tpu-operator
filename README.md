@@ -41,15 +41,25 @@ All infrastructure resources are managed asynchronously via official **Google Cl
 
 ![TPUNodeGroup Architecture](docs/images/tpu_node_group_architecture.svg)
 
-### The Join-to-Workload Lifecycle
+### The Join-to-Workload Lifecycle (Pull-Model Bootstrapping)
 
-When `bootstrapKubernetes` is enabled, the controller orchestrates the following configuration sequence:
+When `bootstrapKubernetes` is enabled, the controller orchestrates a secure, asynchronous **Pull-Model Bootstrapping** flow. This design safely coordinates dynamic token generation and join operations over potentially extended GCE VM booting delays.
 
-1.  **Controller (Token Generation):** The controller creates a **Bootstrap Secret** containing a kubeadm join token (type `bootstrap.kubernetes.io/token`) in the `kube-system` namespace.
-2.  **Controller (Metadata Injection):** The controller injects the **kubeadm Join Token**, **Control Plane IP**, and **CA Cert Hash** into the GCE Instance Metadata for each VM in the slice.
-3.  **GCE VM (Pull-Model Join):** The VM startup script "pulls" these three values from the metadata and executes the `kubeadm join` command to attach to the cluster.
-4.  **Controller (Node Matching & Labeling):** Once the worker node appears in the cluster, the controller matches it to the GCE instance using the node's `ProviderID` and automatically **labels the node properly** with TPU-specific metadata (e.g., topology, accelerator type).
-5.  **Controller (Device Plugin):** Finally, the controller ensures a **TPU Device Plugin DaemonSet** is scheduled on the newly labeled nodes to expose `google.com/tpu` resources.
+The configuration sequence proceeds as follows:
+
+1. **GCE VM Initialization (VM Starts Booting):** The Managed Instance Group (MIG) provisions the VM.
+2. **GCE VM (Polling Begins):** The VM's startup script immediately begins polling its own GCE Instance Metadata for the `kubeadm-join-token`.
+3. **Controller (RUNNING Detection):** In parallel, the controller detects that the GCE VM state has transitioned to `RUNNING`.
+4. **Controller (Token Generation):** The controller generates a unique, short-lived `kubeadm` join token (valid for 1 hour) and creates a corresponding **Bootstrap Secret** in the `kube-system` namespace.
+5. **Controller (Metadata Injection):** The controller fetches the cluster's **CA Cert Hash** and injects it along with the **Join Token** and **Control Plane IP** directly into the GCE Instance Metadata for that specific VM.
+6. **GCE VM (Poll Succeeds):** The VM's polling loop succeeds and retrieves the injected configuration values.
+7. **GCE VM (Pull-Model Join):** The VM executes `kubeadm join` using the retrieved credentials to securely attach itself to the cluster.
+8. **Kubernetes (Node Registered):** The K8s API Server registers the node and marks it as `Ready`.
+9. **Controller (Node Matching & Labeling):** Once the new worker node appears in the cluster, the controller matches it to the GCE instance using the node's **`ProviderID`** and automatically **patches the Node with TPU labels** (topology, accelerator type, chip count).
+
+The following sequence diagram visualizes this chronological pull-model orchestration:
+
+![Pull-Model Bootstrapping Flow](docs/images/bootstrapping_flow.svg)
 
 ---
 

@@ -1,0 +1,39 @@
+sequenceDiagram
+    autonumber
+    
+    box #FAECEB "GCE Infrastructure"
+        participant MIG as GCE MIG
+        participant VM as TPU VM (New)
+    end
+    box #E6F0FA "K8s Cluster"
+        participant Ctrl as TPUNodeGroup Controller
+        participant K8s as K8s API Server
+    end
+
+    MIG->>VM: VM Starts Booting
+    activate VM
+    %% Self-Message: Active internal process running on the VM
+    VM->>VM: Startup script starts<br/>& polls Metadata
+    
+    %% Note: Passive trigger condition that initiates the controller's reconciliation
+    Note over Ctrl: Detects VM status is "RUNNING"
+    activate Ctrl
+    Ctrl->>K8s: Requests fresh join token (1h expiry)
+    activate K8s
+    K8s-->>Ctrl: Returns token details
+    deactivate K8s
+    Ctrl->>VM: Injects token, CP IP, CA hash into VM Metadata
+    deactivate Ctrl
+
+    %% Note: Milestone/state change rather than a new action
+    Note over VM: Poll succeeds, token retrieved
+    VM->>K8s: kubeadm join (with token)
+    activate K8s
+    K8s-->>VM: Node Registered & Ready
+    deactivate K8s
+    deactivate VM
+
+    activate Ctrl
+    %% Self-Message: Concrete actions/operations executed by the controller
+    Ctrl->>Ctrl: Matches Node via ProviderID<br/>& patches TPU labels
+    deactivate Ctrl
