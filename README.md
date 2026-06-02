@@ -37,6 +37,8 @@ This controller is designed using the **Composite Pattern** to maximize modulari
 
 All infrastructure resources are managed asynchronously via official **Google Cloud Go Client Libraries**. This architecture allows the `TPUNodeGroup` controller to focus solely on high-level workload orchestration and node lifecycle, leaving the low-level GCE "3C" (Compute) resource management to specialized, decoupled sub-controllers.
 
+![TPUNodeGroup Architecture](docs/images/tpu_node_group_architecture.svg)
+
 ### The Join-to-Workload Lifecycle
 
 When `bootstrapKubernetes` is enabled, the controller orchestrates the following configuration sequence:

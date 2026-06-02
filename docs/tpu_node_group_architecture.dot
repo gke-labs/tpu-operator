@@ -1,0 +1,45 @@
+digraph TPUNodeGroupArchitecture {
+  rankdir=LR;
+  node [shape=box, style="filled,rounded", fontname="sans-serif", fontsize=10, fontcolor="#1a1a1a"];
+
+  subgraph cluster_k8s {
+    label = "TPUNodeGroup Controller (K8s)";
+    bgcolor="#F0F4F8";
+    color="#D0E1FD";
+    penwidth=2;
+
+    TPUNodeGroupCR [label="TPUNodeGroup CR", shape=ellipse, fillcolor="#FEF9E7", color="#F9E79F", fontcolor="#7D6608"];
+
+    MainController [label="Main Controller", shape=oval, fillcolor="#EBF5FB", color="#AED6F1", style="filled,bold", penwidth=1.5];
+    WP_Controller [label="Workload Policy\nSub-Controller", fillcolor="#F4F6F7", color="#D5DBDB"];
+    IT_Controller [label="Instance Template\nSub-Controller", fillcolor="#F4F6F7", color="#D5DBDB"];
+    MIG_Controller [label="MIG\nSub-Controller", fillcolor="#F4F6F7", color="#D5DBDB"];
+
+    TPUNodeGroupCR -> MainController;
+    MainController -> WP_Controller;
+    MainController -> IT_Controller;
+    MainController -> MIG_Controller;
+  }
+
+  subgraph cluster_gce {
+    label = "GCE Resources";
+    bgcolor="#E8F8F5";
+    color="#A3E4D7";
+    penwidth=2;
+
+    WorkloadPolicy [label="GCE Workload Policy", shape=box, style=filled, fillcolor="#EAF2F8", color="#AED6F1"];
+    InstanceTemplate [label="GCE Instance Template", shape=box, style=filled, fillcolor="#EAF2F8", color="#AED6F1"];
+    MIG [label="GCE Managed\nInstance Group", shape=box, style=filled, fillcolor="#EAF2F8", color="#AED6F1"];
+    VMs [label="GCE VMs (TPUs)", shape=box, style="filled,bold", fillcolor="#F5EEF8", color="#D7BDE2", penwidth=2];
+
+    MIG -> VMs [label="Creates & Manages", penwidth=2];
+  }
+
+  WP_Controller -> WorkloadPolicy [label="Manages"];
+  IT_Controller -> InstanceTemplate [label="Manages"];
+  MIG_Controller -> MIG [label="Manages"];
+
+  // Relationships between GCE resources
+  MIG -> InstanceTemplate [label="Uses", style=dashed];
+  MIG -> WorkloadPolicy [label="References", style=dashed];
+}
