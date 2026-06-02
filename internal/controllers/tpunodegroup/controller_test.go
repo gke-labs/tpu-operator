@@ -254,6 +254,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 							"cloud.google.com/tpu-node-group": "default-test-tpu-disabled",
 						},
 					},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/test-tpu-0",
+					},
 					Status: corev1.NodeStatus{
 						Conditions: []corev1.NodeCondition{
 							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -1085,7 +1088,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 }
 
 func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
-	expectedScript := renderStartupScript("1.31")
+	expectedScript := renderStartupScript("1.31", "test-project", "us-central1-a")
 
 	tests := []struct {
 		name     string
@@ -1175,6 +1178,8 @@ func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
 			},
 			group: &tpuapi.TPUNodeGroup{
 				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
 					BootstrapKubernetes: &tpuapi.BootstrapConfig{
 						Version: ptr.To("1.31"),
 					},

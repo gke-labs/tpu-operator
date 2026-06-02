@@ -10,7 +10,10 @@ import (
 //go:embed startup_script.sh
 var startupScriptFmt string
 
-// renderStartupScript returns the templated K8s initialization script for a given version.
-func renderStartupScript(version string) string {
-	return strings.ReplaceAll(startupScriptFmt, "{{VERSION}}", version)
+// renderStartupScript returns the templated K8s initialization script for a given version, project and zone.
+func renderStartupScript(version, project, zone string) string {
+	script := strings.ReplaceAll(startupScriptFmt, "{{VERSION}}", version)
+	script = strings.ReplaceAll(script, "{{PROJECT}}", project)
+	script = strings.ReplaceAll(script, "{{ZONE}}", zone)
+	return script
 }

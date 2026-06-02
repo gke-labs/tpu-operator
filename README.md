@@ -46,7 +46,7 @@ When `bootstrapKubernetes` is enabled, the controller orchestrates the following
 1.  **Controller (Token Generation):** The controller creates a **Bootstrap Secret** containing a kubeadm join token (type `bootstrap.kubernetes.io/token`) in the `kube-system` namespace.
 2.  **Controller (Metadata Injection):** The controller injects the **kubeadm Join Token**, **Control Plane IP**, and **CA Cert Hash** into the GCE Instance Metadata for each VM in the slice.
 3.  **GCE VM (Pull-Model Join):** The VM startup script "pulls" these three values from the metadata and executes the `kubeadm join` command to attach to the cluster.
-4.  **Controller (Node Labeling):** Once the worker node appears in the cluster, the controller automatically **labels the node properly** with TPU-specific metadata (e.g., topology, accelerator type).
+4.  **Controller (Node Matching & Labeling):** Once the worker node appears in the cluster, the controller matches it to the GCE instance using the node's `ProviderID` and automatically **labels the node properly** with TPU-specific metadata (e.g., topology, accelerator type).
 5.  **Controller (Device Plugin):** Finally, the controller ensures a **TPU Device Plugin DaemonSet** is scheduled on the newly labeled nodes to expose `google.com/tpu` resources.
 
 ---

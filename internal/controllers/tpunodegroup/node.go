@@ -17,13 +17,13 @@ import (
 
 const (
 	// labelTPUAccelerator is the label required by the device plugin DaemonSet.
-	labelTPUAccelerator      = "cloud.google.com/gke-tpu-accelerator"
+	labelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
 	// labelTPUAcceleratorCount is the label identifying the number of TPU chips.
 	labelTPUAcceleratorCount = "cloud.google.com/gke-accelerator-count"
 	// labelTPUNodeGroup is the label identifying the TPUNodeGroup the node belongs to.
-	labelTPUNodeGroup        = "cloud.google.com/tpu-node-group"
+	labelTPUNodeGroup = "cloud.google.com/tpu-node-group"
 	// labelTPUTopology is the label identifying the topology of the TPU slice.
-	labelTPUTopology         = "cloud.google.com/gke-tpu-topology"
+	labelTPUTopology = "cloud.google.com/gke-tpu-topology"
 )
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
@@ -43,10 +43,12 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
-	// 3. Build a map of nodes in the cluster for fast lookup
+	// 3. Build a map of nodes in the cluster for fast lookup by ProviderID
 	nodeMap := make(map[string]*corev1.Node)
 	for i := range nodeList.Items {
-		nodeMap[nodeList.Items[i].Name] = &nodeList.Items[i]
+		if nodeList.Items[i].Spec.ProviderID != "" {
+			nodeMap[nodeList.Items[i].Spec.ProviderID] = &nodeList.Items[i]
+		}
 	}
 
 	readyCount := 0
@@ -59,7 +61,9 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 			continue
 		}
 
-		if node, ok := nodeMap[name]; ok {
+		providerID := fmt.Sprintf("gce://%s/%s/%s", group.Spec.Project, group.Spec.NodeLocation, name)
+
+		if node, ok := nodeMap[providerID]; ok {
 			// Check if node is ready
 			for _, cond := range node.Status.Conditions {
 				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
@@ -96,7 +100,6 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		})
 	}
 
-	// TODO: Use providerID for lookup in the future.
 	return nil
 }
 

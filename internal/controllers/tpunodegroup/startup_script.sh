@@ -85,6 +85,19 @@ if [ -z "$TOKEN" ] || [ -z "$CP_IP" ] || [ -z "$CA_HASH" ]; then
   exit 1
 fi
 
+echo "Using templated project and zone for providerID..."
+PROJECT="{{PROJECT}}"
+ZONE="{{ZONE}}"
+NAME=$(curl -f -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name || true)
+
+if [ -z "$PROJECT" ] || [ -z "$ZONE" ] || [ -z "$NAME" ]; then
+  echo "Failed to retrieve standard instance metadata."
+  exit 1
+fi
+
+PROVIDER_ID="gce://$PROJECT/$ZONE/$NAME"
+echo "Constructed ProviderID: $PROVIDER_ID"
+
 sudo mkdir -p /etc/kubernetes
 cat <<EOF2 | sudo tee /etc/kubernetes/kubeadm-join.yaml
 apiVersion: kubeadm.k8s.io/v1beta3
@@ -98,6 +111,7 @@ discovery:
 nodeRegistration:
   kubeletExtraArgs:
     cgroup-driver: "systemd"
+    provider-id: "$PROVIDER_ID"
 EOF2
 
 echo "Unmasking kubelet and joining cluster..."

@@ -49,6 +49,9 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 			nodes: []corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "inst-1"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-1",
+					},
 					Status: corev1.NodeStatus{
 						Conditions: []corev1.NodeCondition{
 							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -57,6 +60,9 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "inst-2"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-2",
+					},
 					Status: corev1.NodeStatus{
 						Conditions: []corev1.NodeCondition{
 							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -90,6 +96,9 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 			nodes: []corev1.Node{
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "inst-1"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-1",
+					},
 					Status: corev1.NodeStatus{
 						Conditions: []corev1.NodeCondition{
 							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
@@ -98,6 +107,9 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				},
 				{
 					ObjectMeta: metav1.ObjectMeta{Name: "inst-2"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-2",
+					},
 					Status: corev1.NodeStatus{
 						Conditions: []corev1.NodeCondition{
 							{Type: corev1.NodeReady, Status: corev1.ConditionFalse},

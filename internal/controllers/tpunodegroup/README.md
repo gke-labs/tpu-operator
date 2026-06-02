@@ -32,7 +32,7 @@ The controller processes the `TPUNodeGroup` spec and orchestrates the creation o
 ### Phase 3: Bootstrapping & Node Join
 Once the child MIG reports that GCE VMs are in a `RUNNING` state:
 1.  **Metadata & Token Injection**: The controller generates a cluster join token and computes required TPU labels (accelerator type, count, topology), injecting them into the GCE VM metadata.
-2.  **Node Labeling**: The controller monitors the cluster for joining nodes, matches them to GCE instances, and ensures they are labeled with appropriate TPU labels in Kubernetes.
+2.  **Node Matching & Labeling**: The controller monitors the cluster for joining nodes, matches them to GCE instances using the node's `ProviderID` (constructed as `gce://<project>/<zone>/<instance-name>`), and ensures they are labeled with appropriate TPU labels in Kubernetes.
 3.  **Awaiting Readiness**: The controller waits for Kubernetes `Node` objects to register and for the TPU Device Plugin to mark the nodes healthy.
 4.  **Finalize Ready State**: Once all nodes are ready (or `minReadyNodes` is met for single-host topologies), the controller sets the `Ready` condition to `True`.
 
