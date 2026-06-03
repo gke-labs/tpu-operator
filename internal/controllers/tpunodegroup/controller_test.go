@@ -1001,10 +1001,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				tc.setupMocks(igm, inst)
 			}
 
-			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, igm, inst, logr.Discard()).
+			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, igm, inst).
 				WithRecorder(record.NewFakeRecorder(10))
 
-			gotResult, err := r.Reconcile(t.Context(), tc.request)
+			ctx := logr.NewContext(t.Context(), logr.Discard())
+			gotResult, err := r.Reconcile(ctx, tc.request)
 
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
@@ -1353,10 +1354,10 @@ func TestMapDaemonSetToTPUNodeGroups(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialObjs...).Build()
 			r := &TPUNodeGroupReconciler{
 				Client: cl,
-				Log:    logr.Discard(),
 			}
 
-			got := r.mapDaemonSetToTPUNodeGroups(context.Background(), tc.obj)
+			ctx := logr.NewContext(context.Background(), logr.Discard())
+			got := r.mapDaemonSetToTPUNodeGroups(ctx, tc.obj)
 
 			// Sort to compare regardless of order
 			sortRequests := func(reqs []reconcile.Request) {

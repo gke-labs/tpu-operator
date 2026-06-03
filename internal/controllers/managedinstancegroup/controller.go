@@ -7,7 +7,6 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,7 +25,6 @@ const finalizerName = "tpu.google.com/managedinstancegroup-cleanup"
 type ManagedInstanceGroupReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
-	Log    logr.Logger
 	GCE    gce.IGMClient
 	GCEOps gce.ZoneOperationsClient
 }
@@ -36,14 +34,14 @@ type ManagedInstanceGroupReconciler struct {
 // +kubebuilder:rbac:groups=tpu.google.com,resources=managedinstancegroups/finalizers,verbs=update
 
 func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
-	logger := r.Log.WithValues("managedinstancegroup", req.NamespacedName)
+	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Reconciling ManagedInstanceGroup")
 
 	// 1. Fetch the ManagedInstanceGroup instance
 	var mig tpuv1alpha1.ManagedInstanceGroup
 	if err := r.Get(ctx, req.NamespacedName, &mig); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("ManagedInstanceGroup not found. Ignoring since object must be deleted")
+			logger.Info("ManagedInstanceGroup not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to get ManagedInstanceGroup")
@@ -60,7 +58,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "failed to patch status after reconcile error")
+				logger.Error(err, "Failed to patch status after reconcile error")
 			}
 		}
 	}()

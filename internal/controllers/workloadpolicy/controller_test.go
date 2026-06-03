@@ -7,6 +7,7 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/api/googleapi"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -560,7 +561,8 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 				GCEOps:   mockGCEOps,
 			}
 
-			gotResult, err := r.Reconcile(t.Context(), tc.request)
+			ctx := logr.NewContext(t.Context(), logr.Discard())
+			gotResult, err := r.Reconcile(ctx, tc.request)
 
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
@@ -595,3 +597,72 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 		})
 	}
 }
+
+type recordingSink struct {
+	logs []string
+}
+
+func (s *recordingSink) Init(info logr.RuntimeInfo) {}
+func (s *recordingSink) Enabled(level int) bool { return true }
+func (s *recordingSink) Info(level int, msg string, keysAndValues ...interface{}) {
+	s.logs = append(s.logs, msg)
+}
+func (s *recordingSink) Error(err error, msg string, keysAndValues ...interface{}) {
+	s.logs = append(s.logs, msg)
+}
+func (s *recordingSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
+	return s
+}
+func (s *recordingSink) WithName(name string) logr.LogSink {
+	return s
+}
+
+func TestWorkloadPolicyReconciler_Reconcile_UsesContextLogger(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := tpuv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	wp := &tpuv1alpha1.WorkloadPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-policy",
+			Namespace: "default",
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(wp).Build()
+
+	r := &WorkloadPolicyReconciler{
+		Client:   cl,
+		Scheme:   scheme,
+		Recorder: record.NewFakeRecorder(10),
+		GCE:      &gce.MockResourcePolicyClient{},
+		GCEOps:   &gce.MockRegionOperationsClient{},
+	}
+
+	sink := &recordingSink{}
+	logger := logr.New(sink)
+	ctx := logr.NewContext(t.Context(), logger)
+
+	req := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "test-policy",
+			Namespace: "default",
+		},
+	}
+
+	_, _ = r.Reconcile(ctx, req)
+
+	expectedLog := "Reconciling WorkloadPolicy"
+	found := false
+	for _, logMsg := range sink.logs {
+		if logMsg == expectedLog {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Expected log message %q was not recorded by the context logger. Recorded logs: %v", expectedLog, sink.logs)
+	}
+}
+

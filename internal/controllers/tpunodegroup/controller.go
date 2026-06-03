@@ -44,18 +44,16 @@ type TPUNodeGroupReconciler struct {
 	igmClient      gce.IGMClient
 	instanceClient gce.InstanceClient
 	kubeClientset  kubernetes.Interface
-	Log            logr.Logger
 }
 
 // NewTPUNodeGroupReconciler creates a new TPUNodeGroupReconciler.
-func NewTPUNodeGroupReconciler(client client.Client, scheme *runtime.Scheme, kubeClientset kubernetes.Interface, igmClient gce.IGMClient, instanceClient gce.InstanceClient, log logr.Logger) *TPUNodeGroupReconciler {
+func NewTPUNodeGroupReconciler(client client.Client, scheme *runtime.Scheme, kubeClientset kubernetes.Interface, igmClient gce.IGMClient, instanceClient gce.InstanceClient) *TPUNodeGroupReconciler {
 	return &TPUNodeGroupReconciler{
 		Client:         client,
 		scheme:         scheme,
 		kubeClientset:  kubeClientset,
 		igmClient:      igmClient,
 		instanceClient: instanceClient,
-		Log:            log,
 	}
 }
 
@@ -80,7 +78,7 @@ func (r *TPUNodeGroupReconciler) WithRecorder(recorder record.EventRecorder) *TP
 // with server state, wiping out unpersisted condition changes. All cumulative state
 // updates are persisted atomically by the single Status().Patch() call at the end of Reconcile.
 func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
-	logger := r.Log.WithValues("tpunodegroup", req.NamespacedName)
+	logger := ctrl.LoggerFrom(ctx)
 
 	// 1. Fetch the TPUNodeGroup resource
 	var tpuNodeGroup tpuapi.TPUNodeGroup
@@ -110,7 +108,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "failed to patch status after reconcile error")
+				logger.Error(err, "Failed to patch status after reconcile error")
 			}
 		}
 	}()
@@ -225,9 +223,10 @@ func interpretWaitingOrError(logger logr.Logger, err error, message string) (ctr
 // reconcileWorkloadPolicy orchestrates the child WorkloadPolicy CR.
 // It is only needed for multi-host slices where topology is specified.
 func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	logger := ctrl.LoggerFrom(ctx)
 	// WorkloadPolicy is only needed for multi-host slices where topology is specified.
 	if group.Spec.Topology == "" || group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeIndividual {
-		r.Log.Info("Skipping WorkloadPolicy reconciliation as topology is not specified or target policy mode is INDIVIDUAL")
+		logger.Info("Skipping WorkloadPolicy reconciliation as topology is not specified or target policy mode is INDIVIDUAL")
 		return nil
 	}
 
@@ -244,7 +243,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 	// 3. Create if not found
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			r.Log.Info("Creating WorkloadPolicy CR", "name", policy.Name)
+			logger.Info("Creating WorkloadPolicy CR", "name", policy.Name)
 			if err := r.Create(ctx, policy); err != nil {
 				return fmt.Errorf("creating WorkloadPolicy CR: %w", err)
 			}
@@ -261,7 +260,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 
 	// 4. Update if changed
 	if !equality.Semantic.DeepEqual(existing.Spec, policy.Spec) {
-		r.Log.Info("Patching WorkloadPolicy CR", "name", policy.Name)
+		logger.Info("Patching WorkloadPolicy CR", "name", policy.Name)
 		patchBase := existing.DeepCopy()
 		existing.Spec = policy.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
@@ -271,7 +270,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 
 	// 5. Wait for URI population by the WorkloadPolicy controller
 	if existing.Status.URI == "" {
-		r.Log.Info("WorkloadPolicy CR ready but URI missing", "name", existing.Name)
+		logger.Info("WorkloadPolicy CR ready but URI missing", "name", existing.Name)
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    "WorkloadPolicyReady",
 			Status:  metav1.ConditionFalse,
@@ -282,7 +281,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 	}
 
 	// 6. Mark Ready
-	r.Log.Info("WorkloadPolicy CR is ready", "uri", existing.Status.URI)
+	logger.Info("WorkloadPolicy CR is ready", "uri", existing.Status.URI)
 	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 		Type:    "WorkloadPolicyReady",
 		Status:  metav1.ConditionTrue,
@@ -302,7 +301,7 @@ func (e *WaitingForChildError) Error() string {
 }
 
 func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
-
+	logger := ctrl.LoggerFrom(ctx)
 
 	template := converter.ToInstanceTemplateCR(group)
 	if template == nil {
@@ -317,7 +316,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 	err := r.Get(ctx, client.ObjectKey{Namespace: template.Namespace, Name: template.Name}, existing)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			r.Log.Info("Creating InstanceTemplate CR", "name", template.Name)
+			logger.Info("Creating InstanceTemplate CR", "name", template.Name)
 			if err := r.Create(ctx, template); err != nil {
 				return fmt.Errorf("creating InstanceTemplate CR: %w", err)
 			}
@@ -333,7 +332,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 	}
 
 	if !equality.Semantic.DeepEqual(existing.Spec, template.Spec) {
-		r.Log.Info("Patching InstanceTemplate CR", "name", template.Name)
+		logger.Info("Patching InstanceTemplate CR", "name", template.Name)
 		patchBase := existing.DeepCopy()
 		existing.Spec = template.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
@@ -342,7 +341,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 	}
 
 	if existing.Status.URI == "" {
-		r.Log.Info("InstanceTemplate CR ready but URI missing", "name", existing.Name)
+		logger.Info("InstanceTemplate CR ready but URI missing", "name", existing.Name)
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    "InstanceTemplateReady",
 			Status:  metav1.ConditionFalse,
@@ -352,7 +351,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		return &WaitingForChildError{ChildKind: "InstanceTemplate"}
 	}
 
-	r.Log.Info("InstanceTemplate CR is ready", "uri", existing.Status.URI)
+	logger.Info("InstanceTemplate CR is ready", "uri", existing.Status.URI)
 	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 		Type:    "InstanceTemplateReady",
 		Status:  metav1.ConditionTrue,
@@ -363,6 +362,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 }
 
 func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+	logger := ctrl.LoggerFrom(ctx)
 	var template *tpuapi.InstanceTemplate
 	var policy *tpuapi.WorkloadPolicy
 	var err error
@@ -407,7 +407,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	// 5. Create if not found
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			r.Log.Info("Creating ManagedInstanceGroup CR", "name", mig.Name)
+			logger.Info("Creating ManagedInstanceGroup CR", "name", mig.Name)
 			if err := r.Create(ctx, mig); err != nil {
 				return fmt.Errorf("creating ManagedInstanceGroup CR: %w", err)
 			}
@@ -424,7 +424,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 
 	// 6. Update if changed
 	if !equality.Semantic.DeepEqual(existing.Spec, mig.Spec) {
-		r.Log.Info("Patching ManagedInstanceGroup CR", "name", mig.Name)
+		logger.Info("Patching ManagedInstanceGroup CR", "name", mig.Name)
 		patchBase := existing.DeepCopy()
 		existing.Spec = mig.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
@@ -434,7 +434,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 
 	// 7. Wait for URL population
 	if existing.Status.URL == "" {
-		r.Log.Info("ManagedInstanceGroup CR ready but URL missing", "name", existing.Name)
+		logger.Info("ManagedInstanceGroup CR ready but URL missing", "name", existing.Name)
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    "ManagedInstanceGroupReady",
 			Status:  metav1.ConditionFalse,
@@ -445,7 +445,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	}
 
 	// 8. Mark Ready
-	r.Log.Info("ManagedInstanceGroup CR is ready", "url", existing.Status.URL)
+	logger.Info("ManagedInstanceGroup CR is ready", "url", existing.Status.URL)
 	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 		Type:    "ManagedInstanceGroupReady",
 		Status:  metav1.ConditionTrue,
@@ -469,7 +469,7 @@ func (r *TPUNodeGroupReconciler) mapDaemonSetToTPUNodeGroups(ctx context.Context
 	// List all TPUNodeGroups cluster-wide
 	var list tpuapi.TPUNodeGroupList
 	if err := r.List(ctx, &list); err != nil {
-		r.Log.Error(err, "failed to list TPUNodeGroups in DaemonSet watch mapper")
+		ctrl.LoggerFrom(ctx).Error(err, "Failed to list TPUNodeGroups in DaemonSet watch mapper")
 		return nil
 	}
 

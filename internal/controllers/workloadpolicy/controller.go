@@ -7,7 +7,6 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,7 +29,6 @@ type WorkloadPolicyReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Log      logr.Logger
 	GCE      gce.ResourcePolicyClient
 	GCEOps   gce.RegionOperationsClient
 }
@@ -40,14 +38,14 @@ type WorkloadPolicyReconciler struct {
 // +kubebuilder:rbac:groups=tpu.google.com,resources=workloadpolicies/finalizers,verbs=update
 
 func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
-	logger := r.Log.WithValues("workloadpolicy", req.NamespacedName)
+	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Reconciling WorkloadPolicy")
 
 	// 1. Fetch the WorkloadPolicy instance
 	var workloadPolicy tpuv1alpha1.WorkloadPolicy
 	if err := r.Get(ctx, req.NamespacedName, &workloadPolicy); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("WorkloadPolicy not found. Ignoring since object must be deleted")
+			logger.Info("WorkloadPolicy not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to get WorkloadPolicy")
@@ -64,7 +62,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "failed to patch status after reconcile error")
+				logger.Error(err, "Failed to patch status after reconcile error")
 			}
 		}
 	}()

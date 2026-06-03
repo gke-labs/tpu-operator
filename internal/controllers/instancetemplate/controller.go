@@ -7,7 +7,6 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +30,6 @@ type InstanceTemplateReconciler struct {
 	client.Client
 	Scheme   *runtime.Scheme
 	Recorder record.EventRecorder
-	Log      logr.Logger
 	GCE      gce.InstanceTemplateClient
 	GCEOps   gce.GlobalOperationsClient
 }
@@ -41,14 +39,14 @@ type InstanceTemplateReconciler struct {
 // +kubebuilder:rbac:groups=tpu.google.com,resources=instancetemplates/finalizers,verbs=update
 
 func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
-	logger := r.Log.WithValues("instancetemplate", req.NamespacedName)
+	logger := ctrl.LoggerFrom(ctx)
 	logger.Info("Reconciling InstanceTemplate")
 
 	// 1. Fetch the InstanceTemplate instance
 	var instanceTemplate tpuv1alpha1.InstanceTemplate
 	if err := r.Get(ctx, req.NamespacedName, &instanceTemplate); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("InstanceTemplate not found. Ignoring since object must be deleted")
+			logger.Info("InstanceTemplate not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
 		logger.Error(err, "Failed to get InstanceTemplate")
@@ -65,7 +63,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "failed to patch status after reconcile error")
+				logger.Error(err, "Failed to patch status after reconcile error")
 			}
 		}
 	}()

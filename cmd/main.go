@@ -99,7 +99,6 @@ func main() {
 	if err = (&instancetemplate.InstanceTemplateReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Log:    ctrl.Log.WithName("controller").WithName("instancetemplate"),
 		GCE:    gceManager.InstanceTemplates(),
 		GCEOps: gceManager.GlobalOperations(),
 	}).SetupWithManager(mgr); err != nil {
@@ -107,7 +106,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = tpunodegroup.NewTPUNodeGroupReconciler(mgr.GetClient(), mgr.GetScheme(), kubeClient, gceManager.IGM(), gceManager.Instances(), ctrl.Log.WithName("controller").WithName("tpunodegroup")).
+	if err = tpunodegroup.NewTPUNodeGroupReconciler(mgr.GetClient(), mgr.GetScheme(), kubeClient, gceManager.IGM(), gceManager.Instances()).
 		SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Error setting up TPU Node Group controller")
 		os.Exit(1)
@@ -115,7 +114,6 @@ func main() {
 	if err = (&workloadpolicy.WorkloadPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Log:    ctrl.Log.WithName("controller").WithName("workloadpolicy"),
 		GCE:    gceManager.ResourcePolicies(),
 		GCEOps: gceManager.RegionOperations(),
 	}).SetupWithManager(mgr); err != nil {
@@ -126,7 +124,6 @@ func main() {
 	if err = (&managedinstancegroup.ManagedInstanceGroupReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
-		Log:    ctrl.Log.WithName("controller").WithName("managedinstancegroup"),
 		GCE:    gceManager.IGM(),
 		GCEOps: gceManager.ZoneOperations(),
 	}).SetupWithManager(mgr); err != nil {

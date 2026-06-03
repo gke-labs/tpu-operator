@@ -546,12 +546,12 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 			r := &ManagedInstanceGroupReconciler{
 				Client: cl,
 				Scheme: scheme,
-				Log:    logr.Discard(),
 				GCE:    mockGCE,
 				GCEOps: mockGCEOps,
 			}
 
-			gotResult, err := r.Reconcile(t.Context(), tc.request)
+			ctx := logr.NewContext(t.Context(), logr.Discard())
+			gotResult, err := r.Reconcile(ctx, tc.request)
 
 			if gotErr := err != nil; gotErr != tc.wantErr {
 				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
