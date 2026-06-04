@@ -42,17 +42,19 @@ type TPUNodeGroupReconciler struct {
 	recorder       record.EventRecorder
 	igmClient      gce.IGMClient
 	instanceClient gce.InstanceClient
+	templateClient gce.InstanceTemplateClient
 	kubeClientset  kubernetes.Interface
 }
 
 // NewTPUNodeGroupReconciler creates a new TPUNodeGroupReconciler.
-func NewTPUNodeGroupReconciler(client client.Client, scheme *runtime.Scheme, kubeClientset kubernetes.Interface, igmClient gce.IGMClient, instanceClient gce.InstanceClient) *TPUNodeGroupReconciler {
+func NewTPUNodeGroupReconciler(client client.Client, scheme *runtime.Scheme, kubeClientset kubernetes.Interface, igmClient gce.IGMClient, instanceClient gce.InstanceClient, templateClient gce.InstanceTemplateClient) *TPUNodeGroupReconciler {
 	return &TPUNodeGroupReconciler{
 		Client:         client,
 		scheme:         scheme,
 		kubeClientset:  kubeClientset,
 		igmClient:      igmClient,
 		instanceClient: instanceClient,
+		templateClient: templateClient,
 	}
 }
 
@@ -302,6 +304,32 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
+	if group.Spec.InstanceTemplateURI != nil {
+		err := ValidateExternalInstanceTemplate(ctx, r.templateClient, *group.Spec.InstanceTemplateURI)
+		if err != nil {
+			// Emit a warning event only the first time validation fails to avoid event spam.
+			cond := meta.FindStatusCondition(group.Status.Conditions, "InstanceTemplateReady")
+			if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvalidTemplate" {
+				r.recorder.Eventf(group, corev1.EventTypeWarning, "InvalidInstanceTemplate", "External instance template validation failed: %v", err)
+			}
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    "InstanceTemplateReady",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InvalidTemplate",
+				Message: err.Error(),
+			})
+			return false, fmt.Errorf("validating external template: %w", err)
+		}
+
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    "InstanceTemplateReady",
+			Status:  metav1.ConditionTrue,
+			Reason:  "ExternalTemplate",
+			Message: "Using external instance template",
+		})
+		return true, nil
+	}
+
 	template := converter.ToInstanceTemplateCR(group)
 	if template == nil {
 		return true, nil
@@ -367,17 +395,23 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	var err error
 
 	// 1. Fetch InstanceTemplate if needed
-	template = &tpuapi.InstanceTemplate{}
-	templateName := group.InstanceTemplateName()
-	err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
+	var templateURI string
+	if group.Spec.InstanceTemplateURI != nil {
+		templateURI = *group.Spec.InstanceTemplateURI
+	} else {
+		template = &tpuapi.InstanceTemplate{}
+		templateName := group.InstanceTemplateName()
+		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return false, nil
+			}
+			return false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
+		}
+		if template.Status.URI == "" {
 			return false, nil
 		}
-		return false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
-	}
-	if template.Status.URI == "" {
-		return false, nil
+		templateURI = template.Status.URI
 	}
 
 	// 2. Fetch WorkloadPolicy if needed
@@ -397,7 +431,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	}
 
 	// 3. Generate desired state
-	mig := converter.ToManagedInstanceGroupCR(group, template, policy)
+	mig := converter.ToManagedInstanceGroupCR(group, templateURI, policy)
 
 	// 4. Get existing CR
 	existing := &tpuapi.ManagedInstanceGroup{}

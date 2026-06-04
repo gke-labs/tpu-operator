@@ -105,7 +105,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = tpunodegroup.NewTPUNodeGroupReconciler(mgr.GetClient(), mgr.GetScheme(), kubeClient, gceManager.IGM(), gceManager.Instances()).
+	if err = tpunodegroup.NewTPUNodeGroupReconciler(mgr.GetClient(), mgr.GetScheme(), kubeClient, gceManager.IGM(), gceManager.Instances(), gceManager.InstanceTemplates()).
 		SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Error setting up TPU Node Group controller")
 		os.Exit(1)
