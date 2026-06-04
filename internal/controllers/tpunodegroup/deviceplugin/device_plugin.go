@@ -10,7 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
+	ctrl "sigs.k8s.io/controller-runtime"
 
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 )
@@ -45,8 +45,8 @@ func BuildDevicePluginDaemonSet(group *tpuapi.TPUNodeGroup) (*appsv1.DaemonSet, 
 
 // Reconcile ensures the TPU device plugin DaemonSet exists.
 func Reconcile(ctx context.Context, kubeClientset kubernetes.Interface, group *tpuapi.TPUNodeGroup) error {
-	logger := klog.FromContext(ctx)
-	logger.Info("Reconciling TPU Device Plugin")
+	logger := ctrl.LoggerFrom(ctx)
+	logger.V(1).Info("reconciling TPU Device Plugin")
 
 	ds, err := BuildDevicePluginDaemonSet(group)
 	if err != nil {
@@ -57,12 +57,12 @@ func Reconcile(ctx context.Context, kubeClientset kubernetes.Interface, group *t
 }
 
 func ensureDaemonSet(ctx context.Context, kubeClientset kubernetes.Interface, ds *appsv1.DaemonSet) error {
-	logger := klog.FromContext(ctx)
+	logger := ctrl.LoggerFrom(ctx)
 
 	existingDS, err := kubeClientset.AppsV1().DaemonSets(ds.Namespace).Get(ctx, ds.Name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Creating TPU Device Plugin DaemonSet", "namespace", ds.Namespace, "name", ds.Name)
+			logger.Info("creating TPU Device Plugin DaemonSet", "namespace", ds.Namespace, "name", ds.Name)
 			_, err = kubeClientset.AppsV1().DaemonSets(ds.Namespace).Create(ctx, ds, metav1.CreateOptions{})
 			return err
 		}
@@ -70,7 +70,7 @@ func ensureDaemonSet(ctx context.Context, kubeClientset kubernetes.Interface, ds
 	}
 
 	// TODO: Handle updates if needed.
-	logger.Info("TPU Device Plugin DaemonSet already exists", "namespace", existingDS.Namespace, "name", existingDS.Name)
+	logger.V(1).Info("TPU Device Plugin DaemonSet already exists", "namespace", existingDS.Namespace, "name", existingDS.Name)
 
 	return nil
 }

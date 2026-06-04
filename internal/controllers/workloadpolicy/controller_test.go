@@ -652,7 +652,7 @@ func TestWorkloadPolicyReconciler_Reconcile_UsesContextLogger(t *testing.T) {
 
 	_, _ = r.Reconcile(ctx, req)
 
-	expectedLog := "Reconciling WorkloadPolicy"
+	expectedLog := "reconciling WorkloadPolicy"
 	found := false
 	for _, logMsg := range sink.logs {
 		if logMsg == expectedLog {

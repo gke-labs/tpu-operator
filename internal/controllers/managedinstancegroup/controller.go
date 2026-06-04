@@ -35,17 +35,16 @@ type ManagedInstanceGroupReconciler struct {
 
 func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.Info("Reconciling ManagedInstanceGroup")
+	logger.Info("reconciling ManagedInstanceGroup")
 
 	// 1. Fetch the ManagedInstanceGroup instance
 	var mig tpuv1alpha1.ManagedInstanceGroup
 	if err := r.Get(ctx, req.NamespacedName, &mig); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("ManagedInstanceGroup not found, ignoring since object must be deleted")
+			logger.Info("managedInstanceGroup not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get ManagedInstanceGroup")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get ManagedInstanceGroup: %w", err)
 	}
 
 	base := mig.DeepCopy()
@@ -58,34 +57,33 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "Failed to patch status after reconcile error")
+				logger.Error(err, "failed to patch status after reconcile error")
 			}
 		}
 	}()
 
 	// 2. Check pending operation
 	if mig.Status.OperationName != "" {
-		logger.Info("Checking pending GCE operation", "operation", mig.Status.OperationName)
+		logger.V(1).Info("checking pending GCE operation", "operation", mig.Status.OperationName)
 		opProto, err := r.GCEOps.Get(ctx, mig.Spec.Project, mig.Spec.Location, mig.Status.OperationName)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("getting GCE operation: %w", err)
 		}
 
 		if opProto.GetStatus() != computepb.Operation_DONE {
-			logger.Info("GCE operation still pending", "operation", mig.Status.OperationName)
+			logger.V(1).Info("GCE operation still pending", "operation", mig.Status.OperationName)
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 
 		// Operation is DONE
 		if opProto.HttpErrorStatusCode != nil && (opProto.GetHttpErrorStatusCode() < 200 || opProto.GetHttpErrorStatusCode() > 299) {
 			if !mig.ObjectMeta.DeletionTimestamp.IsZero() && opProto.GetHttpErrorStatusCode() == http.StatusNotFound {
-				logger.Info("Ignoring 404 during deletion operation")
+				logger.V(1).Info("ignoring 404 during deletion operation")
 			} else {
-				err := fmt.Errorf("GCE operation failed: %s (code %d): %v", opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
-				logger.Error(err, "GCE operation failed", "operation", mig.Status.OperationName)
+				opName := mig.Status.OperationName
 				mig.Status.OperationName = ""
 				mig.Status.OperationType = ""
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", mig.Status.OperationName)
@@ -125,7 +123,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// 3. Check if the resource is being deleted
 	if !mig.ObjectMeta.DeletionTimestamp.IsZero() {
-		logger.Info("ManagedInstanceGroup is being deleted")
+		logger.Info("managedInstanceGroup is being deleted")
 		if controllerutil.ContainsFinalizer(&mig, finalizerName) {
 			// Delete GCE MIG
 			op, err := r.GCE.Delete(ctx, mig.Spec.Project, mig.Spec.Location, mig.Name)
@@ -174,7 +172,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 	gceMIG, err := r.GCE.Get(ctx, mig.Spec.Project, mig.Spec.Location, mig.Name)
 	if err != nil {
 		if gce.IsNotFound(err) {
-			logger.Info("Creating GCE ManagedInstanceGroup", "name", mig.Name)
+			logger.Info("creating GCE ManagedInstanceGroup", "name", mig.Name)
 			template := converter.ToGCEManagedInstanceGroup(&mig)
 			op, err := r.GCE.Insert(ctx, mig.Spec.Project, mig.Spec.Location, template)
 			if err != nil {
@@ -211,7 +209,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 		},
 	}
 
-	logger.Info("Reconciliation finished")
+	logger.V(1).Info("reconciliation finished")
 	return ctrl.Result{}, nil
 }
 

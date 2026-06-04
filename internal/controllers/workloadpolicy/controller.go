@@ -39,17 +39,16 @@ type WorkloadPolicyReconciler struct {
 
 func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.Info("Reconciling WorkloadPolicy")
+	logger.Info("reconciling WorkloadPolicy")
 
 	// 1. Fetch the WorkloadPolicy instance
 	var workloadPolicy tpuv1alpha1.WorkloadPolicy
 	if err := r.Get(ctx, req.NamespacedName, &workloadPolicy); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("WorkloadPolicy not found, ignoring since object must be deleted")
+			logger.Info("workloadPolicy not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get WorkloadPolicy")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get WorkloadPolicy: %w", err)
 	}
 
 	base := workloadPolicy.DeepCopy()
@@ -62,33 +61,32 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "Failed to patch status after reconcile error")
+				logger.Error(err, "failed to patch status after reconcile error")
 			}
 		}
 	}()
 
 	// 2. Check pending operation
 	if workloadPolicy.Status.OperationName != "" {
-		logger.Info("Checking pending GCE operation", "operation", workloadPolicy.Status.OperationName)
+		logger.V(1).Info("checking pending GCE operation", "operation", workloadPolicy.Status.OperationName)
 		opProto, err := r.GCEOps.Get(ctx, workloadPolicy.Spec.Project, workloadPolicy.Spec.Region, workloadPolicy.Status.OperationName)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("getting GCE operation: %w", err)
 		}
 
 		if opProto.GetStatus() != computepb.Operation_DONE {
-			logger.Info("GCE operation still pending", "operation", workloadPolicy.Status.OperationName)
+			logger.V(1).Info("GCE operation still pending", "operation", workloadPolicy.Status.OperationName)
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 
 		// Operation is DONE
 		if opProto.HttpErrorStatusCode != nil && (opProto.GetHttpErrorStatusCode() < 200 || opProto.GetHttpErrorStatusCode() > 299) {
 			if !workloadPolicy.ObjectMeta.DeletionTimestamp.IsZero() && opProto.GetHttpErrorStatusCode() == http.StatusNotFound {
-				logger.Info("Ignoring 404 during deletion operation")
+				logger.V(1).Info("ignoring 404 during deletion operation")
 			} else {
-				err := fmt.Errorf("GCE operation failed: %s (code %d): %v", opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
-				logger.Error(err, "GCE operation failed", "operation", workloadPolicy.Status.OperationName)
+				opName := workloadPolicy.Status.OperationName
 				workloadPolicy.Status.OperationName = ""
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", workloadPolicy.Status.OperationName)
@@ -128,7 +126,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	// 3. Check if the resource is being deleted
 	if !workloadPolicy.ObjectMeta.DeletionTimestamp.IsZero() {
-		logger.Info("WorkloadPolicy is being deleted")
+		logger.Info("workloadPolicy is being deleted")
 		if controllerutil.ContainsFinalizer(&workloadPolicy, finalizerName) {
 			// Delete GCE Resource Policy
 			op, err := r.GCE.Delete(ctx, workloadPolicy.Spec.Project, workloadPolicy.Spec.Region, workloadPolicy.Name)
@@ -177,7 +175,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	gcePolicy, err := r.GCE.Get(ctx, workloadPolicy.Spec.Project, workloadPolicy.Spec.Region, workloadPolicy.Name)
 	if err != nil {
 		if gce.IsNotFound(err) {
-			logger.Info("Creating GCE ResourcePolicy", "name", workloadPolicy.Name)
+			logger.Info("creating GCE ResourcePolicy", "name", workloadPolicy.Name)
 			policy := converter.ToGCEResourcePolicy(&workloadPolicy)
 			op, err := r.GCE.Insert(ctx, workloadPolicy.Spec.Project, workloadPolicy.Spec.Region, policy)
 			if err != nil {
@@ -214,7 +212,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		},
 	}
 
-	logger.Info("Reconciliation finished")
+	logger.V(1).Info("reconciliation finished")
 	return ctrl.Result{}, nil
 }
 

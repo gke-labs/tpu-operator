@@ -44,7 +44,7 @@ func cordonNodes(ctx context.Context, logger logr.Logger, k8sClient client.Clien
 			continue
 		}
 
-		logger.Info("Cordoning node", "node", node.Name)
+		logger.Info("cordoning node", "node", node.Name)
 		// Apply taint using Patch to avoid conflicts
 		oldNode := node.DeepCopy()
 		node.Spec.Taints = append(node.Spec.Taints, taint)
@@ -142,7 +142,7 @@ func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client
 
 	var errs []error
 	for _, node := range nodeList.Items {
-		logger.Info("Deleting stale Node object", "node", node.Name)
+		logger.Info("deleting stale Node object", "node", node.Name)
 		if err := k8sClient.Delete(ctx, &node); err != nil {
 			if !apierrors.IsNotFound(err) {
 				errs = append(errs, fmt.Errorf("failed to delete node %s: %w", node.Name, err))
@@ -165,13 +165,13 @@ func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client
 	// 2. Check if there are any active groups (not being deleted)
 	for _, g := range groupList.Items {
 		if g.DeletionTimestamp.IsZero() {
-			logger.Info("Skipping device plugin deletion as active TPUNodeGroups still exist")
+			logger.V(1).Info("skipping device plugin deletion as active TPUNodeGroups still exist")
 			return true, nil
 		}
 	}
 
 	// 3. Delete DaemonSet
-	logger.Info("Deleting shared TPU Device Plugin DaemonSet (last group being deleted)")
+	logger.Info("deleting shared TPU Device Plugin DaemonSet as this is the last group being deleted")
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      deviceplugin.DevicePluginName,
@@ -207,7 +207,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		return ctrl.Result{}, nil
 	}
 
-	logger.Info("Cordoning nodes")
+	logger.Info("cordoning nodes")
 	if err := cordonNodes(ctx, logger, k8sClient, group); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
 	}
@@ -216,13 +216,13 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 
 	// 1. MIG
 	if controllerutil.ContainsFinalizer(group, finalizerMIG) {
-		logger.Info("Ensuring ManagedInstanceGroup is deleted")
+		logger.V(1).Info("ensuring ManagedInstanceGroup is deleted")
 		done, err := ensureManagedInstanceGroupDeleted(ctx, k8sClient, group)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete MIG: %w", err)
 		}
 		if !done {
-			logger.Info("Waiting for ManagedInstanceGroup to be deleted")
+			logger.V(1).Info("waiting for ManagedInstanceGroup to be deleted")
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    tpuapi.ConditionTypeReady,
 				Status:  metav1.ConditionFalse,
@@ -241,13 +241,13 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 
 	// 2. Template
 	if controllerutil.ContainsFinalizer(group, finalizerTemplate) {
-		logger.Info("Ensuring InstanceTemplate is deleted")
+		logger.V(1).Info("ensuring InstanceTemplate is deleted")
 		done, err := ensureInstanceTemplateDeleted(ctx, k8sClient, group)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
 		}
 		if !done {
-			logger.Info("Waiting for InstanceTemplate to be deleted")
+			logger.V(1).Info("waiting for InstanceTemplate to be deleted")
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    tpuapi.ConditionTypeReady,
 				Status:  metav1.ConditionFalse,
@@ -266,13 +266,13 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 
 	// 3. Policy
 	if controllerutil.ContainsFinalizer(group, finalizerPolicy) {
-		logger.Info("Ensuring WorkloadPolicy is deleted")
+		logger.V(1).Info("ensuring WorkloadPolicy is deleted")
 		done, err := ensureWorkloadPolicyDeleted(ctx, k8sClient, group)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
 		}
 		if !done {
-			logger.Info("Waiting for WorkloadPolicy to be deleted")
+			logger.V(1).Info("waiting for WorkloadPolicy to be deleted")
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    tpuapi.ConditionTypeReady,
 				Status:  metav1.ConditionFalse,
@@ -291,7 +291,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 
 	// 4. Nodes
 	if controllerutil.ContainsFinalizer(group, finalizerNodes) {
-		logger.Info("Deleting stale Node objects")
+		logger.Info("deleting stale Node objects")
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    tpuapi.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
@@ -311,7 +311,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 
 	// 5. Device Plugin
 	if controllerutil.ContainsFinalizer(group, finalizerDevicePlugin) {
-		logger.Info("Ensuring TPU Device Plugin is deleted if last group")
+		logger.V(1).Info("ensuring TPU Device Plugin is deleted if last group")
 		done, err := cleanupDevicePluginIfLastGroup(ctx, k8sClient, logger)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete TPU Device Plugin: %w", err)

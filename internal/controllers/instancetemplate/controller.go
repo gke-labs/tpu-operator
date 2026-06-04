@@ -40,17 +40,16 @@ type InstanceTemplateReconciler struct {
 
 func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Request) (res ctrl.Result, retErr error) {
 	logger := ctrl.LoggerFrom(ctx)
-	logger.Info("Reconciling InstanceTemplate")
+	logger.Info("reconciling InstanceTemplate")
 
 	// 1. Fetch the InstanceTemplate instance
 	var instanceTemplate tpuv1alpha1.InstanceTemplate
 	if err := r.Get(ctx, req.NamespacedName, &instanceTemplate); err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("InstanceTemplate not found, ignoring since object must be deleted")
+			logger.Info("instanceTemplate not found, ignoring since object must be deleted")
 			return ctrl.Result{}, nil
 		}
-		logger.Error(err, "Failed to get InstanceTemplate")
-		return ctrl.Result{}, err
+		return ctrl.Result{}, fmt.Errorf("failed to get InstanceTemplate: %w", err)
 	}
 
 	base := instanceTemplate.DeepCopy()
@@ -63,33 +62,32 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if retErr == nil {
 				retErr = fmt.Errorf("failed to patch status: %w", err)
 			} else {
-				logger.Error(err, "Failed to patch status after reconcile error")
+				logger.Error(err, "failed to patch status after reconcile error")
 			}
 		}
 	}()
 
 	// 2. Check pending operation
 	if instanceTemplate.Status.OperationName != "" {
-		logger.Info("Checking pending GCE operation", "operation", instanceTemplate.Status.OperationName)
+		logger.V(1).Info("checking pending GCE operation", "operation", instanceTemplate.Status.OperationName)
 		opProto, err := r.GCEOps.Get(ctx, instanceTemplate.Spec.Project, instanceTemplate.Status.OperationName)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("getting GCE operation: %w", err)
 		}
 
 		if opProto.GetStatus() != computepb.Operation_DONE {
-			logger.Info("GCE operation still pending", "operation", instanceTemplate.Status.OperationName)
+			logger.V(1).Info("GCE operation still pending", "operation", instanceTemplate.Status.OperationName)
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 
 		// Operation is DONE
 		if opProto.HttpErrorStatusCode != nil && (opProto.GetHttpErrorStatusCode() < 200 || opProto.GetHttpErrorStatusCode() > 299) {
 			if !instanceTemplate.ObjectMeta.DeletionTimestamp.IsZero() && opProto.GetHttpErrorStatusCode() == http.StatusNotFound {
-				logger.Info("Ignoring 404 during deletion operation")
+				logger.V(1).Info("ignoring 404 during deletion operation")
 			} else {
-				err := fmt.Errorf("GCE operation failed: %s (code %d): %v", opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
-				logger.Error(err, "GCE operation failed", "operation", instanceTemplate.Status.OperationName)
+				opName := instanceTemplate.Status.OperationName
 				instanceTemplate.Status.OperationName = ""
-				return ctrl.Result{}, err
+				return ctrl.Result{}, fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", instanceTemplate.Status.OperationName)
@@ -129,7 +127,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	// 3. Check if the resource is being deleted
 	if !instanceTemplate.ObjectMeta.DeletionTimestamp.IsZero() {
-		logger.Info("InstanceTemplate is being deleted")
+		logger.Info("instanceTemplate is being deleted")
 		if controllerutil.ContainsFinalizer(&instanceTemplate, finalizerName) {
 			// Delete GCE Instance Template
 			op, err := r.GCE.Delete(ctx, instanceTemplate.Spec.Project, instanceTemplate.Name)
@@ -179,7 +177,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	gceTemplate, err := r.GCE.Get(ctx, instanceTemplate.Spec.Project, instanceTemplate.Name)
 	if err != nil {
 		if gce.IsNotFound(err) {
-			logger.Info("Creating GCE InstanceTemplate", "name", instanceTemplate.Name)
+			logger.Info("creating GCE InstanceTemplate", "name", instanceTemplate.Name)
 			template := converter.ToGCEInstanceTemplate(&instanceTemplate)
 			op, err := r.GCE.Insert(ctx, instanceTemplate.Spec.Project, template)
 			if err != nil {
@@ -219,7 +217,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 
 
-	logger.Info("Reconciliation finished")
+	logger.V(1).Info("reconciliation finished")
 	return ctrl.Result{}, nil
 }
 
