@@ -725,6 +725,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonDeletingMIG,
+					Message: "Waiting for ManagedInstanceGroup to be deleted",
+				},
+			},
 			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{
@@ -770,6 +778,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonDeletingMIG,
+					Message: "Waiting for ManagedInstanceGroup to be deleted",
+				},
+			},
 			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{}, nil
@@ -809,6 +825,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonDeletingTemplate,
+					Message: "Waiting for InstanceTemplate to be deleted",
+				},
+			},
 		},
 		{
 			name: "resource_deletion_template_gone_wait_policy",
@@ -843,6 +867,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonDeletingPolicy,
+					Message: "Waiting for WorkloadPolicy to be deleted",
+				},
+			},
 		},
 		{
 			name: "resource_deletion_all_gone",
@@ -905,6 +937,49 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantResult:  reconcile.Result{},
 			wantErr:     false,
 			wantDeleted: true,
+		},
+		{
+			name: "resource_deletion_nodes_gone_wait_device_plugin_with_dummy_finalizer",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-tpu",
+					Namespace:         "default",
+					Finalizers:        []string{"tpu.google.com/cleanup-device-plugin", "tpu.google.com/dummy-cleanup"},
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+				},
+			},
+			additionalObjects: []client.Object{
+				&appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tpu-device-plugin",
+						Namespace: "kube-system",
+					},
+				},
+			},
+			wantResult:     reconcile.Result{},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/dummy-cleanup"},
+			wantConditions: []metav1.Condition{
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonDeletingDevicePlugin,
+					Message: "Deleting TPU Device Plugin DaemonSet",
+				},
+			},
 		},
 		{
 			name: "reconcile_mig_create",

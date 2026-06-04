@@ -155,6 +155,9 @@ func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client
 
 // cleanupDevicePluginIfLastGroup deletes the shared TPU Device Plugin DaemonSet
 // if there are no other active TPUNodeGroups in the cluster.
+// Note: If other active groups exist, we skip deleting the DaemonSet but still
+// return (true, nil). This allows the current group's finalizer to be removed
+// while keeping the shared DaemonSet running for the remaining active groups.
 func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client, logger logr.Logger) (bool, error) {
 	// 1. List all TPUNodeGroups
 	var groupList tpuapi.TPUNodeGroupList
@@ -231,9 +234,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		patchBase := group.DeepCopy()
-		controllerutil.RemoveFinalizer(group, finalizerMIG)
-		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerMIG); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove MIG finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -256,9 +257,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		patchBase := group.DeepCopy()
-		controllerutil.RemoveFinalizer(group, finalizerTemplate)
-		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerTemplate); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Template finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -281,9 +280,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		patchBase := group.DeepCopy()
-		controllerutil.RemoveFinalizer(group, finalizerPolicy)
-		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerPolicy); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Policy finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -301,9 +298,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		if err := deleteNodeObjects(ctx, logger, k8sClient, group); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
 		}
-		patchBase := group.DeepCopy()
-		controllerutil.RemoveFinalizer(group, finalizerNodes)
-		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerNodes); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -312,6 +307,12 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	// 5. Device Plugin
 	if controllerutil.ContainsFinalizer(group, finalizerDevicePlugin) {
 		logger.V(1).Info("ensuring TPU Device Plugin is deleted if last group")
+		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+			Type:    tpuapi.ConditionTypeReady,
+			Status:  metav1.ConditionFalse,
+			Reason:  tpuapi.ReasonDeletingDevicePlugin,
+			Message: "Deleting TPU Device Plugin DaemonSet",
+		})
 		done, err := cleanupDevicePluginIfLastGroup(ctx, k8sClient, logger)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete TPU Device Plugin: %w", err)
@@ -319,13 +320,26 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 		if !done {
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		patchBase := group.DeepCopy()
-		controllerutil.RemoveFinalizer(group, finalizerDevicePlugin)
-		if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerDevicePlugin); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Device Plugin finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// removeFinalizerAndPatch removes the specified finalizer from the TPUNodeGroup and patches it.
+// It saves and restores group.Status.Conditions around the patch call because k8sClient.Patch
+// overwrites the in-memory object (group) with the server response (which lacks the unpersisted
+// status conditions that are only saved via the Status().Patch call at the end of Reconcile).
+func removeFinalizerAndPatch(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup, finalizer string) error {
+	patchBase := group.DeepCopy()
+	savedConditions := group.Status.Conditions
+	controllerutil.RemoveFinalizer(group, finalizer)
+	if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+		return err
+	}
+	group.Status.Conditions = savedConditions
+	return nil
 }
