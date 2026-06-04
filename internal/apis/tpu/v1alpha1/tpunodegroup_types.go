@@ -30,9 +30,14 @@ const (
 
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.
 // +kubebuilder:validation:XValidation:rule="self.nodeCount > 1 || self.targetSizePolicyMode == 'INDIVIDUAL'",message="targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1 or less"
+// +kubebuilder:validation:XValidation:rule="has(self.instanceConfig) || has(self.instanceTemplateURI)",message="Either InstanceConfig or InstanceTemplateURI must be specified"
+// +kubebuilder:validation:XValidation:rule="!(has(self.instanceConfig) && has(self.instanceTemplateURI))",message="InstanceConfig and InstanceTemplateURI cannot be specified together"
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)",message="Bootstrapping is not supported when bringing your own instance template"
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceTemplateURI) || self.instanceTemplateURI.matches('^projects/' + self.project + '/(locations/[^/]+|regions/[^/]+|global)/instanceTemplates/[a-z0-9-]+$')",message="InstanceTemplateURI must belong to the same project as specified in spec.project"
 type TPUNodeGroupSpec struct {
 	// Project is the GCP project ID.
 	// +required
+	// +kubebuilder:validation:MaxLength=30
 	// +kubebuilder:validation:Pattern="^[a-z][a-z0-9-]{4,28}[a-z0-9]$"
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="Project is immutable"
 	Project string `json:"project"`
@@ -42,12 +47,19 @@ type TPUNodeGroupSpec struct {
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="NodeLocation is immutable"
 	NodeLocation string `json:"nodeLocation"`
 
-	// TODO: Handle bring your own instance template URI.
+	// InstanceTemplateURI is the URI of an existing GCE instance template to use.
+	// This field is immutable once set.
+	// If specified, InstanceConfig must be omitted.
+	// +optional
+	// +kubebuilder:validation:MaxLength=255
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="InstanceTemplateURI is immutable"
+	InstanceTemplateURI *string `json:"instanceTemplateURI,omitempty"`
 
 	// InstanceConfig allows the controller to generate an instance template.
-	// +required
+	// If specified, InstanceTemplateURI must be omitted.
+	// +optional
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="InstanceConfig is immutable"
-	InstanceConfig *InstanceConfig `json:"instanceConfig"`
+	InstanceConfig *InstanceConfig `json:"instanceConfig,omitempty"`
 
 	// NodeCount is the total number of VMs desired.
 	// +required
@@ -100,6 +112,7 @@ type ServiceAccount struct {
 type InstanceConfig struct {
 	// MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
 	// +required
+	// +kubebuilder:validation:MaxLength=63
 	// +kubebuilder:validation:XValidation:rule="self.matches('^(tpu7x-|tpu7-|ct6e-).*')",message="Only v6 and v7 TPU machine types are supported"
 	MachineType string `json:"machineType"`
 

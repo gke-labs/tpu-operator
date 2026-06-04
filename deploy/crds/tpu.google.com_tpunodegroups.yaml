@@ -69,8 +69,9 @@ spec:
                 - message: Version must be set to 1.31
                   rule: has(self.version) && self.version == '1.31'
               instanceConfig:
-                description: InstanceConfig allows the controller to generate an instance
-                  template.
+                description: |-
+                  InstanceConfig allows the controller to generate an instance template.
+                  If specified, InstanceTemplateURI must be omitted.
                 properties:
                   bootDiskSizeGB:
                     description: BootDiskSizeGB is the size of the boot disk in GB.
@@ -85,6 +86,7 @@ spec:
                     type: string
                   machineType:
                     description: MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
+                    maxLength: 63
                     type: string
                     x-kubernetes-validations:
                     - message: Only v6 and v7 TPU machine types are supported
@@ -149,6 +151,16 @@ spec:
                 x-kubernetes-validations:
                 - message: InstanceConfig is immutable
                   rule: self == oldSelf
+              instanceTemplateURI:
+                description: |-
+                  InstanceTemplateURI is the URI of an existing GCE instance template to use.
+                  This field is immutable once set.
+                  If specified, InstanceConfig must be omitted.
+                maxLength: 255
+                type: string
+                x-kubernetes-validations:
+                - message: InstanceTemplateURI is immutable
+                  rule: self == oldSelf
               minNodeCount:
                 description: MinNodeCount is the minimum required for a single-host
                   slice.
@@ -173,6 +185,7 @@ spec:
                   rule: self == oldSelf
               project:
                 description: Project is the GCP project ID.
+                maxLength: 30
                 pattern: ^[a-z][a-z0-9-]{4,28}[a-z0-9]$
                 type: string
                 x-kubernetes-validations:
@@ -199,7 +212,6 @@ spec:
                   rule: self == oldSelf
             required:
             - acceleratorConnectionMode
-            - instanceConfig
             - nodeCount
             - nodeLocation
             - project
@@ -210,6 +222,18 @@ spec:
             - message: targetSizePolicyMode must be INDIVIDUAL when nodeCount is 1
                 or less
               rule: self.nodeCount > 1 || self.targetSizePolicyMode == 'INDIVIDUAL'
+            - message: Either InstanceConfig or InstanceTemplateURI must be specified
+              rule: has(self.instanceConfig) || has(self.instanceTemplateURI)
+            - message: InstanceConfig and InstanceTemplateURI cannot be specified
+                together
+              rule: '!(has(self.instanceConfig) && has(self.instanceTemplateURI))'
+            - message: Bootstrapping is not supported when bringing your own instance
+                template
+              rule: '!has(self.instanceTemplateURI) || !has(self.bootstrapKubernetes)'
+            - message: InstanceTemplateURI must belong to the same project as specified
+                in spec.project
+              rule: '!has(self.instanceTemplateURI) || self.instanceTemplateURI.matches(''^projects/''
+                + self.project + ''/(locations/[^/]+|regions/[^/]+|global)/instanceTemplates/[a-z0-9-]+$'')'
           status:
             description: TPUNodeGroupStatus defines the observed state of a TPUNodeGroup.
             properties:
