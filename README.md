@@ -235,6 +235,12 @@ spec:
 EOF
 ```
 
+### Bring Your Own Instance Template (Optional)
+
+If you want to further customize the VM, you can bring your own pre-provisioned GCE Instance Template and bypass the controller's template creation process. You can provide its URI using the `instanceTemplateURI` field. When this field is set, the controller will skip generating an Instance Template and use yours directly to create the Managed Instance Group. The controller will perform basic validation.
+
+*Note: Because the controller skips the bootstrapping phase when using a custom Instance Template, you must configure your own bootstrapping solution. Once the nodes join, the controller will still perform node labeling and deploy the TPU device plugin DaemonSet.*
+
 ## Step 3: Monitor Provisioning Status
 
 The controller provides real-time readiness feedback in the CRD status. You don't need to check the GCP console; simply inspect the resource in Kubernetes to see its exact lifecycle state.
@@ -382,7 +388,6 @@ spec:
           requests:
             google.com/tpu: "4"
 EOF
-```
 ```
 
 ## Step 5: Teardown
