@@ -2,11 +2,9 @@ package tpunodegroup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
-	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -130,18 +128,24 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 1: Reconcile Workload Policy
-	if err := r.reconcileWorkloadPolicy(ctx, &tpuNodeGroup); err != nil {
-		return interpretWaitingOrError(logger, err, "failed to reconcile workload policy")
+	if ready, err := r.reconcileWorkloadPolicy(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile workload policy: %w", err)
+	} else if !ready {
+		return ctrl.Result{}, nil
 	}
 
 	// Step 2: Reconcile Instance Template
-	if err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
-		return interpretWaitingOrError(logger, err, "failed to reconcile instance template")
+	if ready, err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
+	} else if !ready {
+		return ctrl.Result{}, nil
 	}
 
 	// Step 3: Reconcile Managed Instance Group
-	if err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
-		return interpretWaitingOrError(logger, err, "failed to reconcile MIG")
+	if ready, err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
+	} else if !ready {
+		return ctrl.Result{}, nil
 	}
 
 	// Step 4: Inject Metadata
@@ -206,34 +210,20 @@ func (r *TPUNodeGroupReconciler) ensureFinalizers(ctx context.Context, group *tp
 	return true, nil
 }
 
-// interpretWaitingOrError handles errors from child reconcilers, specifically WaitingForChildError.
-// We do not return an error or an explicit requeue timer when waiting for a child resource.
-// Because the controller is configured with .Owns() for these child CRs in SetupWithManager,
-// any status update to the child CR (e.g., Status.URI being populated) will automatically
-// trigger a new reconciliation request for the parent TPUNodeGroup.
-func interpretWaitingOrError(logger logr.Logger, err error, message string) (ctrl.Result, error) {
-	var waitErr *WaitingForChildError
-	if errors.As(err, &waitErr) {
-		logger.V(1).Info(waitErr.Error())
-		return ctrl.Result{}, nil
-	}
-	return ctrl.Result{}, fmt.Errorf("%s: %w", message, err)
-}
-
 // reconcileWorkloadPolicy orchestrates the child WorkloadPolicy CR.
 // It is only needed for multi-host slices where topology is specified.
-func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	logger := ctrl.LoggerFrom(ctx)
 	// WorkloadPolicy is only needed for multi-host slices where topology is specified.
 	if group.Spec.Topology == "" || group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeIndividual {
 		logger.V(1).Info("skipping WorkloadPolicy reconciliation as topology is not specified or target policy mode is INDIVIDUAL")
-		return nil
+		return true, nil
 	}
 
 	// 1. Generate desired state
 	policy, err := converter.ToWorkloadPolicyCR(group)
 	if err != nil {
-		return fmt.Errorf("failed to convert to WorkloadPolicy CR: %w", err)
+		return false, fmt.Errorf("failed to convert to WorkloadPolicy CR: %w", err)
 	}
 
 	// 2. Get existing CR
@@ -245,7 +235,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 		if apierrors.IsNotFound(err) {
 			logger.Info("creating WorkloadPolicy CR", "name", policy.Name)
 			if err := r.Create(ctx, policy); err != nil {
-				return fmt.Errorf("creating WorkloadPolicy CR: %w", err)
+				return false, fmt.Errorf("creating WorkloadPolicy CR: %w", err)
 			}
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    "WorkloadPolicyReady",
@@ -253,9 +243,9 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 				Reason:  "Provisioning",
 				Message: "Child WorkloadPolicy CR created; waiting for GCE resource provisioning",
 			})
-			return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+			return false, nil
 		}
-		return fmt.Errorf("getting WorkloadPolicy CR: %w", err)
+		return false, fmt.Errorf("getting WorkloadPolicy CR: %w", err)
 	}
 
 	// 4. Update if changed
@@ -264,7 +254,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 		patchBase := existing.DeepCopy()
 		existing.Spec = policy.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
-			return fmt.Errorf("patching WorkloadPolicy CR: %w", err)
+			return false, fmt.Errorf("patching WorkloadPolicy CR: %w", err)
 		}
 	}
 
@@ -277,7 +267,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 			Reason:  "Provisioning",
 			Message: "Waiting for GCE resource provisioning",
 		})
-		return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+		return false, nil
 	}
 
 	// 6. Mark Ready
@@ -288,28 +278,19 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 		Reason:  "Ready",
 		Message: "WorkloadPolicy provisioned successfully",
 	})
-	return nil
+	return true, nil
 }
 
-// WaitingForChildError indicates that reconciliation is waiting for a child resource to be provisioned.
-type WaitingForChildError struct {
-	ChildKind string
-}
-
-func (e *WaitingForChildError) Error() string {
-	return fmt.Sprintf("waiting for child resource %s to be provisioned", e.ChildKind)
-}
-
-func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
 	template := converter.ToInstanceTemplateCR(group)
 	if template == nil {
-		return nil
+		return true, nil
 	}
 
 	if err := r.defaultInstanceTemplate(template, group); err != nil {
-		return err
+		return false, err
 	}
 
 	existing := &tpuapi.InstanceTemplate{}
@@ -318,7 +299,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		if apierrors.IsNotFound(err) {
 			logger.Info("creating InstanceTemplate CR", "name", template.Name)
 			if err := r.Create(ctx, template); err != nil {
-				return fmt.Errorf("creating InstanceTemplate CR: %w", err)
+				return false, fmt.Errorf("creating InstanceTemplate CR: %w", err)
 			}
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    "InstanceTemplateReady",
@@ -326,9 +307,9 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 				Reason:  "Provisioning",
 				Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
 			})
-			return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+			return false, nil
 		}
-		return fmt.Errorf("getting InstanceTemplate CR: %w", err)
+		return false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
 	}
 
 	if !equality.Semantic.DeepEqual(existing.Spec, template.Spec) {
@@ -336,7 +317,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		patchBase := existing.DeepCopy()
 		existing.Spec = template.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
-			return fmt.Errorf("patching InstanceTemplate CR: %w", err)
+			return false, fmt.Errorf("patching InstanceTemplate CR: %w", err)
 		}
 	}
 
@@ -348,7 +329,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 			Reason:  "Provisioning",
 			Message: "Waiting for GCE resource provisioning",
 		})
-		return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+		return false, nil
 	}
 
 	logger.Info("instanceTemplate CR is ready", "uri", existing.Status.URI)
@@ -358,10 +339,10 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		Reason:  "Ready",
 		Message: "InstanceTemplate provisioned successfully",
 	})
-	return nil
+	return true, nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) error {
+func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	logger := ctrl.LoggerFrom(ctx)
 	var template *tpuapi.InstanceTemplate
 	var policy *tpuapi.WorkloadPolicy
@@ -373,12 +354,12 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 	err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, template)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+			return false, nil
 		}
-		return fmt.Errorf("getting InstanceTemplate CR: %w", err)
+		return false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
 	}
 	if template.Status.URI == "" {
-		return &WaitingForChildError{ChildKind: "InstanceTemplate"}
+		return false, nil
 	}
 
 	// 2. Fetch WorkloadPolicy if needed
@@ -388,12 +369,12 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 		err = r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, policy)
 		if err != nil {
 			if apierrors.IsNotFound(err) {
-				return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+				return false, nil
 			}
-			return fmt.Errorf("getting WorkloadPolicy CR: %w", err)
+			return false, fmt.Errorf("getting WorkloadPolicy CR: %w", err)
 		}
 		if policy.Status.URI == "" {
-			return &WaitingForChildError{ChildKind: "WorkloadPolicy"}
+			return false, nil
 		}
 	}
 
@@ -409,7 +390,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 		if apierrors.IsNotFound(err) {
 			logger.Info("creating ManagedInstanceGroup CR", "name", mig.Name)
 			if err := r.Create(ctx, mig); err != nil {
-				return fmt.Errorf("creating ManagedInstanceGroup CR: %w", err)
+				return false, fmt.Errorf("creating ManagedInstanceGroup CR: %w", err)
 			}
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    "ManagedInstanceGroupReady",
@@ -417,9 +398,9 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 				Reason:  "Provisioning",
 				Message: "Child ManagedInstanceGroup CR created; waiting for GCE resource provisioning",
 			})
-			return &WaitingForChildError{ChildKind: "ManagedInstanceGroup"}
+			return false, nil
 		}
-		return fmt.Errorf("getting ManagedInstanceGroup CR: %w", err)
+		return false, fmt.Errorf("getting ManagedInstanceGroup CR: %w", err)
 	}
 
 	// 6. Update if changed
@@ -428,7 +409,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 		patchBase := existing.DeepCopy()
 		existing.Spec = mig.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
-			return fmt.Errorf("patching ManagedInstanceGroup CR: %w", err)
+			return false, fmt.Errorf("patching ManagedInstanceGroup CR: %w", err)
 		}
 	}
 
@@ -441,7 +422,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 			Reason:  "Provisioning",
 			Message: "Waiting for GCE resource provisioning",
 		})
-		return &WaitingForChildError{ChildKind: "ManagedInstanceGroup"}
+		return false, nil
 	}
 
 	// 8. Mark Ready
@@ -452,7 +433,7 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 		Reason:  "Ready",
 		Message: "ManagedInstanceGroup provisioned successfully",
 	})
-	return nil
+	return true, nil
 }
 
 // mapDaemonSetToTPUNodeGroups maps events on the shared TPU device plugin DaemonSet
