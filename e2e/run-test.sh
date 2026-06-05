@@ -28,4 +28,12 @@ source e2e/connect-gce-cluster.sh
 TEST_NAME="${1:-.}"
 
 echo "=== Running E2E test matching '${TEST_NAME}' with 20m timeout ==="
-go test -v ./e2e -tags=e2e -run "${TEST_NAME}" -timeout 20m "${@:2}"
+go test -v ./e2e -tags=e2e -run "${TEST_NAME}" -timeout 20m \
+  -args \
+  -e2e-project="${PROJECT}" \
+  -e2e-zone="${ZONE}" \
+  -e2e-region="${E2E_REGION}" \
+  -e2e-reservation="${E2E_RESERVATION}" \
+  -e2e-control-plane-ip="${E2E_CONTROL_PLANE_IP}" \
+  "${@:2}"
+
