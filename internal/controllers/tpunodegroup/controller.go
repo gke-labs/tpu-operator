@@ -156,21 +156,10 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 4.5: Reconcile Nodes (Labeling and Status)
-	if err := ReconcileNodes(ctx, r.Client, r.igmClient, &tpuNodeGroup); err != nil {
+	if err := ReconcileNodes(ctx, r.Client, r.igmClient, r.recorder, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile nodes: %w", err)
 	}
 
-	var prevReady int32
-	if base.Status.NodeSummary != nil {
-		prevReady = base.Status.NodeSummary.Ready
-	}
-	var currentReady int32
-	if tpuNodeGroup.Status.NodeSummary != nil {
-		currentReady = tpuNodeGroup.Status.NodeSummary.Ready
-	}
-	if currentReady > prevReady && currentReady < tpuNodeGroup.Spec.NodeCount {
-		r.recorder.Event(&tpuNodeGroup, corev1.EventTypeNormal, "NodesJoining", fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", tpuNodeGroup.Spec.NodeCount-currentReady, tpuNodeGroup.Spec.NodeCount))
-	}
 
 	// Step 5: Reconcile Device Plugin
 	if err := deviceplugin.Reconcile(ctx, r.kubeClientset, &tpuNodeGroup); err != nil {

@@ -6,12 +6,14 @@ import (
 
 	"cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -31,6 +33,7 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 		nodes            []corev1.Node
 		managedInstances []*computepb.ManagedInstance
 		wantStatus       *tpuapi.NodeSummary
+		wantEvents       []string
 		wantErr          bool
 	}{
 		{
@@ -78,7 +81,8 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				Ready:       2,
 				Reconciling: 0,
 			},
-			wantErr: false,
+			wantEvents: nil,
+			wantErr:    false,
 		},
 		{
 			name: "one_node_ready_one_pending",
@@ -125,7 +129,195 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				Ready:       1,
 				Reconciling: 1,
 			},
+			wantEvents: []string{
+				"Normal NodesJoining Waiting for 1 of 2 nodes to join the cluster",
+			},
 			wantErr: false,
+		},
+		{
+			name: "event_emitted_on_joining_progress",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    3,
+				},
+				Status: tpuapi.TPUNodeGroupStatus{
+					NodeSummary: &tpuapi.NodeSummary{
+						Ready: 1,
+					},
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-1"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-1",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-2"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-2",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-3"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-3",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
+						},
+					},
+				},
+			},
+			managedInstances: []*computepb.ManagedInstance{
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-1")},
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-2")},
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-3")},
+			},
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       2,
+				Reconciling: 1,
+			},
+			wantEvents: []string{
+				"Normal NodesJoining Waiting for 1 of 3 nodes to join the cluster",
+			},
+			wantErr: false,
+		},
+		{
+			name: "no_event_on_no_progress",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    3,
+				},
+				Status: tpuapi.TPUNodeGroupStatus{
+					NodeSummary: &tpuapi.NodeSummary{
+						Ready: 1,
+					},
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-1"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-1",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-2"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-2",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-3"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-3",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionFalse},
+						},
+					},
+				},
+			},
+			managedInstances: []*computepb.ManagedInstance{
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-1")},
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-2")},
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-3")},
+			},
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       1,
+				Reconciling: 2,
+			},
+			wantEvents: nil,
+			wantErr:    false,
+		},
+		{
+			name: "no_event_on_all_ready",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    2,
+				},
+				Status: tpuapi.TPUNodeGroupStatus{
+					NodeSummary: &tpuapi.NodeSummary{
+						Ready: 1,
+					},
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-1"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-1",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-2"},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/inst-2",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+			},
+			managedInstances: []*computepb.ManagedInstance{
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-1")},
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-2")},
+			},
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       2,
+				Reconciling: 0,
+			},
+			wantEvents: nil,
+			wantErr:    false,
 		},
 	}
 
@@ -144,13 +336,23 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 				},
 			}
 
-			err := ReconcileNodes(t.Context(), cl, mockIGM, tc.group)
+			recorder := record.NewFakeRecorder(10)
+			err := ReconcileNodes(t.Context(), cl, mockIGM, recorder, tc.group)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ReconcileNodes() error = %v, wantErr %v", err, tc.wantErr)
 			}
 
 			if diff := cmp.Diff(tc.wantStatus, tc.group.Status.NodeSummary); diff != "" {
 				t.Errorf("NodeSummary mismatch (-want +got):\n%s", diff)
+			}
+
+			var gotEvents []string
+			close(recorder.Events)
+			for e := range recorder.Events {
+				gotEvents = append(gotEvents, e)
+			}
+			if diff := cmp.Diff(tc.wantEvents, gotEvents, cmpopts.EquateEmpty()); diff != "" {
+				t.Errorf("Emitted events mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}

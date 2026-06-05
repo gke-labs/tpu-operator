@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -28,7 +29,7 @@ const (
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
 // and mutates NodeSummary in memory.
-func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.IGMClient, group *tpuapi.TPUNodeGroup) error {
+func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.IGMClient, recorder record.EventRecorder, group *tpuapi.TPUNodeGroup) error {
 	// 1. Get list of expected instances from MIG
 	// TODO: Get actual MIG name from status or child CR when available.
 	migName := group.ManagedInstanceGroupName()
@@ -84,19 +85,29 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		return agg
 	}
 
+	var prevReady int32
+	if group.Status.NodeSummary != nil {
+		prevReady = group.Status.NodeSummary.Ready
+	}
+
 	// 4. Update TPUNodeGroup status
 	if group.Status.NodeSummary == nil {
 		group.Status.NodeSummary = &tpuapi.NodeSummary{}
 	}
-	group.Status.NodeSummary.Ready = int32(readyCount)
-	group.Status.NodeSummary.Reconciling = group.Spec.NodeCount - int32(readyCount)
+	currentReady := int32(readyCount)
+	group.Status.NodeSummary.Ready = currentReady
+	group.Status.NodeSummary.Reconciling = group.Spec.NodeCount - currentReady
 
-	if int32(readyCount) < group.Spec.NodeCount {
+	if currentReady > prevReady && currentReady < group.Spec.NodeCount {
+		recorder.Event(group, corev1.EventTypeNormal, "NodesJoining", fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", group.Spec.NodeCount-currentReady, group.Spec.NodeCount))
+	}
+
+	if currentReady < group.Spec.NodeCount {
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    tpuapi.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  tpuapi.ReasonAwaitingNodeJoin,
-			Message: fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", group.Spec.NodeCount-int32(readyCount), group.Spec.NodeCount),
+			Message: fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", group.Spec.NodeCount-currentReady, group.Spec.NodeCount),
 		})
 	}
 
