@@ -163,4 +163,36 @@ func TestHelpers_ApplyManifest_WithBindEnv(t *testing.T) {
 	}
 }
 
+func TestHelpers_RegionPrecedence(t *testing.T) {
+	origConfig := Config
+	t.Cleanup(func() {
+		Config = origConfig
+	})
+
+	// Case 1: Flag overrides Env
+	Config.Region = "flag-region"
+	t.Setenv("E2E_REGION", "env-region")
+	Config.BindEnv()
+	if Config.Region != "flag-region" {
+		t.Errorf("Expected Region to remain flag-region, got %s", Config.Region)
+	}
+
+	// Case 2: Flag empty, falls back to Env
+	Config.Region = ""
+	t.Setenv("E2E_REGION", "env-region")
+	Config.BindEnv()
+	if Config.Region != "env-region" {
+		t.Errorf("Expected Region to fall back to env-region, got %s", Config.Region)
+	}
+
+	// Case 3: Both empty, falls back to Default
+	Config.Region = ""
+	t.Setenv("E2E_REGION", "")
+	Config.BindEnv()
+	if Config.Region != "us-central1" {
+		t.Errorf("Expected Region to fall back to us-central1 default, got %s", Config.Region)
+	}
+}
+
+
 
