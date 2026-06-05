@@ -2,6 +2,7 @@ package tpunodegroup
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -55,6 +56,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantFinalizers    []string
 		wantDeleted       bool
 		wantNodesDeleted  []string
+		wantEvents        []string
 		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
 		kubeObjects       []runtime.Object
 	}{
@@ -296,6 +298,10 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Reason:  tpuapi.ReasonReady,
 					Message: "All nodes are ready",
 				},
+			},
+			wantEvents: []string{
+				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
+				"Normal Provisioned All nodes are ready",
 			},
 			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
@@ -634,6 +640,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 						Effect: corev1.TaintEffectNoSchedule,
 					},
 				},
+			},
+			wantEvents: []string{
+				"Normal Cleanup TPU Node Group deletion initiated",
 			},
 		},
 		{
@@ -1040,6 +1049,341 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "reconcile_nodes_joining",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes", "tpu.google.com/cleanup-device-plugin"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            2,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+				},
+				Status: tpuapi.TPUNodeGroupStatus{
+					NodeSummary: &tpuapi.NodeSummary{
+						Ready: 0,
+					},
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:              "test-project",
+						Location:             "us-central1-a",
+						InstanceTemplate:     "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:           2,
+						TargetSizePolicyMode: "INDIVIDUAL",
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-tpu-0",
+						Labels: map[string]string{
+							"cloud.google.com/tpu-node-group": "default-test-tpu",
+						},
+					},
+					Spec: corev1.NodeSpec{
+						ProviderID: "gce://test-project/us-central1-a/test-tpu-0",
+					},
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+			},
+			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantErr:       false,
+			wantDaemonSet: true,
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       1,
+				Reconciling: 1,
+			},
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "ManagedInstanceGroup provisioned successfully",
+				},
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonAwaitingNodeJoin,
+					Message: "Waiting for 1 of 2 nodes to join the cluster",
+				},
+			},
+			wantEvents: []string{
+				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
+				"Normal NodesJoining Waiting for 1 of 2 nodes to join the cluster",
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{
+						{
+							Instance:       ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-0"),
+							InstanceStatus: ptr.To("RUNNING"),
+						},
+						{
+							Instance:       ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-1"),
+							InstanceStatus: ptr.To("PROVISIONING"),
+						},
+					}, nil
+				}
+				inst.GetFunc = func(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error) {
+					return &computepb.Instance{
+						Name: ptr.To(req.Instance),
+						Metadata: &computepb.Metadata{
+							Fingerprint: ptr.To("fingerprint"),
+						},
+					}, nil
+				}
+				inst.SetMetadataFunc = func(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error) {
+					return &compute.Operation{}, nil
+				}
+			},
+		},
+		{
+			name: "reconcile_failed_event",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes", "tpu.google.com/cleanup-device-plugin"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:              "test-project",
+						Location:             "us-central1-a",
+						InstanceTemplate:     "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:           1,
+						TargetSizePolicyMode: "INDIVIDUAL",
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    true,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "ManagedInstanceGroup provisioned successfully",
+				},
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonReconcileError,
+					Message: "Error reconciling: failed to inject metadata: failed to list managed instances: GCE API error",
+				},
+			},
+			wantEvents: []string{
+				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
+				"Warning Failed Error reconciling: failed to inject metadata: failed to list managed instances: GCE API error",
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return nil, fmt.Errorf("GCE API error")
+				}
+			},
+		},
+		{
+			name: "reconcile_mig_provisioned",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes", "tpu.google.com/cleanup-device-plugin"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
+				},
+				Status: tpuapi.TPUNodeGroupStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:    "InstanceTemplateReady",
+							Status:  metav1.ConditionTrue,
+							Reason:  "Ready",
+							Message: "InstanceTemplate provisioned successfully",
+						},
+						{
+							Type:    "ManagedInstanceGroupReady",
+							Status:  metav1.ConditionFalse,
+							Reason:  "Provisioning",
+							Message: "Child ManagedInstanceGroup CR created; waiting for GCE resource provisioning",
+						},
+					},
+				},
+			},
+			additionalObjects: []client.Object{
+				&tpuapi.InstanceTemplate{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-template",
+						Namespace: "default",
+					},
+					Spec: tpuapi.InstanceTemplateSpec{
+						InstanceConfig: tpuapi.InstanceConfig{
+							MachineType:       "tpu7x-standard-4t",
+							ProvisioningModel: ptr.To("STANDARD"),
+						},
+					},
+					Status: tpuapi.InstanceTemplateStatus{
+						URI: "projects/test-project/global/instanceTemplates/my-template",
+					},
+				},
+				&tpuapi.ManagedInstanceGroup{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-tpu-mig",
+						Namespace: "default",
+					},
+					Spec: tpuapi.ManagedInstanceGroupSpec{
+						Project:              "test-project",
+						Location:             "us-central1-a",
+						InstanceTemplate:     "projects/test-project/global/instanceTemplates/my-template",
+						TargetSize:           1,
+						TargetSizePolicyMode: "INDIVIDUAL",
+					},
+					Status: tpuapi.ManagedInstanceGroupStatus{
+						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+					},
+				},
+			},
+			wantResult: reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantErr:    false,
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       0,
+				Reconciling: 1,
+			},
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "InstanceTemplate provisioned successfully",
+				},
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "ManagedInstanceGroup provisioned successfully",
+				},
+				{
+					Type:    tpuapi.ConditionTypeReady,
+					Status:  metav1.ConditionFalse,
+					Reason:  tpuapi.ReasonAwaitingNodeJoin,
+					Message: "Waiting for 1 of 1 nodes to join the cluster",
+				},
+			},
+			wantEvents: []string{
+				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
+					return []*computepb.ManagedInstance{
+						{
+							Instance:       ptr.To("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/test-tpu-0"),
+							InstanceStatus: ptr.To("RUNNING"),
+						},
+					}, nil
+				}
+				inst.GetFunc = func(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error) {
+					return &computepb.Instance{
+						Name: ptr.To("test-tpu-0"),
+						Metadata: &computepb.Metadata{
+							Fingerprint: ptr.To("fingerprint"),
+						},
+					}, nil
+				}
+				inst.SetMetadataFunc = func(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error) {
+					return &compute.Operation{}, nil
+				}
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -1076,8 +1420,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				tc.setupMocks(igm, inst)
 			}
 
+			fakeRecorder := record.NewFakeRecorder(10)
 			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, igm, inst).
-				WithRecorder(record.NewFakeRecorder(10))
+				WithRecorder(fakeRecorder)
 
 			ctx := logr.NewContext(t.Context(), logr.Discard())
 			gotResult, err := r.Reconcile(ctx, tc.request)
@@ -1157,6 +1502,22 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					} else if !errors.IsNotFound(err) {
 						t.Errorf("Failed to get node %s: %v", nodeName, err)
 					}
+				}
+			}
+
+			if tc.wantEvents != nil {
+				var gotEvents []string
+				for {
+					select {
+					case ev := <-fakeRecorder.Events:
+						gotEvents = append(gotEvents, ev)
+					default:
+						goto DoneEvents
+					}
+				}
+			DoneEvents:
+				if diff := cmp.Diff(tc.wantEvents, gotEvents, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("Reconcile() events mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})

@@ -17,6 +17,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"k8s.io/client-go/tools/record"
 )
 
 const tpuNodeGroupLabel = "cloud.google.com/tpu-node-group"
@@ -193,7 +194,7 @@ func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client
 // handleDeletion handles the deletion of the TPUNodeGroup and its child resources.
 // It returns a ctrl.Result and an error. If the result is non-empty or error is non-nil,
 // the caller should return immediately.
-func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (ctrl.Result, error) {
+func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Client, recorder record.EventRecorder, group *tpuapi.TPUNodeGroup) (ctrl.Result, error) {
 	if group.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
@@ -208,6 +209,18 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 
 	if !hasAnyFinalizer {
 		return ctrl.Result{}, nil
+	}
+
+	readyCond := meta.FindStatusCondition(group.Status.Conditions, tpuapi.ConditionTypeReady)
+	isDeletingReason := false
+	if readyCond != nil {
+		r := readyCond.Reason
+		if r == tpuapi.ReasonDeletingMIG || r == tpuapi.ReasonDeletingTemplate || r == tpuapi.ReasonDeletingPolicy || r == tpuapi.ReasonDeletingNodes || r == tpuapi.ReasonDeletingDevicePlugin {
+			isDeletingReason = true
+		}
+	}
+	if !isDeletingReason {
+		recorder.Event(group, corev1.EventTypeNormal, "Cleanup", "TPU Node Group deletion initiated")
 	}
 
 	logger.Info("cordoning nodes")

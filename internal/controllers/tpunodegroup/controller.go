@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup/deviceplugin"
 	"github.com/gke-labs/tpu-operator/internal/converter"
@@ -95,6 +96,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return
 		}
 		if retErr != nil {
+			r.recorder.Event(&tpuNodeGroup, corev1.EventTypeWarning, "Failed", fmt.Sprintf("Error reconciling: %v", retErr))
 			meta.SetStatusCondition(&tpuNodeGroup.Status.Conditions, metav1.Condition{
 				Type:    tpuapi.ConditionTypeReady,
 				Status:  metav1.ConditionFalse,
@@ -115,7 +117,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Handle deletion
 	if !tpuNodeGroup.DeletionTimestamp.IsZero() {
-		return handleDeletion(ctx, logger, r.Client, &tpuNodeGroup)
+		return handleDeletion(ctx, logger, r.Client, r.recorder, &tpuNodeGroup)
 	}
 
 	// Add finalizers if not present
@@ -158,6 +160,18 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile nodes: %w", err)
 	}
 
+	var prevReady int32
+	if base.Status.NodeSummary != nil {
+		prevReady = base.Status.NodeSummary.Ready
+	}
+	var currentReady int32
+	if tpuNodeGroup.Status.NodeSummary != nil {
+		currentReady = tpuNodeGroup.Status.NodeSummary.Ready
+	}
+	if currentReady > prevReady && currentReady < tpuNodeGroup.Spec.NodeCount {
+		r.recorder.Event(&tpuNodeGroup, corev1.EventTypeNormal, "NodesJoining", fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", tpuNodeGroup.Spec.NodeCount-currentReady, tpuNodeGroup.Spec.NodeCount))
+	}
+
 	// Step 5: Reconcile Device Plugin
 	if err := deviceplugin.Reconcile(ctx, r.kubeClientset, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile device plugin: %w", err)
@@ -175,6 +189,10 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		Reason:  tpuapi.ReasonReady,
 		Message: "All nodes are ready",
 	})
+
+	if !meta.IsStatusConditionTrue(base.Status.Conditions, tpuapi.ConditionTypeReady) {
+		r.recorder.Event(&tpuNodeGroup, corev1.EventTypeNormal, "Provisioned", "All nodes are ready")
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -427,12 +445,16 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 
 	// 8. Mark Ready
 	logger.Info("managedInstanceGroup CR is ready", "url", existing.Status.URL)
+	wasReady := meta.IsStatusConditionTrue(group.Status.Conditions, "ManagedInstanceGroupReady")
 	meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 		Type:    "ManagedInstanceGroupReady",
 		Status:  metav1.ConditionTrue,
 		Reason:  "Ready",
 		Message: "ManagedInstanceGroup provisioned successfully",
 	})
+	if !wasReady {
+		r.recorder.Event(group, corev1.EventTypeNormal, "ChildResourcesProvisioned", "All child resources provisioned successfully")
+	}
 	return true, nil
 }
 
