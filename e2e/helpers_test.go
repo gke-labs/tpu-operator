@@ -97,3 +97,70 @@ spec:
 		t.Errorf("Expected project test-project, got %s", fetched.Spec.Project)
 	}
 }
+
+func TestHelpers_ApplyManifest_WithConfig(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	// Save original config and restore on cleanup
+	origConfig := Config
+	t.Cleanup(func() {
+		Config = origConfig
+	})
+
+	Config.Project = "my-config-project"
+
+	tmpDir := t.TempDir()
+	yamlPath := filepath.Join(tmpDir, "test.yaml")
+	content := []byte(`
+apiVersion: tpu.google.com/v1alpha1
+kind: InstanceTemplate
+metadata:
+  name: test-apply-config
+  namespace: default
+spec:
+  project: ${E2E_PROJECT}
+  machineType: v4-8
+`)
+	if err := os.WriteFile(yamlPath, content, 0644); err != nil {
+		t.Fatalf("Failed to write temp yaml: %v", err)
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+	ctx := context.Background()
+
+	obj := &v1alpha1.InstanceTemplate{}
+	err := applyManifest(ctx, fakeClient, yamlPath, obj)
+	if err != nil {
+		t.Fatalf("applyManifest failed: %v", err)
+	}
+
+	var fetched v1alpha1.InstanceTemplate
+	if err := fakeClient.Get(ctx, types.NamespacedName{Name: "test-apply-config", Namespace: "default"}, &fetched); err != nil {
+		t.Fatalf("Failed to get applied object: %v", err)
+	}
+	if fetched.Spec.Project != "my-config-project" {
+		t.Errorf("Expected project my-config-project, got %s", fetched.Spec.Project)
+	}
+}
+
+func TestHelpers_ApplyManifest_WithBindEnv(t *testing.T) {
+	// Save original config and restore on cleanup
+	origConfig := Config
+	t.Cleanup(func() {
+		Config = origConfig
+	})
+
+	// Set env variable
+	t.Setenv("E2E_PROJECT", "env-bind-project")
+
+	// Clear config.Project to force bind from env
+	Config.Project = ""
+	Config.BindEnv()
+
+	if Config.Project != "env-bind-project" {
+		t.Errorf("Expected bound project env-bind-project, got %s", Config.Project)
+	}
+}
+
+

@@ -90,6 +90,8 @@ func dumpControllerLogs() {
 
 func setup() {
 	fmt.Println("=== Global Setup ===")
+	Config.BindEnv()
+
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -166,10 +168,11 @@ func setup() {
 		log.Fatalf("Safety Check Error: Failed to read test manifest at %s: %v", manifestPath, err)
 	}
 	var ng v1alpha1.TPUNodeGroup
-	expandedYAML := os.ExpandEnv(string(yamlBytes))
-	if err := yaml.Unmarshal([]byte(expandedYAML), &ng); err != nil {
+	expandedYAML := expandManifest(yamlBytes)
+	if err := yaml.Unmarshal(expandedYAML, &ng); err != nil {
 		log.Fatalf("Safety Check Error: Failed to unmarshal test manifest: %v", err)
 	}
+
 
 	expectedIP := ""
 	if ng.Spec.BootstrapKubernetes != nil {

@@ -73,7 +73,8 @@ fi
 export KUBECONFIG="${KUBECONFIG_PATH}"
 export E2E_PROJECT="${PROJECT}"
 export E2E_ZONE="${ZONE}"
-export E2E_REGION="us-central1"
+export E2E_REGION="${E2E_REGION:-us-central1}"
+
 
 echo "=== Connection Successful ==="
 echo "Kubeconfig saved to: ${KUBECONFIG}"

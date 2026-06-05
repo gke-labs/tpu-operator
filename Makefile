@@ -32,10 +32,26 @@ test:
 	@echo "Running unit tests..."
 	go test -v ./internal/...
 
+TEST_NAME ?= .
 .PHONY: e2e-test
 e2e-test:
 	@echo "Running E2E tests..."
-	go test -v -tags=e2e ./e2e/...
+	@if [ -f e2e/local-env.sh ]; then \
+		source e2e/local-env.sh && \
+		export CONTROL_PLANE_NODE PROJECT ZONE E2E_CONTROL_PLANE_IP E2E_RESERVATION E2E_REGION && \
+		source e2e/connect-gce-cluster.sh && \
+		go test -v -tags=e2e ./e2e/... -run "$(TEST_NAME)" -timeout 20m \
+			-args \
+			-e2e-project="$$PROJECT" \
+			-e2e-zone="$$ZONE" \
+			-e2e-region="$$E2E_REGION" \
+			-e2e-reservation="$$E2E_RESERVATION" \
+			-e2e-control-plane-ip="$$E2E_CONTROL_PLANE_IP"; \
+	else \
+		go test -v -tags=e2e ./e2e/... -run "$(TEST_NAME)"; \
+	fi
+
+
 
 .PHONY: e2e-kustomize
 e2e-kustomize:
