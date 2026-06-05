@@ -4,15 +4,15 @@ metadata:
   name: test-multihost
   namespace: default
 spec:
-  project: gsc-nexus-xteam-shared-testing
-  nodeLocation: us-central1-c
+  project: ${E2E_PROJECT}
+  nodeLocation: ${E2E_ZONE}
   nodeCount: 2
   acceleratorConnectionMode: STATIC
   topology: "2x2x2"
   targetSizePolicyMode: BULK
   bootstrapKubernetes:
     version: "1.31"
-    controlPlaneIP: "10.128.15.234"
+    controlPlaneIP: "${E2E_CONTROL_PLANE_IP}"
   instanceConfig:
     machineType: tpu7x-standard-4t
     image: projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320
@@ -20,7 +20,7 @@ spec:
     diskType: hyperdisk-balanced
     subnetwork: regions/us-central1/subnetworks/default
     provisioningModel: RESERVATION_BOUND
-    reservation: cloudtpu-20260414000000-1337732930
+    reservation: ${E2E_RESERVATION}
     metadata:
       key1: value1
     networkTags:

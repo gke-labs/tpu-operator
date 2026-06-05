@@ -166,7 +166,8 @@ func setup() {
 		log.Fatalf("Safety Check Error: Failed to read test manifest at %s: %v", manifestPath, err)
 	}
 	var ng v1alpha1.TPUNodeGroup
-	if err := yaml.Unmarshal(yamlBytes, &ng); err != nil {
+	expandedYAML := os.ExpandEnv(string(yamlBytes))
+	if err := yaml.Unmarshal([]byte(expandedYAML), &ng); err != nil {
 		log.Fatalf("Safety Check Error: Failed to unmarshal test manifest: %v", err)
 	}
 

@@ -13,7 +13,7 @@ cd "${REPO_ROOT}"
 if [[ -f "e2e/local-env.sh" ]]; then
   echo "=== Loading environment from e2e/local-env.sh ==="
   source e2e/local-env.sh
-  export CONTROL_PLANE_NODE PROJECT ZONE
+  export CONTROL_PLANE_NODE PROJECT ZONE E2E_CONTROL_PLANE_IP E2E_RESERVATION E2E_REGION
 else
   echo "Error: e2e/local-env.sh not found."
   exit 1

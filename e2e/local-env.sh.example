@@ -5,8 +5,17 @@
 # The name of the GCE VM running the Kubernetes control plane.
 CONTROL_PLANE_NODE="your-control-plane-node"
 
+# The internal IP address of the Kubernetes control plane.
+E2E_CONTROL_PLANE_IP="10.128.0.2"
+
 # The GCP project where the cluster is running.
 PROJECT="your-gcp-project"
 
-# The GCE zone where the control plane VM is located.
+# The GCE zone where the control plane VM and TPU nodes are located.
 ZONE="us-central1-c"
+
+# The GCE region derived from the zone.
+E2E_REGION="us-central1"
+
+# The GCP reservation to use for provisioning TPU nodes.
+E2E_RESERVATION="your-reservation-name"

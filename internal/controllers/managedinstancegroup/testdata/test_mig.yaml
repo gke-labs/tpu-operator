@@ -3,8 +3,8 @@ kind: ManagedInstanceGroup
 metadata:
   name: test-mig
 spec:
-  project: gsc-nexus-xteam-shared-testing
-  location: us-central1-c
-  instanceTemplate: https://www.googleapis.com/compute/v1/projects/gsc-nexus-xteam-shared-testing/global/instanceTemplates/test-multihost-template
+  project: ${E2E_PROJECT}
+  location: ${E2E_ZONE}
+  instanceTemplate: https://www.googleapis.com/compute/v1/projects/${E2E_PROJECT}/global/instanceTemplates/test-multihost-template
   targetSize: 2
-  workloadPolicy: https://www.googleapis.com/compute/v1/projects/gsc-nexus-xteam-shared-testing/regions/us-central1/resourcePolicies/test-multihost-policy
+  workloadPolicy: https://www.googleapis.com/compute/v1/projects/${E2E_PROJECT}/regions/${E2E_REGION}/resourcePolicies/test-multihost-policy

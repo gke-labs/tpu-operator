@@ -25,7 +25,8 @@ func applyManifest(ctx context.Context, k8sClient client.Client, path string, ob
 	if err != nil {
 		return err
 	}
-	if err := yaml.Unmarshal(yamlBytes, obj); err != nil {
+	expandedYAML := os.ExpandEnv(string(yamlBytes))
+	if err := yaml.Unmarshal([]byte(expandedYAML), obj); err != nil {
 		return err
 	}
 	return k8sClient.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner("e2e-test"))
