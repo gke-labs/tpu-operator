@@ -52,6 +52,7 @@ spec:
                 type: string
               machineType:
                 description: MachineType is the GCE machine type (e.g., "tpu7x-standard-4t").
+                maxLength: 63
                 type: string
                 x-kubernetes-validations:
                 - message: Only v6 and v7 TPU machine types are supported
