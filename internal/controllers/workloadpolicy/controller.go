@@ -7,7 +7,9 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -86,7 +88,9 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			} else {
 				opName := workloadPolicy.Status.OperationName
 				workloadPolicy.Status.OperationName = ""
-				return ctrl.Result{}, fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				err := fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				r.Recorder.Event(&workloadPolicy, corev1.EventTypeWarning, "Failed", fmt.Sprintf("GCE operation failed: %v", err))
+				return ctrl.Result{}, err
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", workloadPolicy.Status.OperationName)
@@ -152,6 +156,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 				workloadPolicy.Status.OperationName = op.Name()
 				workloadPolicy.Status.OperationType = "DELETE"
 				logger.Info("GCE delete operation started", "operation", op.Name())
+				r.Recorder.Event(&workloadPolicy, corev1.EventTypeNormal, "Cleanup", fmt.Sprintf("GCE deletion operation started: %s", op.Name()))
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
@@ -186,6 +191,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 					workloadPolicy.Status.OperationName = op.Name()
 					workloadPolicy.Status.OperationType = "CREATE"
 					logger.Info("GCE insert operation started", "operation", op.Name())
+					r.Recorder.Event(&workloadPolicy, corev1.EventTypeNormal, "Provisioning", fmt.Sprintf("GCE creation operation started: %s", op.Name()))
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
 			}
@@ -201,6 +207,7 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	}
 
 	// 5. Update Status
+	wasReady := meta.IsStatusConditionTrue(base.Status.Conditions, "Ready")
 	workloadPolicy.Status.URI = gcePolicy.GetSelfLink()
 	workloadPolicy.Status.Conditions = []metav1.Condition{
 		{
@@ -210,6 +217,9 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			Message:            "GCE Resource Policy successfully created",
 			LastTransitionTime: metav1.Now(),
 		},
+	}
+	if !wasReady {
+		r.Recorder.Event(&workloadPolicy, corev1.EventTypeNormal, "Provisioned", fmt.Sprintf("GCE resource successfully created: %s", gcePolicy.GetSelfLink()))
 	}
 
 	logger.V(1).Info("reconciliation finished")

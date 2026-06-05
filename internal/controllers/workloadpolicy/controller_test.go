@@ -9,6 +9,7 @@ import (
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/googleapi"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +36,7 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 		wantResult     reconcile.Result
 		wantErr        bool
 		wantFinalizers []string
+		wantEvents     []string
 		mockGCE        *gce.MockResourcePolicyClient
 		mockGCEOps     *gce.MockRegionOperationsClient
 	}{
@@ -144,6 +146,9 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+			wantEvents: []string{
+				"Normal Provisioned GCE resource successfully created: https://www.googleapis.com/compute/v1/projects/test-project/regions/us-central1/resourcePolicies/test-policy",
+			},
 		},
 		{
 			name: "resource_creation_pending_operation",
@@ -179,6 +184,9 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+			wantEvents: []string{
+				"Normal Provisioning GCE creation operation started: op-123",
+			},
 		},
 		{
 			name: "resource_creation_polling_operation",
@@ -376,6 +384,9 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 			},
 			wantErr: true,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+			wantEvents: []string{
+				"Warning Failed GCE operation failed: GCE operation \"op-123\" failed: internal error (code 500): <nil>",
+			},
 		},
 		{
 			name: "deletion_gce_delete_error",
@@ -531,6 +542,41 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 			wantErr:        false,
 			wantFinalizers: []string{},
 		},
+		{
+			name: "deletion_gce_delete_starts",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.WorkloadPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-policy",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/workloadpolicy-cleanup"},
+				},
+				Spec: tpuv1alpha1.WorkloadPolicySpec{
+					Project: "test-project",
+					Region:  "us-central1",
+				},
+			},
+			mockGCE: &gce.MockResourcePolicyClient{
+				DeleteFunc: func(ctx context.Context, project, region, name string) (gce.Operation, error) {
+					return &gce.MockOperation{
+						DoneFunc: func() bool { return false },
+						NameFunc: func() string { return "op-delete-123" },
+					}, nil
+				},
+			},
+			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
+			wantEvents: []string{
+				"Normal Cleanup GCE deletion operation started: op-delete-123",
+			},
+		},
 	}
 
 	for _, tc := range tests {
@@ -553,10 +599,11 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 			if mockGCEOps == nil {
 				mockGCEOps = &gce.MockRegionOperationsClient{}
 			}
+			fakeRecorder := record.NewFakeRecorder(10)
 			r := &WorkloadPolicyReconciler{
 				Client:   cl,
 				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: fakeRecorder,
 				GCE:      mockGCE,
 				GCEOps:   mockGCEOps,
 			}
@@ -592,6 +639,22 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 					if diff := cmp.Diff(tc.wantFinalizers, gotFinalizers); diff != "" {
 						t.Errorf("Finalizers mismatch (-want +got):\n%s", diff)
 					}
+				}
+			}
+
+			if tc.wantEvents != nil {
+				var gotEvents []string
+				for {
+					select {
+					case ev := <-fakeRecorder.Events:
+						gotEvents = append(gotEvents, ev)
+					default:
+						goto DoneEvents
+					}
+				}
+			DoneEvents:
+				if diff := cmp.Diff(tc.wantEvents, gotEvents, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("Reconcile() events mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
