@@ -19,7 +19,7 @@ var Config TestConfig
 func init() {
 	flag.StringVar(&Config.Project, "e2e-project", "", "GCP Project ID for E2E tests")
 	flag.StringVar(&Config.Zone, "e2e-zone", "", "GCE Zone for E2E tests")
-	flag.StringVar(&Config.Region, "e2e-region", "us-central1", "GCE Region for E2E tests")
+	flag.StringVar(&Config.Region, "e2e-region", "", "GCE Region for E2E tests")
 	flag.StringVar(&Config.Reservation, "e2e-reservation", "", "GCP Reservation for E2E tests")
 	flag.StringVar(&Config.ControlPlaneIP, "e2e-control-plane-ip", "", "Control plane IP for E2E tests")
 }
@@ -32,9 +32,11 @@ func (c *TestConfig) BindEnv() {
 	if c.Zone == "" {
 		c.Zone = os.Getenv("E2E_ZONE")
 	}
-	if c.Region == "" || c.Region == "us-central1" {
+	if c.Region == "" {
 		if envRegion := os.Getenv("E2E_REGION"); envRegion != "" {
 			c.Region = envRegion
+		} else {
+			c.Region = "us-central1"
 		}
 	}
 	if c.Reservation == "" {
