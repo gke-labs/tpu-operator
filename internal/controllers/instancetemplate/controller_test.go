@@ -6,6 +6,7 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/api/googleapi"
@@ -34,6 +35,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 		wantResult     reconcile.Result
 		wantErr        bool
 		wantFinalizers []string
+		wantEvents     []string
 		mockGCE        *gce.MockInstanceTemplateClient
 		mockGCEOps     *gce.MockGlobalOperationsClient
 	}{
@@ -47,6 +49,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			},
 			wantResult: reconcile.Result{},
 			wantErr:    false,
+			wantEvents: []string{},
 		},
 		{
 			name: "resource_found_adds_finalizer",
@@ -68,6 +71,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+			wantEvents:     []string{},
 		},
 		{
 			name: "resource_being_deleted_removes_finalizer",
@@ -91,6 +95,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{},
 			wantErr:        false,
 			wantFinalizers: []string{},
+			wantEvents:     []string{},
 			mockGCE: &gce.MockInstanceTemplateClient{
 				DeleteFunc: func(ctx context.Context, project, name string) (gce.Operation, error) {
 					return nil, nil // Success
@@ -141,6 +146,9 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+			wantEvents: []string{
+				"Normal Provisioned GCE Instance Template successfully created: https://www.googleapis.com/compute/v1/projects/test-project/global/instanceTemplates/test-template",
+			},
 		},
 		{
 			name: "resource_creation_pending_operation",
@@ -177,6 +185,9 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+			wantEvents: []string{
+				"Normal Provisioning GCE creation operation started: op-123",
+			},
 		},
 		{
 			name: "resource_creation_polling_operation",
@@ -214,6 +225,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{Requeue: true},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+			wantEvents:     []string{},
 		},
 		{
 			name: "creation_completed_after_deletion_requested",
@@ -252,6 +264,91 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			wantResult:     reconcile.Result{Requeue: true},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+			wantEvents:     []string{},
+		},
+		{
+			name: "resource_being_deleted_starts_deletion",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:              "test-template",
+					Namespace:         "default",
+					DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					Finalizers:        []string{"tpu.google.com/instancetemplate-cleanup"},
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{
+					Project: "test-project",
+				},
+			},
+			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantErr:        false,
+			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+			mockGCE: &gce.MockInstanceTemplateClient{
+				DeleteFunc: func(ctx context.Context, project, name string) (gce.Operation, error) {
+					return &gce.MockOperation{
+						DoneFunc: func() bool { return false },
+						NameFunc: func() string { return "op-delete-123" },
+					}, nil
+				},
+			},
+			wantEvents: []string{
+				"Normal Cleanup GCE deletion operation started: op-delete-123",
+			},
+		},
+		{
+			name: "resource_creation_operation_fails_terminally",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-template",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-template",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{
+					Project: "test-project",
+					InstanceConfig: tpuv1alpha1.InstanceConfig{
+						MachineType: "v4-8",
+					},
+				},
+				Status: tpuv1alpha1.InstanceTemplateStatus{
+					OperationName: "op-123",
+					OperationType: "CREATE",
+				},
+			},
+			mockGCEOps: &gce.MockGlobalOperationsClient{
+				GetFunc: func(ctx context.Context, project, operation string) (*computepb.Operation, error) {
+					status := computepb.Operation_DONE
+					errCode := int32(400)
+					errMessage := "Invalid configuration"
+					return &computepb.Operation{
+						Status:               &status,
+						HttpErrorStatusCode: &errCode,
+						HttpErrorMessage:     &errMessage,
+						Error: &computepb.Error{
+							Errors: []*computepb.Errors{
+								{
+									Message: ptr.To("Invalid configuration"),
+								},
+							},
+						},
+					}, nil
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    true,
+			wantEvents: []string{
+				"Warning Failed GCE operation failed: GCE operation \"op-123\" failed: Invalid configuration (code 400): errors:{message:\"Invalid configuration\"}",
+			},
 		},
 	}
 
@@ -275,10 +372,11 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 			if mockGCEOps == nil {
 				mockGCEOps = &gce.MockGlobalOperationsClient{}
 			}
+			fakeRecorder := record.NewFakeRecorder(10)
 			r := &InstanceTemplateReconciler{
 				Client:   cl,
 				Scheme:   scheme,
-				Recorder: record.NewFakeRecorder(10),
+				Recorder: fakeRecorder,
 				GCE:      mockGCE,
 				GCEOps:   mockGCEOps,
 			}
@@ -314,6 +412,22 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 					if diff := cmp.Diff(tc.wantFinalizers, gotFinalizers); diff != "" {
 						t.Errorf("Finalizers mismatch (-want +got):\n%s", diff)
 					}
+				}
+			}
+
+			if tc.wantEvents != nil {
+				var gotEvents []string
+				for {
+					select {
+					case ev := <-fakeRecorder.Events:
+						gotEvents = append(gotEvents, ev)
+					default:
+						goto DoneEvents
+					}
+				}
+			DoneEvents:
+				if diff := cmp.Diff(tc.wantEvents, gotEvents, cmpopts.EquateEmpty()); diff != "" {
+					t.Errorf("Reconcile() events mismatch (-want +got):\n%s", diff)
 				}
 			}
 		})
