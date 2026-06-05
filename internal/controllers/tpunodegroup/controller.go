@@ -117,7 +117,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Handle deletion
 	if !tpuNodeGroup.DeletionTimestamp.IsZero() {
-		return handleDeletion(ctx, logger, r.Client, r.recorder, &tpuNodeGroup)
+		return r.handleDeletion(ctx, logger, &tpuNodeGroup)
 	}
 
 	// Add finalizers if not present

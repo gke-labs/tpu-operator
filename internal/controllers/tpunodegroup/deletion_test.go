@@ -97,7 +97,8 @@ func TestEnsureManagedInstanceGroupDeleted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialObjs...).Build()
 
-			got, err := ensureManagedInstanceGroupDeleted(context.Background(), cl, tc.group)
+			r := &TPUNodeGroupReconciler{Client: cl}
+			got, err := r.ensureManagedInstanceGroupDeleted(context.Background(), tc.group)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ensureManagedInstanceGroupDeleted() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -195,7 +196,8 @@ func TestEnsureInstanceTemplateDeleted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialObjs...).Build()
 
-			got, err := ensureInstanceTemplateDeleted(context.Background(), cl, tc.group)
+			r := &TPUNodeGroupReconciler{Client: cl}
+			got, err := r.ensureInstanceTemplateDeleted(context.Background(), tc.group)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ensureInstanceTemplateDeleted() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -293,7 +295,8 @@ func TestEnsureWorkloadPolicyDeleted(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialObjs...).Build()
 
-			got, err := ensureWorkloadPolicyDeleted(context.Background(), cl, tc.group)
+			r := &TPUNodeGroupReconciler{Client: cl}
+			got, err := r.ensureWorkloadPolicyDeleted(context.Background(), tc.group)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ensureWorkloadPolicyDeleted() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -446,7 +449,8 @@ func TestCleanupDevicePluginIfLastGroup(t *testing.T) {
 			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialObjs...).Build()
 
 			// We pass nil logger for simplicity in tests
-			got, err := cleanupDevicePluginIfLastGroup(context.Background(), cl, logr.Discard())
+			r := &TPUNodeGroupReconciler{Client: cl}
+			got, err := r.cleanupDevicePluginIfLastGroup(context.Background(), logr.Discard())
 			if (err != nil) != tc.wantErr {
 				t.Errorf("cleanupDevicePluginIfLastGroup() error = %v, wantErr %v", err, tc.wantErr)
 				return

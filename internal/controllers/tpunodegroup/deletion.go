@@ -17,19 +17,18 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"k8s.io/client-go/tools/record"
 )
 
 const tpuNodeGroupLabel = "cloud.google.com/tpu-node-group"
 
 // cordonNodes taints all nodes associated with the TPUNodeGroup as NoSchedule.
-func cordonNodes(ctx context.Context, logger logr.Logger, k8sClient client.Client, group *tpuapi.TPUNodeGroup) error {
+func (r *TPUNodeGroupReconciler) cordonNodes(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
 	// 1. List Node objects in the cluster with matching label
 	var nodeList corev1.NodeList
 	labelSelector := client.MatchingLabels{
 		tpuNodeGroupLabel: fmt.Sprintf("%s-%s", group.Namespace, group.Name),
 	}
-	if err := k8sClient.List(ctx, &nodeList, labelSelector); err != nil {
+	if err := r.List(ctx, &nodeList, labelSelector); err != nil {
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
@@ -50,7 +49,7 @@ func cordonNodes(ctx context.Context, logger logr.Logger, k8sClient client.Clien
 		oldNode := node.DeepCopy()
 		node.Spec.Taints = append(node.Spec.Taints, taint)
 
-		if err := k8sClient.Patch(ctx, &node, client.MergeFrom(oldNode)); err != nil {
+		if err := r.Patch(ctx, &node, client.MergeFrom(oldNode)); err != nil {
 			errs = append(errs, fmt.Errorf("failed to patch node %s with taint: %w", node.Name, err))
 		}
 	}
@@ -70,10 +69,10 @@ func hasTaint(node *corev1.Node, key string) bool {
 
 // ensureManagedInstanceGroupDeleted ensures the ManagedInstanceGroup is deleted.
 // It returns true if the resource is gone, and false if it initiated deletion or is waiting.
-func ensureManagedInstanceGroupDeleted(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
+func (r *TPUNodeGroupReconciler) ensureManagedInstanceGroupDeleted(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	migName := group.ManagedInstanceGroupName()
 	var mig tpuapi.ManagedInstanceGroup
-	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: migName}, &mig)
+	err := r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: migName}, &mig)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return true, nil
@@ -82,7 +81,7 @@ func ensureManagedInstanceGroupDeleted(ctx context.Context, k8sClient client.Cli
 	}
 
 	if mig.DeletionTimestamp.IsZero() {
-		if err := k8sClient.Delete(ctx, &mig); err != nil {
+		if err := r.Delete(ctx, &mig); err != nil {
 			return false, fmt.Errorf("failed to delete ManagedInstanceGroup: %w", err)
 		}
 	}
@@ -91,10 +90,10 @@ func ensureManagedInstanceGroupDeleted(ctx context.Context, k8sClient client.Cli
 
 // ensureInstanceTemplateDeleted ensures the InstanceTemplate is deleted.
 // It returns true if the resource is gone, and false if it initiated deletion or is waiting.
-func ensureInstanceTemplateDeleted(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
+func (r *TPUNodeGroupReconciler) ensureInstanceTemplateDeleted(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	templateName := group.InstanceTemplateName()
 	var template tpuapi.InstanceTemplate
-	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, &template)
+	err := r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: templateName}, &template)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return true, nil
@@ -103,7 +102,7 @@ func ensureInstanceTemplateDeleted(ctx context.Context, k8sClient client.Client,
 	}
 
 	if template.DeletionTimestamp.IsZero() {
-		if err := k8sClient.Delete(ctx, &template); err != nil {
+		if err := r.Delete(ctx, &template); err != nil {
 			return false, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
 		}
 	}
@@ -112,10 +111,10 @@ func ensureInstanceTemplateDeleted(ctx context.Context, k8sClient client.Client,
 
 // ensureWorkloadPolicyDeleted ensures the WorkloadPolicy is deleted.
 // It returns true if the resource is gone, and false if it initiated deletion or is waiting.
-func ensureWorkloadPolicyDeleted(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (bool, error) {
+func (r *TPUNodeGroupReconciler) ensureWorkloadPolicyDeleted(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
 	policyName := group.WorkloadPolicyName()
 	var policy tpuapi.WorkloadPolicy
-	err := k8sClient.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, &policy)
+	err := r.Get(ctx, client.ObjectKey{Namespace: group.Namespace, Name: policyName}, &policy)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return true, nil
@@ -124,7 +123,7 @@ func ensureWorkloadPolicyDeleted(ctx context.Context, k8sClient client.Client, g
 	}
 
 	if policy.DeletionTimestamp.IsZero() {
-		if err := k8sClient.Delete(ctx, &policy); err != nil {
+		if err := r.Delete(ctx, &policy); err != nil {
 			return false, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
 		}
 	}
@@ -132,19 +131,19 @@ func ensureWorkloadPolicyDeleted(ctx context.Context, k8sClient client.Client, g
 }
 
 // deleteNodeObjects deletes Kubernetes Node objects that were associated with the group.
-func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client.Client, group *tpuapi.TPUNodeGroup) error {
+func (r *TPUNodeGroupReconciler) deleteNodeObjects(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
 	var nodeList corev1.NodeList
 	labelSelector := client.MatchingLabels{
 		"cloud.google.com/tpu-node-group": fmt.Sprintf("%s-%s", group.Namespace, group.Name),
 	}
-	if err := k8sClient.List(ctx, &nodeList, labelSelector); err != nil {
+	if err := r.List(ctx, &nodeList, labelSelector); err != nil {
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
 	var errs []error
 	for _, node := range nodeList.Items {
 		logger.Info("deleting stale Node object", "node", node.Name)
-		if err := k8sClient.Delete(ctx, &node); err != nil {
+		if err := r.Delete(ctx, &node); err != nil {
 			if !apierrors.IsNotFound(err) {
 				errs = append(errs, fmt.Errorf("failed to delete node %s: %w", node.Name, err))
 			}
@@ -159,10 +158,10 @@ func deleteNodeObjects(ctx context.Context, logger logr.Logger, k8sClient client
 // Note: If other active groups exist, we skip deleting the DaemonSet but still
 // return (true, nil). This allows the current group's finalizer to be removed
 // while keeping the shared DaemonSet running for the remaining active groups.
-func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client, logger logr.Logger) (bool, error) {
+func (r *TPUNodeGroupReconciler) cleanupDevicePluginIfLastGroup(ctx context.Context, logger logr.Logger) (bool, error) {
 	// 1. List all TPUNodeGroups
 	var groupList tpuapi.TPUNodeGroupList
-	if err := k8sClient.List(ctx, &groupList); err != nil {
+	if err := r.List(ctx, &groupList); err != nil {
 		return false, fmt.Errorf("failed to list TPUNodeGroups: %w", err)
 	}
 
@@ -182,7 +181,7 @@ func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client
 			Namespace: deviceplugin.DevicePluginNamespace,
 		},
 	}
-	if err := k8sClient.Delete(ctx, ds); err != nil {
+	if err := r.Delete(ctx, ds); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return false, fmt.Errorf("failed to delete device plugin DaemonSet: %w", err)
 		}
@@ -194,7 +193,7 @@ func cleanupDevicePluginIfLastGroup(ctx context.Context, k8sClient client.Client
 // handleDeletion handles the deletion of the TPUNodeGroup and its child resources.
 // It returns a ctrl.Result and an error. If the result is non-empty or error is non-nil,
 // the caller should return immediately.
-func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Client, recorder record.EventRecorder, group *tpuapi.TPUNodeGroup) (ctrl.Result, error) {
+func (r *TPUNodeGroupReconciler) handleDeletion(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) (ctrl.Result, error) {
 	if group.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
@@ -214,17 +213,17 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	readyCond := meta.FindStatusCondition(group.Status.Conditions, tpuapi.ConditionTypeReady)
 	isDeletingReason := false
 	if readyCond != nil {
-		r := readyCond.Reason
-		if r == tpuapi.ReasonDeletingMIG || r == tpuapi.ReasonDeletingTemplate || r == tpuapi.ReasonDeletingPolicy || r == tpuapi.ReasonDeletingNodes || r == tpuapi.ReasonDeletingDevicePlugin {
+		reason := readyCond.Reason
+		if reason == tpuapi.ReasonDeletingMIG || reason == tpuapi.ReasonDeletingTemplate || reason == tpuapi.ReasonDeletingPolicy || reason == tpuapi.ReasonDeletingNodes || reason == tpuapi.ReasonDeletingDevicePlugin {
 			isDeletingReason = true
 		}
 	}
 	if !isDeletingReason {
-		recorder.Event(group, corev1.EventTypeNormal, "Cleanup", "TPU Node Group deletion initiated")
+		r.recorder.Event(group, corev1.EventTypeNormal, "Cleanup", "TPU Node Group deletion initiated")
 	}
 
 	logger.Info("cordoning nodes")
-	if err := cordonNodes(ctx, logger, k8sClient, group); err != nil {
+	if err := r.cordonNodes(ctx, logger, group); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to cordon nodes: %w", err)
 	}
 
@@ -233,7 +232,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	// 1. MIG
 	if controllerutil.ContainsFinalizer(group, finalizerMIG) {
 		logger.V(1).Info("ensuring ManagedInstanceGroup is deleted")
-		done, err := ensureManagedInstanceGroupDeleted(ctx, k8sClient, group)
+		done, err := r.ensureManagedInstanceGroupDeleted(ctx, group)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete MIG: %w", err)
 		}
@@ -247,7 +246,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerMIG); err != nil {
+		if err := r.removeFinalizerAndPatch(ctx, group, finalizerMIG); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove MIG finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -256,7 +255,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	// 2. Template
 	if controllerutil.ContainsFinalizer(group, finalizerTemplate) {
 		logger.V(1).Info("ensuring InstanceTemplate is deleted")
-		done, err := ensureInstanceTemplateDeleted(ctx, k8sClient, group)
+		done, err := r.ensureInstanceTemplateDeleted(ctx, group)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete InstanceTemplate: %w", err)
 		}
@@ -270,7 +269,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerTemplate); err != nil {
+		if err := r.removeFinalizerAndPatch(ctx, group, finalizerTemplate); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Template finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -279,7 +278,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 	// 3. Policy
 	if controllerutil.ContainsFinalizer(group, finalizerPolicy) {
 		logger.V(1).Info("ensuring WorkloadPolicy is deleted")
-		done, err := ensureWorkloadPolicyDeleted(ctx, k8sClient, group)
+		done, err := r.ensureWorkloadPolicyDeleted(ctx, group)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete WorkloadPolicy: %w", err)
 		}
@@ -293,7 +292,7 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			})
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerPolicy); err != nil {
+		if err := r.removeFinalizerAndPatch(ctx, group, finalizerPolicy); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Policy finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -308,10 +307,10 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			Reason:  tpuapi.ReasonDeletingNodes,
 			Message: "Deleting stale Node objects",
 		})
-		if err := deleteNodeObjects(ctx, logger, k8sClient, group); err != nil {
+		if err := r.deleteNodeObjects(ctx, logger, group); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
 		}
-		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerNodes); err != nil {
+		if err := r.removeFinalizerAndPatch(ctx, group, finalizerNodes); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -326,14 +325,14 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 			Reason:  tpuapi.ReasonDeletingDevicePlugin,
 			Message: "Deleting TPU Device Plugin DaemonSet",
 		})
-		done, err := cleanupDevicePluginIfLastGroup(ctx, k8sClient, logger)
+		done, err := r.cleanupDevicePluginIfLastGroup(ctx, logger)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete TPU Device Plugin: %w", err)
 		}
 		if !done {
 			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 		}
-		if err := removeFinalizerAndPatch(ctx, k8sClient, group, finalizerDevicePlugin); err != nil {
+		if err := r.removeFinalizerAndPatch(ctx, group, finalizerDevicePlugin); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Device Plugin finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil // Return and reconcile again
@@ -346,11 +345,11 @@ func handleDeletion(ctx context.Context, logger logr.Logger, k8sClient client.Cl
 // It saves and restores group.Status.Conditions around the patch call because k8sClient.Patch
 // overwrites the in-memory object (group) with the server response (which lacks the unpersisted
 // status conditions that are only saved via the Status().Patch call at the end of Reconcile).
-func removeFinalizerAndPatch(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup, finalizer string) error {
+func (r *TPUNodeGroupReconciler) removeFinalizerAndPatch(ctx context.Context, group *tpuapi.TPUNodeGroup, finalizer string) error {
 	patchBase := group.DeepCopy()
 	savedConditions := group.Status.Conditions
 	controllerutil.RemoveFinalizer(group, finalizer)
-	if err := k8sClient.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
+	if err := r.Patch(ctx, group, client.MergeFrom(patchBase)); err != nil {
 		return err
 	}
 	group.Status.Conditions = savedConditions
