@@ -7,9 +7,12 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -24,9 +27,10 @@ const finalizerName = "tpu.google.com/managedinstancegroup-cleanup"
 // ManagedInstanceGroupReconciler reconciles a ManagedInstanceGroup object
 type ManagedInstanceGroupReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
-	GCE    gce.IGMClient
-	GCEOps gce.ZoneOperationsClient
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
+	GCE      gce.IGMClient
+	GCEOps   gce.ZoneOperationsClient
 }
 
 // +kubebuilder:rbac:groups=tpu.google.com,resources=managedinstancegroups,verbs=get;list;watch;create;update;patch;delete
@@ -83,7 +87,9 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 				opName := mig.Status.OperationName
 				mig.Status.OperationName = ""
 				mig.Status.OperationType = ""
-				return ctrl.Result{}, fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				err := fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				r.Recorder.Event(&mig, corev1.EventTypeWarning, "Failed", fmt.Sprintf("GCE operation failed: %v", err))
+				return ctrl.Result{}, err
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", mig.Status.OperationName)
@@ -149,6 +155,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 				mig.Status.OperationName = op.Name()
 				mig.Status.OperationType = "DELETE"
 				logger.Info("GCE delete operation started", "operation", op.Name())
+				r.Recorder.Event(&mig, corev1.EventTypeNormal, "Cleanup", fmt.Sprintf("GCE deletion operation started: %s", op.Name()))
 				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 			}
 
@@ -183,6 +190,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 					mig.Status.OperationName = op.Name()
 					mig.Status.OperationType = "CREATE"
 					logger.Info("GCE insert operation started", "operation", op.Name())
+					r.Recorder.Event(&mig, corev1.EventTypeNormal, "Provisioning", fmt.Sprintf("GCE creation operation started: %s", op.Name()))
 					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 				}
 			}
@@ -198,6 +206,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// 5. Update Status
+	wasReady := meta.IsStatusConditionTrue(base.Status.Conditions, "Ready")
 	mig.Status.URL = gceMIG.GetSelfLink()
 	mig.Status.Conditions = []metav1.Condition{
 		{
@@ -208,6 +217,9 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			LastTransitionTime: metav1.Now(),
 		},
 	}
+	if !wasReady {
+		r.Recorder.Event(&mig, corev1.EventTypeNormal, "Provisioned", fmt.Sprintf("GCE resource successfully created: %s", gceMIG.GetSelfLink()))
+	}
 
 	logger.V(1).Info("reconciliation finished")
 	return ctrl.Result{}, nil
@@ -215,6 +227,7 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ManagedInstanceGroupReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.Recorder = mgr.GetEventRecorderFor("ManagedInstanceGroupController")
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&tpuv1alpha1.ManagedInstanceGroup{}).
 		Complete(r)
