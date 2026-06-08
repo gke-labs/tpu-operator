@@ -344,10 +344,10 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult: reconcile.Result{},
-			wantErr:    true,
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Minute},
+			wantErr:    false,
 			wantEvents: []string{
-				"Warning Failed GCE operation failed: GCE operation \"op-123\" failed: Invalid configuration (code 400): errors:{message:\"Invalid configuration\"}",
+				"Warning OperationFailed GCE operation \"op-123\" failed: Invalid configuration (code 400): errors:{message:\"Invalid configuration\"}",
 			},
 		},
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
@@ -18,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/errorutil"
 	"github.com/gke-labs/tpu-operator/internal/converter"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
@@ -87,9 +89,11 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 				opName := mig.Status.OperationName
 				mig.Status.OperationName = ""
 				mig.Status.OperationType = ""
-				err := fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
-				r.Recorder.Event(&mig, corev1.EventTypeWarning, "Failed", fmt.Sprintf("GCE operation failed: %v", err))
-				return ctrl.Result{}, err
+				msg := fmt.Sprintf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				if errorutil.SetTerminalCondition(&mig.Status.Conditions, tpuv1alpha1.ReasonOperationFailed, msg) {
+					r.Recorder.Event(&mig, corev1.EventTypeWarning, tpuv1alpha1.ReasonOperationFailed, msg)
+				}
+				return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", mig.Status.OperationName)
@@ -183,6 +187,14 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 			template := converter.ToGCEManagedInstanceGroup(&mig)
 			op, err := r.GCE.Insert(ctx, mig.Spec.Project, mig.Spec.Location, template)
 			if err != nil {
+				classification := errorutil.Classify(err)
+				if classification == errorutil.ClassificationTerminal {
+					msg := fmt.Sprintf("GCP API rejected ManagedInstanceGroup creation: %v", err)
+					if errorutil.SetTerminalCondition(&mig.Status.Conditions, tpuv1alpha1.ReasonRequestRejected, msg) {
+						r.Recorder.Event(&mig, corev1.EventTypeWarning, tpuv1alpha1.ReasonRequestRejected, msg)
+					}
+					return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("inserting GCE ManagedInstanceGroup: %w", err)
 			}
 			if op != nil {
@@ -206,8 +218,49 @@ func (r *ManagedInstanceGroupReconciler) Reconcile(ctx context.Context, req ctrl
 	}
 
 	// 5. Update Status
-	wasReady := meta.IsStatusConditionTrue(base.Status.Conditions, "Ready")
 	mig.Status.URL = gceMIG.GetSelfLink()
+
+	// Check for instance creation failures (Phase 2)
+	if gceMIG.Status != nil && gceMIG.Status.IsStable != nil && !*gceMIG.Status.IsStable {
+		instances, err := r.GCE.ListManagedInstances(ctx, mig.Spec.Project, mig.Spec.Location, mig.Name)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("listing GCE managed instances: %w", err)
+		}
+		for _, ins := range instances {
+			if ins.LastAttempt != nil && ins.LastAttempt.Errors != nil && len(ins.LastAttempt.Errors.Errors) > 0 {
+				var msgs []string
+				for _, e := range ins.LastAttempt.Errors.Errors {
+					msgs = append(msgs, fmt.Sprintf("%s: %s", e.GetCode(), e.GetMessage()))
+				}
+				msg := fmt.Sprintf("MIG failed to create instances: %s", strings.Join(msgs, "; "))
+				if errorutil.SetTerminalCondition(&mig.Status.Conditions, tpuv1alpha1.ReasonInstancesCreationFailed, msg) {
+					r.Recorder.Event(&mig, corev1.EventTypeWarning, tpuv1alpha1.ReasonInstancesCreationFailed, msg)
+				}
+				break
+			}
+		}
+	}
+
+	if errorutil.TerminalFailureCondition(mig.Status.Conditions) != nil {
+		return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+	}
+
+	if gceMIG.Status != nil && gceMIG.Status.IsStable != nil && !*gceMIG.Status.IsStable {
+		logger.V(1).Info("GCE Managed Instance Group is not yet stable, triggering exponential backoff retry")
+		meta.SetStatusCondition(&mig.Status.Conditions, metav1.Condition{
+			Type:    "Ready",
+			Status:  metav1.ConditionFalse,
+			Reason:  "Unstable",
+			Message: "Waiting for GCE Managed Instance Group to become stable",
+		})
+		// Return an error to use exponential backoff provided by controller-runtime
+		// to handle transient errors.
+		// TODO: implemented customized solutions for exponential backoff for better
+		// flexibility.
+		return ctrl.Result{}, fmt.Errorf("waiting for GCE Managed Instance Group to become stable")
+	}
+
+	wasReady := meta.IsStatusConditionTrue(base.Status.Conditions, "Ready")
 	mig.Status.Conditions = []metav1.Condition{
 		{
 			Type:               "Ready",

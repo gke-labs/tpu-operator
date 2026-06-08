@@ -68,6 +68,7 @@ func (r *TPUNodeGroupReconciler) WithRecorder(recorder record.EventRecorder) *TP
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;patch;delete
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=create
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete
 
 // Reconcile is the main entry point for reconciling a TPUNodeGroup.
@@ -454,14 +455,14 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 		}
 	}
 
-	// 7. Wait for URL population
-	if existing.Status.URL == "" {
-		logger.V(1).Info("managedInstanceGroup CR ready but URL missing", "name", existing.Name)
+	// 7. Wait for URL and Ready condition
+	if existing.Status.URL == "" || !meta.IsStatusConditionTrue(existing.Status.Conditions, tpuapi.ConditionTypeReady) {
+		logger.V(1).Info("managedInstanceGroup CR not yet ready", "name", existing.Name)
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    "ManagedInstanceGroupReady",
 			Status:  metav1.ConditionFalse,
 			Reason:  "Provisioning",
-			Message: "Waiting for GCE resource provisioning",
+			Message: "Waiting for child ManagedInstanceGroup to be ready and stable",
 		})
 		return false, nil
 	}

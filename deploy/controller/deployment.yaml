@@ -20,6 +20,7 @@ spec:
       - command:
         - /manager
         image: tpu-node-group-controller
+        imagePullPolicy: Always
         name: manager
         resources:
           limits:

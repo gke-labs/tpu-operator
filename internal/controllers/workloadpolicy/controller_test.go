@@ -382,10 +382,11 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantErr: true,
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Minute},
+			wantErr:    false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
 			wantEvents: []string{
-				"Warning Failed GCE operation failed: GCE operation \"op-123\" failed: internal error (code 500): <nil>",
+				"Warning OperationFailed GCE operation \"op-123\" failed: internal error (code 500): <nil>",
 			},
 		},
 		{

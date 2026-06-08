@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/errorutil"
 	"github.com/gke-labs/tpu-operator/internal/converter"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
@@ -88,9 +89,12 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			} else {
 				opName := workloadPolicy.Status.OperationName
 				workloadPolicy.Status.OperationName = ""
-				err := fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
-				r.Recorder.Event(&workloadPolicy, corev1.EventTypeWarning, "Failed", fmt.Sprintf("GCE operation failed: %v", err))
-				return ctrl.Result{}, err
+				workloadPolicy.Status.OperationType = ""
+				msg := fmt.Sprintf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				if errorutil.SetTerminalCondition(&workloadPolicy.Status.Conditions, tpuv1alpha1.ReasonOperationFailed, msg) {
+					r.Recorder.Event(&workloadPolicy, corev1.EventTypeWarning, tpuv1alpha1.ReasonOperationFailed, msg)
+				}
+				return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", workloadPolicy.Status.OperationName)
@@ -184,6 +188,14 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 			policy := converter.ToGCEResourcePolicy(&workloadPolicy)
 			op, err := r.GCE.Insert(ctx, workloadPolicy.Spec.Project, workloadPolicy.Spec.Region, policy)
 			if err != nil {
+				classification := errorutil.Classify(err)
+				if classification == errorutil.ClassificationTerminal {
+					msg := fmt.Sprintf("GCP API rejected WorkloadPolicy creation: %v", err)
+					if errorutil.SetTerminalCondition(&workloadPolicy.Status.Conditions, tpuv1alpha1.ReasonRequestRejected, msg) {
+						r.Recorder.Event(&workloadPolicy, corev1.EventTypeWarning, tpuv1alpha1.ReasonRequestRejected, msg)
+					}
+					return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("inserting GCE ResourcePolicy: %w", err)
 			}
 			if op != nil {

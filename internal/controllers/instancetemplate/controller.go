@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/errorutil"
 	"github.com/gke-labs/tpu-operator/internal/converter"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
@@ -25,7 +26,6 @@ import (
 // finalizerName is the name of the finalizer used to ensure clean teardown
 // of external resources associated with an InstanceTemplate.
 const finalizerName = "tpu.google.com/instancetemplate-cleanup"
-
 
 // InstanceTemplateReconciler reconciles a InstanceTemplate object
 type InstanceTemplateReconciler struct {
@@ -89,9 +89,12 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			} else {
 				opName := instanceTemplate.Status.OperationName
 				instanceTemplate.Status.OperationName = ""
-				err := fmt.Errorf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
-				r.Recorder.Event(&instanceTemplate, corev1.EventTypeWarning, "Failed", fmt.Sprintf("GCE operation failed: %v", err))
-				return ctrl.Result{}, err
+				instanceTemplate.Status.OperationType = ""
+				msg := fmt.Sprintf("GCE operation %q failed: %s (code %d): %v", opName, opProto.GetHttpErrorMessage(), opProto.GetHttpErrorStatusCode(), opProto.GetError())
+				if errorutil.SetTerminalCondition(&instanceTemplate.Status.Conditions, tpuv1alpha1.ReasonOperationFailed, msg) {
+					r.Recorder.Event(&instanceTemplate, corev1.EventTypeWarning, tpuv1alpha1.ReasonOperationFailed, msg)
+				}
+				return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", instanceTemplate.Status.OperationName)
@@ -177,7 +180,6 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{}, nil
 	}
 
-
 	// 4. Ensure GCE Instance Template exists
 	gceTemplate, err := r.GCE.Get(ctx, instanceTemplate.Spec.Project, instanceTemplate.Name)
 	if err != nil {
@@ -186,6 +188,14 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			template := converter.ToGCEInstanceTemplate(&instanceTemplate)
 			op, err := r.GCE.Insert(ctx, instanceTemplate.Spec.Project, template)
 			if err != nil {
+				classification := errorutil.Classify(err)
+				if classification == errorutil.ClassificationTerminal {
+					msg := fmt.Sprintf("GCP API rejected InstanceTemplate creation: %v", err)
+					if errorutil.SetTerminalCondition(&instanceTemplate.Status.Conditions, tpuv1alpha1.ReasonRequestRejected, msg) {
+						r.Recorder.Event(&instanceTemplate, corev1.EventTypeWarning, tpuv1alpha1.ReasonRequestRejected, msg)
+					}
+					return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+				}
 				return ctrl.Result{}, fmt.Errorf("inserting GCE InstanceTemplate: %w", err)
 			}
 			if op != nil {
@@ -224,8 +234,6 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 	if !wasReady {
 		r.Recorder.Event(&instanceTemplate, corev1.EventTypeNormal, "Provisioned", fmt.Sprintf("GCE Instance Template successfully created: %s", gceTemplate.GetSelfLink()))
 	}
-
-
 
 	logger.V(1).Info("reconciliation finished")
 	return ctrl.Result{}, nil
