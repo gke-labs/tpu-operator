@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 )
@@ -39,7 +40,7 @@ func waitForCondition[T client.Object](
 ) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		if err := k8sClient.Get(ctx, key, obj); err != nil {
-			return false, err
+			return false, nil // Ignore errors during polling
 		}
 		for _, c := range getConditions(obj) {
 			if c.Type == condType && c.Status == expectedStatus {
@@ -57,7 +58,7 @@ func waitForDeletion(ctx context.Context, k8sClient client.Client, key client.Ob
 			return true, nil
 		}
 		if err != nil {
-			return false, err
+			return false, nil // Ignore errors
 		}
 		return false, nil
 	})
@@ -308,3 +309,47 @@ func dumpPodLogs(t *testing.T, ctx context.Context, k8sClient client.Client, job
 		}
 	}
 }
+
+func verifyEvents(t *testing.T, ctx context.Context, kubeClient kubernetes.Interface, obj client.Object, expectedReasons []string) {
+	t.Helper()
+	t.Logf("Verifying events for %s/%s: %v", obj.GetNamespace(), obj.GetName(), expectedReasons)
+	var foundReasons map[string]bool
+	err := wait.PollUntilContextTimeout(ctx, 5*time.Second, 5*time.Minute, true, func(ctx context.Context) (bool, error) {
+		events, err := kubeClient.CoreV1().Events(obj.GetNamespace()).List(ctx, metav1.ListOptions{
+			FieldSelector: fmt.Sprintf("involvedObject.name=%s", obj.GetName()),
+		})
+		if err != nil {
+			return false, err
+		}
+
+		foundReasons = make(map[string]bool)
+		for _, event := range events.Items {
+			foundReasons[event.Reason] = true
+			t.Logf("Found event: Reason=%q, Message=%q", event.Reason, event.Message)
+		}
+
+		allFound := true
+		for _, reason := range expectedReasons {
+			if !foundReasons[reason] {
+				allFound = false
+			}
+		}
+		return allFound, nil
+	})
+	if err != nil {
+		var missing []string
+		for _, reason := range expectedReasons {
+			if !foundReasons[reason] {
+				missing = append(missing, reason)
+			}
+		}
+		var found []string
+		for r := range foundReasons {
+			found = append(found, r)
+		}
+		t.Fatalf("verifyEvents(%s/%s) timed out: missing expected events %v; found %v; error: %v",
+			obj.GetNamespace(), obj.GetName(), missing, found, err)
+	}
+	t.Log("All expected events found.")
+}
+

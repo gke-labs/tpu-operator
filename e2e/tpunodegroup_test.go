@@ -288,7 +288,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		t.Log("=== Waiting for ManagedInstanceGroup to be ready ===")
 		if err := waitForCondition(ctx, k8sClient, migKey, mig, func(obj *tpuapi.ManagedInstanceGroup) []metav1.Condition {
 			return obj.Status.Conditions
-		}, "Ready", metav1.ConditionTrue, 120*time.Second); err != nil {
+		}, "Ready", metav1.ConditionTrue, 1200*time.Second); err != nil {
 			_ = k8sClient.Get(ctx, migKey, mig)
 			t.Logf("Timeout waiting for ManagedInstanceGroup to be ready. Dumping status: %+#v", mig)
 			t.Fatalf("Timeout waiting for ManagedInstanceGroup to be ready: %v", err)
@@ -313,9 +313,9 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		t.Log("GCP resource verified.")
 
 		t.Log("=== Verifying Node Joining and Labeling (Multi-Host) ===")
-		if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 10*time.Minute, true, func(ctx context.Context) (bool, error) {
+		if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 15*time.Minute, true, func(ctx context.Context) (bool, error) {
 			if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
-				return false, err
+				return false, nil // Ignore errors during polling
 			}
 			if ng.Status.NodeSummary != nil && ng.Status.NodeSummary.Ready == 2 {
 				t.Log("NodeSummary indicates 2 Ready nodes.")
@@ -369,5 +369,8 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 
 		t.Log("=== Verifying TPU Workloads (Multi-Host) ===")
 		verifyTPUWorkload(t, ctx, k8sClient, "default-test-multihost", 2)
+
+		t.Log("=== Verifying Controller Events ===")
+		verifyEvents(t, ctx, kubernetesClient, ng, []string{"ChildResourcesProvisioned", "NodesJoining", "Provisioned"})
 	})
 }

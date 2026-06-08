@@ -15,23 +15,25 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
+
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/errorutil"
 	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup/deviceplugin"
 	"github.com/gke-labs/tpu-operator/internal/converter"
 	"github.com/gke-labs/tpu-operator/internal/gce"
-	"k8s.io/utils/ptr"
 )
 
 const (
-	finalizerMIG      = "tpu.google.com/cleanup-mig"
-	finalizerTemplate = "tpu.google.com/cleanup-template"
-	finalizerPolicy   = "tpu.google.com/cleanup-policy"
-	finalizerNodes    = "tpu.google.com/cleanup-nodes"
+	finalizerMIG          = "tpu.google.com/cleanup-mig"
+	finalizerTemplate     = "tpu.google.com/cleanup-template"
+	finalizerPolicy       = "tpu.google.com/cleanup-policy"
+	finalizerNodes        = "tpu.google.com/cleanup-nodes"
 	finalizerDevicePlugin = "tpu.google.com/cleanup-device-plugin"
 )
 
@@ -136,6 +138,9 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if ready, err := r.reconcileWorkloadPolicy(ctx, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile workload policy: %w", err)
 	} else if !ready {
+		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
+			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -143,6 +148,9 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if ready, err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
 	} else if !ready {
+		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
+			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -150,6 +158,9 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if ready, err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
 	} else if !ready {
+		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
+			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+		}
 		return ctrl.Result{}, nil
 	}
 
@@ -162,7 +173,6 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	if err := ReconcileNodes(ctx, r.Client, r.igmClient, r.recorder, &tpuNodeGroup); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile nodes: %w", err)
 	}
-
 
 	// Step 5: Reconcile Device Plugin
 	if err := deviceplugin.Reconcile(ctx, r.kubeClientset, &tpuNodeGroup); err != nil {
@@ -258,6 +268,15 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 		return false, fmt.Errorf("getting WorkloadPolicy CR: %w", err)
 	}
 
+	// Check for terminal failure in child
+	if cond := errorutil.TerminalFailureCondition(existing.Status.Conditions); cond != nil {
+		msg := fmt.Sprintf("Child WorkloadPolicy %q failed: %s", existing.Name, cond.Message)
+		if errorutil.SetTerminalCondition(&group.Status.Conditions, cond.Reason, msg) {
+			r.recorder.Event(group, corev1.EventTypeWarning, cond.Reason, msg)
+		}
+		return false, nil
+	}
+
 	// 4. Update if changed
 	if !equality.Semantic.DeepEqual(existing.Spec, policy.Spec) {
 		logger.Info("patching WorkloadPolicy CR", "name", policy.Name)
@@ -346,6 +365,15 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 			return false, nil
 		}
 		return false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
+	}
+
+	// Check for terminal failure in child
+	if cond := errorutil.TerminalFailureCondition(existing.Status.Conditions); cond != nil {
+		msg := fmt.Sprintf("Child InstanceTemplate %q failed: %s", existing.Name, cond.Message)
+		if errorutil.SetTerminalCondition(&group.Status.Conditions, cond.Reason, msg) {
+			r.recorder.Event(group, corev1.EventTypeWarning, cond.Reason, msg)
+		}
+		return false, nil
 	}
 
 	if !equality.Semantic.DeepEqual(existing.Spec, template.Spec) {
@@ -443,6 +471,15 @@ func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Conte
 			return false, nil
 		}
 		return false, fmt.Errorf("getting ManagedInstanceGroup CR: %w", err)
+	}
+
+	// Check for terminal failure in child
+	if cond := errorutil.TerminalFailureCondition(existing.Status.Conditions); cond != nil {
+		msg := fmt.Sprintf("Child ManagedInstanceGroup %q failed: %s", existing.Name, cond.Message)
+		if errorutil.SetTerminalCondition(&group.Status.Conditions, cond.Reason, msg) {
+			r.recorder.Event(group, corev1.EventTypeWarning, cond.Reason, msg)
+		}
+		return false, nil
 	}
 
 	// 6. Update if changed
@@ -554,6 +591,3 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 	}
 	return nil
 }
-
-
-
