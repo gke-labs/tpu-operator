@@ -26,6 +26,13 @@ const (
 
 	// ReasonReconcileError indicates that an error occurred during reconciliation.
 	ReasonReconcileError = "ReconcileError"
+
+	// ReasonRequestRejected indicates that the GCP API synchronously rejected the request.
+	ReasonRequestRejected = "RequestRejected"
+	// ReasonOperationFailed indicates that a GCE operation completed with an error.
+	ReasonOperationFailed = "OperationFailed"
+	// ReasonInstancesCreationFailed indicates that the MIG failed to create instances.
+	ReasonInstancesCreationFailed = "InstancesCreationFailed"
 )
 
 // TPUNodeGroupSpec defines the desired state of a TPUNodeGroup.

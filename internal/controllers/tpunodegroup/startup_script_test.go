@@ -31,4 +31,8 @@ func TestRenderStartupScript(t *testing.T) {
 	if strings.Contains(script, "{{ZONE}}") {
 		t.Errorf("Expected script to not contain placeholder {{ZONE}}")
 	}
+
+	if !strings.Contains(script, "provider-id: \"$PROVIDER_ID\"") {
+		t.Errorf("renderStartupScript(%q, %q, %q) does not contain expected provider-id configuration", version, project, zone)
+	}
 }
