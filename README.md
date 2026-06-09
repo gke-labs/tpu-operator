@@ -106,7 +106,7 @@ gcloud compute instances create k8s-control-plane \
 sudo kubeadm init --pod-network-cidr=10.244.0.0/16
 ```
 
-Note: kubeadm is required if enabling \``bootstrapKubernetes`\` in the TPUNodeGroup CR.
+Note: kubeadm is required if enabling `bootstrapKubernetes` in the TPUNodeGroup CR.
 
 ### Configure Your Subnet
 
