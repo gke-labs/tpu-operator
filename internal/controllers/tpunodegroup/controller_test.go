@@ -57,7 +57,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 		wantDeleted       bool
 		wantNodesDeleted  []string
 		wantEvents        []string
-		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient)
+		setupMocks        func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient)
 		kubeObjects       []runtime.Object
 	}{
 		{
@@ -168,7 +168,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				Ready:       0,
 				Reconciling: 1,
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{
 						{
@@ -303,7 +303,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
 				"Normal Provisioned All nodes are ready",
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{
 						{
@@ -742,7 +742,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Message: "Waiting for ManagedInstanceGroup to be deleted",
 				},
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{
 						{
@@ -795,7 +795,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					Message: "Waiting for ManagedInstanceGroup to be deleted",
 				},
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{}, nil
 				}
@@ -991,6 +991,174 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "reconcile_instance_template_external_success",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes", "tpu.google.com/cleanup-device-plugin"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceTemplateURI:  ptr.To("projects/test-project/locations/global/instanceTemplates/my-template"),
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    false,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "ExternalTemplate",
+					Message: "Using external instance template",
+				},
+				{
+					Type:    "ManagedInstanceGroupReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "Provisioning",
+					Message: "Child ManagedInstanceGroup CR created; waiting for GCE resource provisioning",
+				},
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
+				tmpl.GetFunc = func(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error) {
+					return &computepb.InstanceTemplate{
+						Properties: &computepb.InstanceProperties{
+							MachineType: ptr.To("tpu7x-standard-4t"),
+							Scheduling: &computepb.Scheduling{
+								ProvisioningModel: ptr.To("STANDARD"),
+								OnHostMaintenance: ptr.To("TERMINATE"),
+							},
+						},
+					}, nil
+				}
+			},
+		},
+		{
+			name: "reconcile_instance_template_external_invalid_machine_type",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes", "tpu.google.com/cleanup-device-plugin"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceTemplateURI:  ptr.To("projects/test-project/locations/global/instanceTemplates/my-template"),
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    true,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "InvalidTemplate",
+					Message: "invalid external template: machine type \"n1-standard-1\" is not supported",
+				},
+				{
+					Type:    "Ready",
+					Status:  metav1.ConditionFalse,
+					Reason:  "ReconcileError",
+					Message: "Error reconciling: failed to reconcile instance template: validating external template: invalid external template: machine type \"n1-standard-1\" is not supported",
+				},
+			},
+			wantEvents: []string{
+				"Warning InvalidInstanceTemplate External instance template validation failed: invalid external template: machine type \"n1-standard-1\" is not supported",
+				"Warning Failed Error reconciling: failed to reconcile instance template: validating external template: invalid external template: machine type \"n1-standard-1\" is not supported",
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
+				tmpl.GetFunc = func(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error) {
+					return &computepb.InstanceTemplate{
+						Properties: &computepb.InstanceProperties{
+							MachineType: ptr.To("n1-standard-1"),
+						},
+					}, nil
+				}
+			},
+		},
+		{
+			name: "reconcile_instance_template_external_invalid_machine_type_subsequent",
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+			},
+			initialObject: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-tpu",
+					Namespace:  "default",
+					Finalizers: []string{"tpu.google.com/cleanup-mig", "tpu.google.com/cleanup-template", "tpu.google.com/cleanup-policy", "tpu.google.com/cleanup-nodes", "tpu.google.com/cleanup-device-plugin"},
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:              "test-project",
+					NodeLocation:         "us-central1-a",
+					NodeCount:            1,
+					Topology:             "2x2x1",
+					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceTemplateURI:  ptr.To("projects/test-project/locations/global/instanceTemplates/my-template"),
+				},
+				Status: tpuapi.TPUNodeGroupStatus{
+					Conditions: []metav1.Condition{
+						{
+							Type:    "InstanceTemplateReady",
+							Status:  metav1.ConditionFalse,
+							Reason:  "InvalidTemplate",
+							Message: "invalid external template: machine type \"n1-standard-1\" is not supported",
+						},
+					},
+				},
+			},
+			wantResult: reconcile.Result{},
+			wantErr:    true,
+			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionFalse,
+					Reason:  "InvalidTemplate",
+					Message: "invalid external template: machine type \"n1-standard-1\" is not supported",
+				},
+				{
+					Type:    "Ready",
+					Status:  metav1.ConditionFalse,
+					Reason:  "ReconcileError",
+					Message: "Error reconciling: failed to reconcile instance template: validating external template: invalid external template: machine type \"n1-standard-1\" is not supported",
+				},
+			},
+			wantEvents: []string{
+				"Warning Failed Error reconciling: failed to reconcile instance template: validating external template: invalid external template: machine type \"n1-standard-1\" is not supported",
+			},
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
+				tmpl.GetFunc = func(ctx context.Context, project, name string) (*computepb.InstanceTemplate, error) {
+					return &computepb.InstanceTemplate{
+						Properties: &computepb.InstanceProperties{
+							MachineType: ptr.To("n1-standard-1"),
+						},
+					}, nil
+				}
+			},
+		},
+		{
 			name: "reconcile_mig_create",
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -1152,7 +1320,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
 				"Normal NodesJoining Waiting for 1 of 2 nodes to join the cluster",
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{
 						{
@@ -1253,7 +1421,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
 				"Warning Failed Error reconciling: failed to inject metadata: failed to list managed instances: GCE API error",
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return nil, fmt.Errorf("GCE API error")
 				}
@@ -1362,7 +1530,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantEvents: []string{
 				"Normal ChildResourcesProvisioned All child resources provisioned successfully",
 			},
-			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient) {
+			setupMocks: func(igm *gce.MockIGMClient, inst *gce.MockInstanceClient, tmpl *gce.MockInstanceTemplateClient) {
 				igm.ListManagedInstancesFunc = func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error) {
 					return []*computepb.ManagedInstance{
 						{
@@ -1416,12 +1584,13 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 
 			igm := &gce.MockIGMClient{}
 			inst := &gce.MockInstanceClient{}
+			templateClient := &gce.MockInstanceTemplateClient{}
 			if tc.setupMocks != nil {
-				tc.setupMocks(igm, inst)
+				tc.setupMocks(igm, inst, templateClient)
 			}
 
 			fakeRecorder := record.NewFakeRecorder(10)
-			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, igm, inst).
+			r := NewTPUNodeGroupReconciler(cl, scheme, k8sFakeClient, igm, inst, templateClient).
 				WithRecorder(fakeRecorder)
 
 			ctx := logr.NewContext(t.Context(), logr.Discard())
@@ -1818,4 +1987,3 @@ func TestMapDaemonSetToTPUNodeGroups(t *testing.T) {
 		})
 	}
 }
-

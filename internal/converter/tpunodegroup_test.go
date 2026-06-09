@@ -385,7 +385,11 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ToManagedInstanceGroupCR(tt.tpuNodeGroup, tt.template, tt.policy)
+			var templateURI string
+			if tt.template != nil {
+				templateURI = tt.template.Status.URI
+			}
+			got := ToManagedInstanceGroupCR(tt.tpuNodeGroup, templateURI, tt.policy)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Errorf("ToManagedInstanceGroupCR() mismatch (-want +got):\n%s", diff)
 			}

@@ -91,12 +91,7 @@ func isZone(location string) bool {
 }
 
 // ToManagedInstanceGroupCR converts a TPUNodeGroup to a ManagedInstanceGroup CR.
-func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, template *api.InstanceTemplate, policy *api.WorkloadPolicy) *api.ManagedInstanceGroup {
-	var templateURL string
-	if template != nil {
-		templateURL = template.Status.URI
-	}
-
+func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, templateURI string, policy *api.WorkloadPolicy) *api.ManagedInstanceGroup {
 	var wp *string
 	if policy != nil && policy.Status.URI != "" {
 		wp = &policy.Status.URI
@@ -120,7 +115,7 @@ func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, template *api.Inst
 		Spec: api.ManagedInstanceGroupSpec{
 			Project:              tpuNodeGroup.Spec.Project,
 			Location:             tpuNodeGroup.Spec.NodeLocation,
-			InstanceTemplate:     templateURL,
+			InstanceTemplate:     templateURI,
 			TargetSize:           tpuNodeGroup.Spec.NodeCount,
 			WorkloadPolicy:       wp,
 			TargetSizePolicyMode: tpuNodeGroup.Spec.TargetSizePolicyMode,
