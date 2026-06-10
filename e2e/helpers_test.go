@@ -46,6 +46,27 @@ func TestHelpers_WaitForCondition(t *testing.T) {
 	}
 }
 
+func TestHelpers_WaitForCondition_NotFound(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = v1alpha1.AddToScheme(scheme)
+
+	key := types.NamespacedName{Name: "non-existent-obj", Namespace: "default"}
+	fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
+
+	ctx := context.Background()
+	err := waitForCondition(ctx, fakeClient, key, &v1alpha1.InstanceTemplate{}, func(obj *v1alpha1.InstanceTemplate) []metav1.Condition {
+		return obj.Status.Conditions
+	}, "Ready", metav1.ConditionTrue, 5*time.Second)
+
+	if err == nil {
+		t.Fatal("Expected error when resource is not found, got nil")
+	}
+	expectedErrMsg := "resource non-existent-obj was deleted while waiting for condition Ready"
+	if err.Error() != expectedErrMsg {
+		t.Errorf("Expected error message %q, got %q", expectedErrMsg, err.Error())
+	}
+}
+
 func TestHelpers_WaitForDeletion(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = v1alpha1.AddToScheme(scheme)

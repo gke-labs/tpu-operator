@@ -3,6 +3,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"sort"
@@ -34,13 +35,20 @@ func applyManifest(ctx context.Context, k8sClient client.Client, path string, ob
 	return k8sClient.Patch(ctx, obj, client.Apply, client.ForceOwnership, client.FieldOwner("e2e-test"))
 }
 
+// waitForCondition polls until the target object reaches the expected condition status.
+// It assumes the object already exists. If the object is not found (NotFound), it returns
+// a terminal error immediately to fail fast. Other transient errors during polling are logged and ignored.
 func waitForCondition[T client.Object](
 	ctx context.Context, k8sClient client.Client, key client.ObjectKey, obj T,
 	getConditions func(T) []metav1.Condition, condType string, expectedStatus metav1.ConditionStatus, timeout time.Duration,
 ) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		if err := k8sClient.Get(ctx, key, obj); err != nil {
-			return false, nil // Ignore errors during polling
+			if errors.IsNotFound(err) {
+				return false, fmt.Errorf("resource %s was deleted while waiting for condition %s", key.Name, condType)
+			}
+			log.Printf("Ignoring transient error while waiting for condition %s on %s: %v", condType, key.Name, err)
+			return false, nil // Ignore other transient errors
 		}
 		for _, c := range getConditions(obj) {
 			if c.Type == condType && c.Status == expectedStatus {
