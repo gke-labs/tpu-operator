@@ -137,6 +137,13 @@ func TestTPUNodeGroup(t *testing.T) {
 		t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
 	}
 
+	t.Log("=== Verifying TPUNodeGroup Ready Condition ===")
+	if err := waitForCondition(ctx, k8sClient, ngKey, ng, func(obj *tpuapi.TPUNodeGroup) []metav1.Condition {
+		return obj.Status.Conditions
+	}, "Ready", metav1.ConditionTrue, 2*time.Minute); err != nil {
+		t.Fatalf("Timeout waiting for TPUNodeGroup CR to be Ready: %v", err)
+	}
+
 	t.Log("=== Verifying TPU Workload (Single-Host) ===")
 	verifyTPUWorkload(t, ctx, k8sClient, "default-test-nodegroup", 1)
 
@@ -365,6 +372,13 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 				}
 				t.Logf("Node %s label verified: %s=%s", node.Name, k, val)
 			}
+		}
+
+		t.Log("=== Verifying TPUNodeGroup Ready Condition (Multi-Host) ===")
+		if err := waitForCondition(ctx, k8sClient, ngKey, ng, func(obj *tpuapi.TPUNodeGroup) []metav1.Condition {
+			return obj.Status.Conditions
+		}, "Ready", metav1.ConditionTrue, 2*time.Minute); err != nil {
+			t.Fatalf("Timeout waiting for TPUNodeGroup CR to be Ready: %v", err)
 		}
 
 		t.Log("=== Verifying TPU Workloads (Multi-Host) ===")
