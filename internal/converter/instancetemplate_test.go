@@ -82,6 +82,9 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 		t.Fatalf("Expected 1 disk, got %d", len(gceTemplate.Properties.Disks))
 	}
 	disk := gceTemplate.Properties.Disks[0]
+	if disk.AutoDelete == nil || !*disk.AutoDelete {
+		t.Errorf("Expected AutoDelete to be true, got %v", disk.AutoDelete)
+	}
 	if disk.InitializeParams == nil {
 		t.Fatal("Expected InitializeParams to be set")
 	}

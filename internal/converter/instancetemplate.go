@@ -118,6 +118,7 @@ func buildBootDisk(image *string, bootDiskSizeGB *int32, diskType *string) []*co
 	}
 
 	disk := &computepb.AttachedDisk{
+		AutoDelete:       ptr.To(true),
 		Boot:             ptr.To(true),
 		InitializeParams: &computepb.AttachedDiskInitializeParams{},
 	}
