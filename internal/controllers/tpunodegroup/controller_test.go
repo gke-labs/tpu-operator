@@ -158,6 +158,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+						Conditions: []metav1.Condition{
+							{
+								Type:    tpuapi.ConditionTypeReady,
+								Status:  metav1.ConditionTrue,
+								Reason:  tpuapi.ReasonReady,
+								Message: "ManagedInstanceGroup provisioned successfully",
+							},
+						},
 					},
 				},
 			},
@@ -245,6 +253,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-disabled-mig",
+						Conditions: []metav1.Condition{
+							{
+								Type:    tpuapi.ConditionTypeReady,
+								Status:  metav1.ConditionTrue,
+								Reason:  tpuapi.ReasonReady,
+								Message: "ManagedInstanceGroup provisioned successfully",
+							},
+						},
 					},
 				},
 			},
@@ -406,6 +422,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+						Conditions: []metav1.Condition{
+							{
+								Type:    tpuapi.ConditionTypeReady,
+								Status:  metav1.ConditionTrue,
+								Reason:  tpuapi.ReasonReady,
+								Message: "ManagedInstanceGroup provisioned successfully",
+							},
+						},
 					},
 				},
 			},
@@ -1274,6 +1298,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+						Conditions: []metav1.Condition{
+							{
+								Type:    tpuapi.ConditionTypeReady,
+								Status:  metav1.ConditionTrue,
+								Reason:  tpuapi.ReasonReady,
+								Message: "ManagedInstanceGroup provisioned successfully",
+							},
+						},
 					},
 				},
 			},
@@ -1398,6 +1430,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+						Conditions: []metav1.Condition{
+							{
+								Type:    tpuapi.ConditionTypeReady,
+								Status:  metav1.ConditionTrue,
+								Reason:  tpuapi.ReasonReady,
+								Message: "ManagedInstanceGroup provisioned successfully",
+							},
+						},
 					},
 				},
 			},
@@ -1498,6 +1538,14 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 					Status: tpuapi.ManagedInstanceGroupStatus{
 						URL: "projects/test-project/zones/us-central1-a/instanceGroupManagers/test-tpu-mig",
+						Conditions: []metav1.Condition{
+							{
+								Type:    tpuapi.ConditionTypeReady,
+								Status:  metav1.ConditionTrue,
+								Reason:  tpuapi.ReasonReady,
+								Message: "ManagedInstanceGroup provisioned successfully",
+							},
+						},
 					},
 				},
 			},
