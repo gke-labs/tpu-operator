@@ -1,18 +1,20 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,7 +46,7 @@ func waitForCondition[T client.Object](
 ) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		if err := k8sClient.Get(ctx, key, obj); err != nil {
-			if errors.IsNotFound(err) {
+			if apierrors.IsNotFound(err) {
 				return false, fmt.Errorf("resource %s was deleted while waiting for condition %s", key.Name, condType)
 			}
 			log.Printf("Ignoring transient error while waiting for condition %s on %s: %v", condType, key.Name, err)
@@ -62,7 +64,7 @@ func waitForCondition[T client.Object](
 func waitForDeletion(ctx context.Context, k8sClient client.Client, key client.ObjectKey, obj client.Object, timeout time.Duration) error {
 	return wait.PollUntilContextTimeout(ctx, 2*time.Second, timeout, true, func(ctx context.Context) (bool, error) {
 		err := k8sClient.Get(ctx, key, obj)
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return true, nil
 		}
 		if err != nil {
@@ -359,5 +361,57 @@ func verifyEvents(t *testing.T, ctx context.Context, kubeClient kubernetes.Inter
 			obj.GetNamespace(), obj.GetName(), missing, found, err)
 	}
 	t.Log("All expected events found.")
+}
+
+// runGcloud executes a gcloud command with the provided args, returning the combined output.
+// It logs the command and returns an error if execution fails.
+func runGcloud(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	t.Logf("Running: gcloud %s", strings.Join(args, " "))
+	cmd := exec.Command("gcloud", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		return stdout.String(), fmt.Errorf("gcloud error: %w, stderr: %s", err, stderr.String())
+	}
+	return stdout.String(), nil
+}
+
+// verifyGCEInstanceTemplateExists checks if a GCE instance template exists.
+func verifyGCEInstanceTemplateExists(t *testing.T, project, name string, expectedExists bool) {
+	t.Helper()
+	args := []string{"compute", "instance-templates", "describe", name, "--project", project}
+	_, err := runGcloud(t, args...)
+	if expectedExists && err != nil {
+		t.Fatalf("Expected GCE Instance Template %s to exist, but got error: %v", name, err)
+	} else if !expectedExists && err == nil {
+		t.Fatalf("Expected GCE Instance Template %s to NOT exist, but it still exists", name)
+	}
+}
+
+// verifyGCEManagedInstanceGroupExists checks if a GCE MIG exists.
+func verifyGCEManagedInstanceGroupExists(t *testing.T, project, zone, name string, expectedExists bool) {
+	t.Helper()
+	args := []string{"compute", "instance-groups", "managed", "describe", name, "--project", project, "--zone", zone}
+	_, err := runGcloud(t, args...)
+	if expectedExists && err != nil {
+		t.Fatalf("Expected GCE Managed Instance Group %s to exist, but got error: %v", name, err)
+	} else if !expectedExists && err == nil {
+		t.Fatalf("Expected GCE Managed Instance Group %s to NOT exist, but it still exists", name)
+	}
+}
+
+// verifyGCEResourcePolicyExists checks if a GCE Resource Policy exists.
+func verifyGCEResourcePolicyExists(t *testing.T, project, region, name string, expectedExists bool) {
+	t.Helper()
+	args := []string{"compute", "resource-policies", "describe", name, "--project", project, "--region", region}
+	_, err := runGcloud(t, args...)
+	if expectedExists && err != nil {
+		t.Fatalf("Expected GCE Resource Policy %s to exist, but got error: %v", name, err)
+	} else if !expectedExists && err == nil {
+		t.Fatalf("Expected GCE Resource Policy %s to NOT exist, but it still exists", name)
+	}
 }
 

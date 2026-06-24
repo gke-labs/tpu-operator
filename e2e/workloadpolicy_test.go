@@ -3,10 +3,8 @@
 package e2e
 
 import (
-	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -60,11 +58,7 @@ func TestWorkloadPolicy(t *testing.T) {
 	t.Logf("WorkloadPolicy is Ready. URI: %s", wp.Status.URI)
 
 	t.Log("=== Verifying GCP Resource Creation ===")
-	cmd := exec.Command("gcloud", "compute", "resource-policies", "describe", crName, "--project", project, "--region", region)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("GCP Resource Policy not found or error: %v", err)
-	}
-	t.Log("GCP resource verified.")
+	verifyGCEResourcePolicyExists(t, project, region, crName, true)
 
 	t.Log("=== Teardown Verification ===")
 	t.Log("Deleting WorkloadPolicy CR...")
@@ -78,12 +72,6 @@ func TestWorkloadPolicy(t *testing.T) {
 	}
 
 	t.Log("Verifying GCP resource deletion...")
-	cmd = exec.Command("gcloud", "compute", "resource-policies", "describe", crName, "--project", project, "--region", region)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err == nil {
-		t.Fatal("GCP Resource Policy still exists after CR deletion!")
-	}
-	t.Log("GCP Resource Policy deleted successfully.")
+	verifyGCEResourcePolicyExists(t, project, region, crName, false)
 }
 

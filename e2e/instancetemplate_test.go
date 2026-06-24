@@ -3,10 +3,8 @@
 package e2e
 
 import (
-	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -56,11 +54,7 @@ func TestInstanceTemplate(t *testing.T) {
 	t.Logf("InstanceTemplate is Ready. URI: %s", it.Status.URI)
 
 	t.Log("=== Verifying GCP Resource Creation ===")
-	cmd := exec.Command("gcloud", "compute", "instance-templates", "describe", crName, "--project", project)
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("GCP Instance Template not found or error: %v", err)
-	}
-	t.Log("GCP resource verified.")
+	verifyGCEInstanceTemplateExists(t, project, crName, true)
 
 	t.Log("=== Teardown Verification ===")
 	t.Log("Deleting InstanceTemplate CR...")
@@ -74,12 +68,6 @@ func TestInstanceTemplate(t *testing.T) {
 	}
 
 	t.Log("Verifying GCP resource deletion...")
-	cmd = exec.Command("gcloud", "compute", "instance-templates", "describe", crName, "--project", project)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err == nil {
-		t.Fatal("GCP Instance Template still exists after CR deletion!")
-	}
-	t.Log("GCP Instance Template deleted successfully.")
+	verifyGCEInstanceTemplateExists(t, project, crName, false)
 }
 

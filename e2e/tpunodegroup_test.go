@@ -3,10 +3,8 @@
 package e2e
 
 import (
-	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -311,13 +309,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		if zone == "" {
 			zone = "us-central1-c"
 		}
-		cmd := exec.Command("gcloud", "compute", "instance-groups", "managed", "describe", migName, "--project", project, "--zone", zone)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			t.Fatalf("GCP Managed Instance Group not found or error: %v, stderr: %s", err, stderr.String())
-		}
-		t.Log("GCP resource verified.")
+		verifyGCEManagedInstanceGroupExists(t, project, zone, migName, true)
 
 		t.Log("=== Verifying Node Joining and Labeling (Multi-Host) ===")
 		if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 15*time.Minute, true, func(ctx context.Context) (bool, error) {
