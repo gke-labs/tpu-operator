@@ -9,6 +9,14 @@ const (
 	MaintenancePolicyTerminate = "TERMINATE"
 )
 
+// BootDisk defines the boot disk configuration for the Instance Template.
+type BootDisk struct {
+	// AutoDelete specifies whether the boot disk is automatically deleted when the VM is deleted.
+	// +kubebuilder:default=true
+	// +optional
+	AutoDelete *bool `json:"autoDelete,omitempty"`
+}
+
 // +kubebuilder:validation:XValidation:rule="!has(self.provisioningModel) || self.provisioningModel != 'RESERVATION_BOUND' || has(self.reservation)",message="Reservation is required when provisioningModel is RESERVATION_BOUND"
 // +kubebuilder:validation:XValidation:rule="!has(self.reservation) || !has(self.provisioningModel) || self.provisioningModel == 'RESERVATION_BOUND'",message="ProvisioningModel must be RESERVATION_BOUND when reservation is specified"
 // InstanceTemplateSpec defines the desired state of an InstanceTemplate.
@@ -26,6 +34,11 @@ type InstanceTemplateSpec struct {
 	// +kubebuilder:default="TERMINATE"
 	// +optional
 	MaintenancePolicy *string `json:"maintenancePolicy,omitempty"`
+
+	// BootDisk configures the boot disk for the instances.
+	// +kubebuilder:default={"autoDelete": true}
+	// +optional
+	BootDisk *BootDisk `json:"bootDisk,omitempty"`
 }
 
 // InstanceTemplateStatus defines the observed state of InstanceTemplate.

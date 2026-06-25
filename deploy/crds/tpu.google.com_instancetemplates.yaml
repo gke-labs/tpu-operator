@@ -39,6 +39,17 @@ spec:
           spec:
             description: InstanceTemplateSpec defines the desired state of an InstanceTemplate.
             properties:
+              bootDisk:
+                default:
+                  autoDelete: true
+                description: BootDisk configures the boot disk for the instances.
+                properties:
+                  autoDelete:
+                    default: true
+                    description: AutoDelete specifies whether the boot disk is automatically
+                      deleted when the VM is deleted.
+                    type: boolean
+                type: object
               bootDiskSizeGB:
                 description: BootDiskSizeGB is the size of the boot disk in GB.
                 format: int32

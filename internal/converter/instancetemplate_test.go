@@ -36,6 +36,9 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 				ProvisioningModel: ptr.To("SPOT"),
 			},
 			MaintenancePolicy: ptr.To("TERMINATE"),
+			BootDisk: &tpuv1alpha1.BootDisk{
+				AutoDelete: ptr.To(true),
+			},
 		},
 	}
 
@@ -212,6 +215,70 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 			t.Errorf("Expected Reservation Value %q, got %q", *cr.Spec.Reservation, gceTemplate.Properties.ReservationAffinity.Values[0])
 		}
 	*/
+}
+
+func TestToGCEInstanceTemplate_ExplicitAutoDelete(t *testing.T) {
+	tests := []struct {
+		name       string
+		bootDisk   *tpuv1alpha1.BootDisk
+		wantDelete *bool
+	}{
+		{
+			name:       "nil bootdisk",
+			bootDisk:   nil,
+			wantDelete: nil,
+		},
+		{
+			name: "explicit true",
+			bootDisk: &tpuv1alpha1.BootDisk{
+				AutoDelete: ptr.To(true),
+			},
+			wantDelete: ptr.To(true),
+		},
+		{
+			name: "explicit false",
+			bootDisk: &tpuv1alpha1.BootDisk{
+				AutoDelete: ptr.To(false),
+			},
+			wantDelete: ptr.To(false),
+		},
+		{
+			name: "bootdisk present but autoDelete nil",
+			bootDisk: &tpuv1alpha1.BootDisk{
+				AutoDelete: nil,
+			},
+			wantDelete: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cr := &tpuv1alpha1.InstanceTemplate{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-template",
+				},
+				Spec: tpuv1alpha1.InstanceTemplateSpec{
+					InstanceConfig: tpuv1alpha1.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+						Image:       ptr.To("image"),
+					},
+					BootDisk: tc.bootDisk,
+				},
+			}
+
+			gceTemplate := ToGCEInstanceTemplate(cr)
+			if gceTemplate == nil {
+				t.Fatal("Expected non-nil gceTemplate")
+			}
+			if len(gceTemplate.Properties.Disks) != 1 {
+				t.Fatalf("Expected 1 disk, got %d", len(gceTemplate.Properties.Disks))
+			}
+			disk := gceTemplate.Properties.Disks[0]
+			if diff := cmp.Diff(tc.wantDelete, disk.AutoDelete); diff != "" {
+				t.Errorf("AutoDelete mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
 }
 
 // TODO: Restore and update these tests when functions are re-implemented

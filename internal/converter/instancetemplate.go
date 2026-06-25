@@ -20,7 +20,7 @@ func ToGCEInstanceTemplate(cr *tpuv1alpha1.InstanceTemplate) *computepb.Instance
 	properties := &computepb.InstanceProperties{
 		MachineType: &cr.Spec.MachineType,
 		Metadata:    buildMetadata(cr.Spec.Metadata),
-		Disks:       buildBootDisk(cr.Spec.Image, cr.Spec.BootDiskSizeGB, cr.Spec.DiskType),
+		Disks:       buildBootDisk(cr.Spec.Image, cr.Spec.BootDiskSizeGB, cr.Spec.DiskType, cr.Spec.BootDisk),
 	}
 
 	// Scheduling
@@ -112,13 +112,12 @@ func buildMetadata(m map[string]string) *computepb.Metadata {
 }
 
 // buildBootDisk constructs the disks slice for GCE API.
-func buildBootDisk(image *string, bootDiskSizeGB *int32, diskType *string) []*computepb.AttachedDisk {
-	if image == nil && bootDiskSizeGB == nil && diskType == nil {
+func buildBootDisk(image *string, bootDiskSizeGB *int32, diskType *string, bootDisk *tpuv1alpha1.BootDisk) []*computepb.AttachedDisk {
+	if image == nil && bootDiskSizeGB == nil && diskType == nil && bootDisk == nil {
 		return nil
 	}
 
 	disk := &computepb.AttachedDisk{
-		AutoDelete:       ptr.To(true),
 		Boot:             ptr.To(true),
 		InitializeParams: &computepb.AttachedDiskInitializeParams{},
 	}
@@ -132,5 +131,11 @@ func buildBootDisk(image *string, bootDiskSizeGB *int32, diskType *string) []*co
 	if diskType != nil {
 		disk.InitializeParams.DiskType = diskType
 	}
+
+	// 1-1 match: only set AutoDelete on the compute protobuf if specified in the CR's bootDisk section.
+	if bootDisk != nil && bootDisk.AutoDelete != nil {
+		disk.AutoDelete = bootDisk.AutoDelete
+	}
+
 	return []*computepb.AttachedDisk{disk}
 }
