@@ -314,7 +314,24 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 	logger := ctrl.LoggerFrom(ctx)
 
 	if group.Spec.InstanceTemplateURI != nil {
-		err := ValidateExternalInstanceTemplate(ctx, r.templateClient, *group.Spec.InstanceTemplateURI)
+		templateProject := group.Spec.Project
+		templateName := extractShortName(*group.Spec.InstanceTemplateURI)
+		computeTemplate, err := r.templateClient.Get(ctx, templateProject, templateName)
+		if err != nil {
+			cond := meta.FindStatusCondition(group.Status.Conditions, "InstanceTemplateReady")
+			if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "InvalidTemplate" {
+				r.recorder.Eventf(group, corev1.EventTypeWarning, "InvalidInstanceTemplate", "External instance template fetch failed: %v", err)
+			}
+			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
+				Type:    "InstanceTemplateReady",
+				Status:  metav1.ConditionFalse,
+				Reason:  "InvalidTemplate",
+				Message: err.Error(),
+			})
+			return false, fmt.Errorf("fetching external instance template: %w", err)
+		}
+
+		err = ValidateExternalInstanceTemplate(computeTemplate)
 		if err != nil {
 			// Emit a warning event only the first time validation fails to avoid event spam.
 			cond := meta.FindStatusCondition(group.Status.Conditions, "InstanceTemplateReady")

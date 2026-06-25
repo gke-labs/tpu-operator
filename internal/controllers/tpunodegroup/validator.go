@@ -1,11 +1,10 @@
 package tpunodegroup
 
 import (
-	"context"
 	"fmt"
 	"regexp"
 
-	"github.com/gke-labs/tpu-operator/internal/gce"
+	"cloud.google.com/go/compute/apiv1/computepb"
 )
 
 const (
@@ -19,26 +18,13 @@ const (
 	TerminationActionStop   = "STOP"
 )
 
-var instanceTemplateURIRegex = regexp.MustCompile(`^projects/([^/]+)/(locations/[^/]+|regions/[^/]+|global)/instanceTemplates/([a-z0-9-]+)$`)
 var machineTypeRegex = regexp.MustCompile(`^(tpu7x-|tpu7-|ct6e-).*`)
 
 // ValidateExternalInstanceTemplate validates that the external instance template conforms to TPU requirements.
-func ValidateExternalInstanceTemplate(ctx context.Context, templateClient gce.InstanceTemplateClient, uri string) error {
-	matches := instanceTemplateURIRegex.FindStringSubmatch(uri)
-	if len(matches) == 0 {
-		return fmt.Errorf("invalid instance template URI format")
-	}
-	templateProject := matches[1]
-	templateName := matches[3]
-
-	computeTemplate, err := templateClient.Get(ctx, templateProject, templateName)
-	if err != nil {
-		return fmt.Errorf("fetching external instance template: %w", err)
-	}
-
-	machineType := computeTemplate.GetProperties().GetMachineType()
+func ValidateExternalInstanceTemplate(computeTemplate *computepb.InstanceTemplate) error {
+	machineType := extractShortName(computeTemplate.GetProperties().GetMachineType())
 	if !machineTypeRegex.MatchString(machineType) {
-		return fmt.Errorf("invalid external template: machine type %q is not supported", machineType)
+		return fmt.Errorf("invalid external template: machine type %q is not supported", computeTemplate.GetProperties().GetMachineType())
 	}
 
 	scheduling := computeTemplate.GetProperties().GetScheduling()
