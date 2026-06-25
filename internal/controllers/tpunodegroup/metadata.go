@@ -34,7 +34,7 @@ const (
 )
 
 // injectMetadata handles injecting metadata into instances.
-func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient client.Client, igm gce.IGMClient, instanceClient gce.InstanceClient) error {
+func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient client.Client, igm gce.IGMClient, instanceClient gce.InstanceClient, machineType string) error {
 	migName := group.ManagedInstanceGroupName()
 	instances, err := igm.ListManagedInstances(ctx, group.Spec.Project, group.Spec.NodeLocation, migName)
 	if err != nil {
@@ -98,7 +98,7 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 			}
 		}
 
-		sliceUpdates := sliceMetadata(group, gceInst)
+		sliceUpdates := sliceMetadata(group, gceInst, machineType)
 
 		newItems, fingerprint, changed := mergeMetadataItems(gceInst, tokenUpdates, sliceUpdates)
 		if !changed {
@@ -129,14 +129,10 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 }
 
 // sliceMetadata returns metadata for slice topology etc.
-func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance) map[string]string {
+func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance, machineType string) map[string]string {
 	updates := make(map[string]string)
 
 	// 1. Map the raw GCE machine type to the specific accelerator string expected by the plugin
-	var machineType string
-	if group.Spec.InstanceConfig != nil {
-		machineType = group.Spec.InstanceConfig.MachineType
-	}
 	acceleratorType := acceleratorLabelValue(machineType, group.Spec.Topology, string(group.Spec.TargetSizePolicyMode))
 	if acceleratorType == "" {
 		// Cannot inject labels without a known accelerator type

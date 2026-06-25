@@ -161,7 +161,7 @@ func TestInjectMetadata(t *testing.T) {
 		},
 	}
 
-	err := injectMetadata(t.Context(), group, cl, mockIGM, mockInstance)
+	err := injectMetadata(t.Context(), group, cl, mockIGM, mockInstance, "ct5lp-hightpu-4t")
 	if err != nil {
 		t.Fatalf("injectMetadata() error = %v", err)
 	}
@@ -333,7 +333,7 @@ func TestSliceMetadata(t *testing.T) {
 				}
 			}
 
-			got := sliceMetadata(group, gceInst)
+			got := sliceMetadata(group, gceInst, group.Spec.InstanceConfig.MachineType)
 			gotLabels, ok := got["kube-labels"]
 			if !ok {
 				t.Fatalf("sliceMetadata did not return kube-labels")
@@ -377,7 +377,7 @@ func TestSliceMetadata_TopologyRemoval(t *testing.T) {
 		},
 	}
 
-	got := sliceMetadata(group, gceInst)
+	got := sliceMetadata(group, gceInst, group.Spec.InstanceConfig.MachineType)
 	gotLabels, ok := got["kube-labels"]
 	if !ok {
 		t.Fatalf("sliceMetadata did not return kube-labels")
@@ -427,7 +427,7 @@ func TestSliceMetadata_SingleHost(t *testing.T) {
 		},
 	}
 
-	got := sliceMetadata(group, gceInst)
+	got := sliceMetadata(group, gceInst, group.Spec.InstanceConfig.MachineType)
 	gotLabels, ok := got["kube-labels"]
 	if !ok {
 		t.Fatalf("sliceMetadata did not return kube-labels")

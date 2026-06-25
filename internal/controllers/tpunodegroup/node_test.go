@@ -347,7 +347,7 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 			}
 
 			recorder := record.NewFakeRecorder(10)
-			err := ReconcileNodes(t.Context(), cl, mockIGM, recorder, tc.group)
+			err := ReconcileNodes(t.Context(), cl, mockIGM, recorder, tc.group, "ct5lp-hightpu-4t")
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ReconcileNodes() error = %v, wantErr %v", err, tc.wantErr)
 			}
@@ -505,7 +505,7 @@ func TestEnsureNodeLabel(t *testing.T) {
 				}
 			}
 
-			err := ensureNodeLabels(t.Context(), cl, tc.initialNode, group)
+			err := ensureNodeLabels(t.Context(), cl, tc.initialNode, group, tc.machineType)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("ensureNodeLabels() error = %v, wantErr %v", err, tc.wantErr)
 			}

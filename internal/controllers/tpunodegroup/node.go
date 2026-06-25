@@ -31,7 +31,7 @@ const (
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
 // and mutates NodeSummary in memory.
-func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.IGMClient, recorder record.EventRecorder, group *tpuapi.TPUNodeGroup) error {
+func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.IGMClient, recorder record.EventRecorder, group *tpuapi.TPUNodeGroup, machineType string) error {
 	// 1. Get list of expected instances from MIG
 	// TODO: Get actual MIG name from status or child CR when available.
 	migName := group.ManagedInstanceGroupName()
@@ -79,7 +79,7 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 			}
 
 			// Ensure node has the required labels
-			if err := ensureNodeLabels(ctx, k8sClient, node, group); err != nil {
+			if err := ensureNodeLabels(ctx, k8sClient, node, group, machineType); err != nil {
 				errs = append(errs, fmt.Errorf("failed to ensure labels for node %s: %w", node.Name, err))
 			}
 		}
@@ -119,13 +119,9 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 }
 
 // ensureNodeLabels adds required labels to the node if they are missing.
-func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1.Node, group *tpuapi.TPUNodeGroup) error {
+func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1.Node, group *tpuapi.TPUNodeGroup, machineType string) error {
 	tpuNodeGroupLabelValue := fmt.Sprintf("%s-%s", group.Namespace, group.Name)
 
-	var machineType string
-	if group.Spec.InstanceConfig != nil {
-		machineType = group.Spec.InstanceConfig.MachineType
-	}
 	acceleratorType := acceleratorLabelValue(machineType, group.Spec.Topology, string(group.Spec.TargetSizePolicyMode))
 	if acceleratorType == "" {
 		return nil // Skip if we cannot determine accelerator type

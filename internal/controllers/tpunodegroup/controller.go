@@ -165,12 +165,16 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 4: Inject Metadata
-	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient); err != nil {
+	var machineType string
+	if tpuNodeGroup.Spec.InstanceConfig != nil {
+		machineType = tpuNodeGroup.Spec.InstanceConfig.MachineType
+	}
+	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient, machineType); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
 	}
 
 	// Step 4.5: Reconcile Nodes (Labeling and Status)
-	if err := ReconcileNodes(ctx, r.Client, r.igmClient, r.recorder, &tpuNodeGroup); err != nil {
+	if err := ReconcileNodes(ctx, r.Client, r.igmClient, r.recorder, &tpuNodeGroup, machineType); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile nodes: %w", err)
 	}
 
