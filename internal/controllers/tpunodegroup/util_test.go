@@ -50,6 +50,20 @@ func TestAcceleratorLabelValue(t *testing.T) {
 			want:                 "tpu-v5-lite-device",
 		},
 		{
+			name:                 "tpu7x-relative-url",
+			machineType:          "zones/us-central1-a/machineTypes/tpu7x-standard-4t",
+			topology:             "2x2x1",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "tpu7x",
+		},
+		{
+			name:                 "ct6e-full-url",
+			machineType:          "https://www.googleapis.com/compute/v1/projects/my-proj/zones/us-central1-a/machineTypes/ct6e-standard-4t",
+			topology:             "2x2x1",
+			targetSizePolicyMode: tpuapi.TargetSizePolicyModeIndividual,
+			want:                 "tpu-v6e-slice",
+		},
+		{
 			name:                 "unknown",
 			machineType:          "unknown-type",
 			topology:             "2x2x1",
@@ -60,16 +74,7 @@ func TestAcceleratorLabelValue(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			group := &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
-						MachineType: tt.machineType,
-					},
-					Topology:             tt.topology,
-					TargetSizePolicyMode: tt.targetSizePolicyMode,
-				},
-			}
-			got := acceleratorLabelValue(group)
+			got := acceleratorLabelValue(tt.machineType, tt.topology, string(tt.targetSizePolicyMode))
 			if got != tt.want {
 				t.Errorf("acceleratorLabelValue() = %v, want %v", got, tt.want)
 			}
@@ -87,21 +92,14 @@ func TestChipsPerNode(t *testing.T) {
 		{"2t", "ct5lp-hightpu-2t", 2},
 		{"4t", "ct5lp-hightpu-4t", 4},
 		{"8t", "ct5lp-hightpu-8t", 8},
+		{"url-4t", "zones/us-central1-a/machineTypes/ct5lp-hightpu-4t", 4},
+		{"full-url-8t", "https://www.googleapis.com/compute/v1/projects/my-proj/zones/us-central1-a/machineTypes/ct5lp-hightpu-8t", 8},
 		{"unknown", "ct5lp-hightpu-16t", 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			group := &tpuapi.TPUNodeGroup{
-				Spec: tpuapi.TPUNodeGroupSpec{
-					InstanceConfig: &tpuapi.InstanceConfig{
-						MachineType: tt.machineType,
-					},
-					Topology:  "2x2x1",
-					NodeCount: 1,
-				},
-			}
-			got := chipsPerNode(group)
+			got := chipsPerNode(tt.machineType)
 			if got != tt.want {
 				t.Errorf("chipsPerNode() = %v, want %v", got, tt.want)
 			}

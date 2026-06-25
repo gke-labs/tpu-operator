@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/gce"
@@ -55,12 +54,17 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		}
 	}
 
+	var machineType string
+	if group.Spec.InstanceConfig != nil {
+		machineType = group.Spec.InstanceConfig.MachineType
+	}
+
 	readyCount := 0
 	var errs []error
 
 	// 4. Iterate over expected instances and match with nodes
 	for _, inst := range instances {
-		name := instanceShortName(inst.GetInstance())
+		name := extractShortName(inst.GetInstance())
 		if name == "" {
 			continue
 		}
@@ -69,7 +73,7 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 
 		if node, ok := nodeMap[providerID]; ok {
 			// Check if node is ready and TPU resources match the expected GKE accelerator count
-			if isNodeTPUReady(node, chipsPerNode(group)) {
+			if isNodeTPUReady(node, chipsPerNode(machineType)) {
 				readyCount++
 				// TODO: Cleanup bootstrap token secret for this node after it has joined.
 			}
@@ -118,7 +122,11 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1.Node, group *tpuapi.TPUNodeGroup) error {
 	tpuNodeGroupLabelValue := fmt.Sprintf("%s-%s", group.Namespace, group.Name)
 
-	acceleratorType := acceleratorLabelValue(group)
+	var machineType string
+	if group.Spec.InstanceConfig != nil {
+		machineType = group.Spec.InstanceConfig.MachineType
+	}
+	acceleratorType := acceleratorLabelValue(machineType, group.Spec.Topology, string(group.Spec.TargetSizePolicyMode))
 	if acceleratorType == "" {
 		return nil // Skip if we cannot determine accelerator type
 	}
@@ -126,7 +134,7 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 	if node.Labels == nil {
 		node.Labels = make(map[string]string)
 	}
-	countStr := strconv.Itoa(chipsPerNode(group))
+	countStr := strconv.Itoa(chipsPerNode(machineType))
 	needsUpdate := false
 	if val, ok := node.Labels[labelTPUAccelerator]; !ok || val != acceleratorType {
 		needsUpdate = true
@@ -167,15 +175,6 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 	}
 
 	return nil
-}
-
-// instanceShortName extracts the instance name from its full URL.
-func instanceShortName(url string) string {
-	if url == "" {
-		return ""
-	}
-	parts := strings.Split(url, "/")
-	return parts[len(parts)-1]
 }
 
 // isNodeTPUReady checks if the node is K8s Ready and has its TPU resources fully exposed, allocatable, and matching the expected chips count.

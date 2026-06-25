@@ -55,7 +55,7 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 
 	var errs []error
 	for _, mi := range instances {
-		name := instanceShortName(mi.GetInstance())
+		name := extractShortName(mi.GetInstance())
 		if name == "" {
 			continue
 		}
@@ -133,14 +133,18 @@ func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance) map[
 	updates := make(map[string]string)
 
 	// 1. Map the raw GCE machine type to the specific accelerator string expected by the plugin
-	acceleratorType := acceleratorLabelValue(group)
+	var machineType string
+	if group.Spec.InstanceConfig != nil {
+		machineType = group.Spec.InstanceConfig.MachineType
+	}
+	acceleratorType := acceleratorLabelValue(machineType, group.Spec.Topology, string(group.Spec.TargetSizePolicyMode))
 	if acceleratorType == "" {
 		// Cannot inject labels without a known accelerator type
 		return updates
 	}
 
 	// 2. Extract the number of chips per VM from the machine type
-	chipsPerNode := chipsPerNode(group)
+	chipsPerNode := chipsPerNode(machineType)
 	if chipsPerNode == 0 {
 		// The device plugin will crash if count is missing, fail safely here
 		return updates

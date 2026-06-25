@@ -8,12 +8,8 @@ import (
 
 // acceleratorLabelValue translates the GCE machine type into the
 // specific string expected by the TPU device plugin.
-func acceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
-	if group.Spec.InstanceConfig == nil || group.Spec.InstanceConfig.MachineType == "" {
-		return ""
-	}
-
-	machineType := group.Spec.InstanceConfig.MachineType
+func acceleratorLabelValue(machineType string, topology string, targetSizePolicyMode string) string {
+	machineType = extractShortName(machineType)
 
 	// Map GCE Machine Type prefixes to the plugin's expected label values
 	switch {
@@ -24,17 +20,17 @@ func acceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
 	case strings.HasPrefix(machineType, "ct6e-"):
 		return "tpu-v6e-slice"
 	case strings.HasPrefix(machineType, "ct5lp-"):
-		if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
+		if topology != "" && targetSizePolicyMode == string(tpuapi.TargetSizePolicyModeBulk) {
 			return "tpu-v5-lite-podslice"
 		}
 		return "tpu-v5-lite-device"
 	case strings.HasPrefix(machineType, "ct5p-"):
-		if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
+		if topology != "" && targetSizePolicyMode == string(tpuapi.TargetSizePolicyModeBulk) {
 			return "tpu-v5-podslice"
 		}
 		return "tpu-v5-device"
 	case strings.HasPrefix(machineType, "ct4p-"):
-		if group.Spec.Topology != "" && group.Spec.TargetSizePolicyMode == tpuapi.TargetSizePolicyModeBulk {
+		if topology != "" && targetSizePolicyMode == string(tpuapi.TargetSizePolicyModeBulk) {
 			return "tpu-v4-podslice"
 		}
 		return "tpu-v4-device"
@@ -46,11 +42,8 @@ func acceleratorLabelValue(group *tpuapi.TPUNodeGroup) string {
 
 // chipsPerNode parses the machine type suffix to determine the number of
 // chips attached to the VM (e.g., "tpu7x-standard-4t" -> 4).
-func chipsPerNode(group *tpuapi.TPUNodeGroup) int {
-	if group.Spec.InstanceConfig == nil || group.Spec.InstanceConfig.MachineType == "" {
-		return 0
-	}
-	machineType := group.Spec.InstanceConfig.MachineType
+func chipsPerNode(machineType string) int {
+	machineType = extractShortName(machineType)
 
 	// The device plugin expects this to be exactly 1, 2, 4, or 8.
 	// We extract it based on standard GCE machine type suffixes.
@@ -68,3 +61,13 @@ func chipsPerNode(group *tpuapi.TPUNodeGroup) int {
 		return 0
 	}
 }
+
+// extractShortName extracts the last element of a slash-separated GCE resource URL or path.
+func extractShortName(name string) string {
+	if name == "" {
+		return ""
+	}
+	parts := strings.Split(name, "/")
+	return parts[len(parts)-1]
+}
+
