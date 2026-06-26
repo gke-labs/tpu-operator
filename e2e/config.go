@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-
 type TestConfig struct {
 	Project        string
 	Zone           string

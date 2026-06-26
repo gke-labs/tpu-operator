@@ -25,6 +25,9 @@ const (
 	labelTPUNodeGroup = "cloud.google.com/tpu-node-group"
 	// labelTPUTopology is the label identifying the topology of the TPU slice.
 	labelTPUTopology = "cloud.google.com/gke-tpu-topology"
+
+	// resourceNameTPU is the canonical name for TPU resources exposed by the device plugin.
+	resourceNameTPU corev1.ResourceName = "google.com/tpu"
 )
 
 // ReconcileNodes checks if nodes have joined the cluster, ensures they are labeled,
@@ -65,13 +68,10 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		providerID := fmt.Sprintf("gce://%s/%s/%s", group.Spec.Project, group.Spec.NodeLocation, name)
 
 		if node, ok := nodeMap[providerID]; ok {
-			// Check if node is ready
-			for _, cond := range node.Status.Conditions {
-				if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
-					readyCount++
-					// TODO: Cleanup bootstrap token secret for this node after it has joined.
-					break
-				}
+			// Check if node is ready and TPU resources match the expected GKE accelerator count
+			if isNodeTPUReady(node, chipsPerNode(group)) {
+				readyCount++
+				// TODO: Cleanup bootstrap token secret for this node after it has joined.
 			}
 
 			// Ensure node has the required labels
@@ -176,4 +176,44 @@ func instanceShortName(url string) string {
 	}
 	parts := strings.Split(url, "/")
 	return parts[len(parts)-1]
+}
+
+// isNodeTPUReady checks if the node is K8s Ready and has its TPU resources fully exposed, allocatable, and matching the expected chips count.
+func isNodeTPUReady(node *corev1.Node, expectedChips int) bool {
+	// 1. Check standard K8s NodeReady condition
+	isK8sReady := false
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+			isK8sReady = true
+			break
+		}
+	}
+	if !isK8sReady {
+		return false
+	}
+
+	// 2. Extract TPU resource Capacity and Allocatable
+	capacity, hasCapacity := node.Status.Capacity[resourceNameTPU]
+	allocatable, hasAllocatable := node.Status.Allocatable[resourceNameTPU]
+
+	if !hasCapacity || !hasAllocatable {
+		return false
+	}
+
+	// 3. Values must be non-zero
+	if capacity.Value() <= 0 || allocatable.Value() <= 0 {
+		return false
+	}
+
+	// 4. Capacity and Allocatable must match the expected chips count if specified.
+	if expectedChips > 0 {
+		if capacity.Value() != int64(expectedChips) || allocatable.Value() != int64(expectedChips) {
+			return false
+		}
+	} else if capacity.Cmp(allocatable) != 0 {
+		// Fallback when expectedChips is not set (e.g. unknown machine type)
+		return false
+	}
+
+	return true
 }

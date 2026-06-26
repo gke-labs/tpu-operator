@@ -1620,6 +1620,16 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			}
 			objs = append(objs, tc.additionalObjects...)
 			for i := range tc.nodes {
+				isReady := false
+				for _, cond := range tc.nodes[i].Status.Conditions {
+					if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+						isReady = true
+						break
+					}
+				}
+				if isReady {
+					tc.nodes[i] = withTPU(tc.nodes[i], "4", "4")
+				}
 				objs = append(objs, &tc.nodes[i])
 			}
 

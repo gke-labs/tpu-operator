@@ -325,6 +325,16 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			objs := []client.Object{tc.group}
 			for i := range tc.nodes {
+				isReady := false
+				for _, cond := range tc.nodes[i].Status.Conditions {
+					if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+						isReady = true
+						break
+					}
+				}
+				if isReady {
+					tc.nodes[i] = withTPU(tc.nodes[i], "4", "4")
+				}
 				objs = append(objs, &tc.nodes[i])
 			}
 
@@ -507,6 +517,98 @@ func TestEnsureNodeLabel(t *testing.T) {
 
 			if diff := cmp.Diff(wantLabels, tc.initialNode.Labels); diff != "" {
 				t.Errorf("Labels mismatch (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+func TestIsNodeTPUReady(t *testing.T) {
+	tests := []struct {
+		name          string
+		isK8sReady    bool
+		capacity      string
+		allocatable   string
+		expectedChips int
+		want          bool
+	}{
+		{
+			name:          "k8s_not_ready",
+			isK8sReady:    false,
+			capacity:      "4",
+			allocatable:   "4",
+			expectedChips: 4,
+			want:          false,
+		},
+		{
+			name:          "missing_tpu_resource",
+			isK8sReady:    true,
+			capacity:      "",
+			allocatable:   "",
+			expectedChips: 4,
+			want:          false,
+		},
+		{
+			name:          "missing_allocatable",
+			isK8sReady:    true,
+			capacity:      "4",
+			allocatable:   "",
+			expectedChips: 4,
+			want:          false,
+		},
+		{
+			name:          "zero_capacity",
+			isK8sReady:    true,
+			capacity:      "0",
+			allocatable:   "0",
+			expectedChips: 4,
+			want:          false,
+		},
+		{
+			name:          "allocatable_mismatch",
+			isK8sReady:    true,
+			capacity:      "4",
+			allocatable:   "3",
+			expectedChips: 4,
+			want:          false,
+		},
+		{
+			name:          "capacity_mismatch_with_expected",
+			isK8sReady:    true,
+			capacity:      "2",
+			allocatable:   "2",
+			expectedChips: 4,
+			want:          false,
+		},
+		{
+			name:          "fully_ready",
+			isK8sReady:    true,
+			capacity:      "4",
+			allocatable:   "4",
+			expectedChips: 4,
+			want:          true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			node := corev1.Node{
+				Status: corev1.NodeStatus{
+					Conditions: []corev1.NodeCondition{
+						{
+							Type:   corev1.NodeReady,
+							Status: corev1.ConditionFalse,
+						},
+					},
+				},
+			}
+			if tc.isK8sReady {
+				node.Status.Conditions[0].Status = corev1.ConditionTrue
+			}
+			node = withTPU(node, tc.capacity, tc.allocatable)
+
+			got := isNodeTPUReady(&node, tc.expectedChips)
+			if got != tc.want {
+				t.Errorf("isNodeTPUReady() = %v, want %v", got, tc.want)
 			}
 		})
 	}
