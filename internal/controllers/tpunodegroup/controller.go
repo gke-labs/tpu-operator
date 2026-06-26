@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"cloud.google.com/go/compute/apiv1/computepb"
+
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -145,13 +147,23 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 2: Reconcile Instance Template
-	if ready, err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup); err != nil {
+	gceTemplate, ready, err := r.reconcileInstanceTemplate(ctx, &tpuNodeGroup)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
 	} else if !ready {
 		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
 			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 		}
 		return ctrl.Result{}, nil
+	}
+
+	if gceTemplate == nil {
+		return ctrl.Result{}, fmt.Errorf("instance template is not resolved")
+	}
+
+	machineType := extractShortName(gceTemplate.GetProperties().GetMachineType())
+	if machineType == "" {
+		return ctrl.Result{}, fmt.Errorf("could not determine machine type for TPUNodeGroup")
 	}
 
 	// Step 3: Reconcile Managed Instance Group
@@ -165,10 +177,6 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 4: Inject Metadata
-	var machineType string
-	if tpuNodeGroup.Spec.InstanceConfig != nil {
-		machineType = tpuNodeGroup.Spec.InstanceConfig.MachineType
-	}
 	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient, machineType); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
 	}
@@ -314,7 +322,7 @@ func (r *TPUNodeGroupReconciler) reconcileWorkloadPolicy(ctx context.Context, gr
 	return true, nil
 }
 
-func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
+func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, group *tpuapi.TPUNodeGroup) (*computepb.InstanceTemplate, bool, error) {
 	logger := ctrl.LoggerFrom(ctx)
 
 	if group.Spec.InstanceTemplateURI != nil {
@@ -332,7 +340,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 				Reason:  "InvalidTemplate",
 				Message: err.Error(),
 			})
-			return false, fmt.Errorf("fetching external instance template: %w", err)
+			return nil, false, fmt.Errorf("fetching external instance template: %w", err)
 		}
 
 		err = ValidateExternalInstanceTemplate(computeTemplate)
@@ -348,7 +356,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 				Reason:  "InvalidTemplate",
 				Message: err.Error(),
 			})
-			return false, fmt.Errorf("validating external template: %w", err)
+			return nil, false, fmt.Errorf("validating external template: %w", err)
 		}
 
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
@@ -357,16 +365,16 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 			Reason:  "ExternalTemplate",
 			Message: "Using external instance template",
 		})
-		return true, nil
+		return computeTemplate, true, nil
 	}
 
 	template := converter.ToInstanceTemplateCR(group)
 	if template == nil {
-		return true, nil
+		return nil, true, nil
 	}
 
 	if err := r.defaultInstanceTemplate(template, group); err != nil {
-		return false, err
+		return nil, false, err
 	}
 
 	existing := &tpuapi.InstanceTemplate{}
@@ -375,7 +383,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		if apierrors.IsNotFound(err) {
 			logger.Info("creating InstanceTemplate CR", "name", template.Name)
 			if err := r.Create(ctx, template); err != nil {
-				return false, fmt.Errorf("creating InstanceTemplate CR: %w", err)
+				return nil, false, fmt.Errorf("creating InstanceTemplate CR: %w", err)
 			}
 			meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 				Type:    "InstanceTemplateReady",
@@ -383,9 +391,9 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 				Reason:  "Provisioning",
 				Message: "Child InstanceTemplate CR created; waiting for GCE resource provisioning",
 			})
-			return false, nil
+			return nil, false, nil
 		}
-		return false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
+		return nil, false, fmt.Errorf("getting InstanceTemplate CR: %w", err)
 	}
 
 	// Check for terminal failure in child
@@ -394,7 +402,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		if errorutil.SetTerminalCondition(&group.Status.Conditions, cond.Reason, msg) {
 			r.recorder.Event(group, corev1.EventTypeWarning, cond.Reason, msg)
 		}
-		return false, nil
+		return nil, false, nil
 	}
 
 	if !equality.Semantic.DeepEqual(existing.Spec, template.Spec) {
@@ -402,7 +410,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		patchBase := existing.DeepCopy()
 		existing.Spec = template.Spec
 		if err := r.Patch(ctx, existing, client.MergeFrom(patchBase)); err != nil {
-			return false, fmt.Errorf("patching InstanceTemplate CR: %w", err)
+			return nil, false, fmt.Errorf("patching InstanceTemplate CR: %w", err)
 		}
 	}
 
@@ -414,7 +422,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 			Reason:  "Provisioning",
 			Message: "Waiting for GCE resource provisioning",
 		})
-		return false, nil
+		return nil, false, nil
 	}
 
 	logger.Info("instanceTemplate CR is ready", "uri", existing.Status.URI)
@@ -424,7 +432,7 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 		Reason:  "Ready",
 		Message: "InstanceTemplate provisioned successfully",
 	})
-	return true, nil
+	return converter.ToGCEInstanceTemplate(existing), true, nil
 }
 
 func (r *TPUNodeGroupReconciler) reconcileManagedInstanceGroup(ctx context.Context, group *tpuapi.TPUNodeGroup) (bool, error) {
@@ -612,3 +620,5 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 	}
 	return nil
 }
+
+

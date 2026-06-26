@@ -122,8 +122,11 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeCount:            1,
 					Topology:             "2x2x1",
 					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
 					BootstrapKubernetes: &tpuapi.BootstrapConfig{
-
+						Version:        ptr.To("1.25.0"),
 						ControlPlaneIP: "1.2.3.4",
 					},
 				},
@@ -221,6 +224,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeCount:            1,
 					Topology:             "2x2x1",
 					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
 				},
 			},
 			additionalObjects: []client.Object{
@@ -303,6 +309,12 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			wantConditions: []metav1.Condition{
 				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "InstanceTemplate provisioned successfully",
+				},
+				{
 					Type:    "ManagedInstanceGroupReady",
 					Status:  metav1.ConditionTrue,
 					Reason:  "Ready",
@@ -327,6 +339,17 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 							InstanceStatus: ptr.To("RUNNING"),
 						},
 					}, nil
+				}
+				inst.GetFunc = func(ctx context.Context, req *computepb.GetInstanceRequest) (*computepb.Instance, error) {
+					return &computepb.Instance{
+						Name: ptr.To("test-tpu-0"),
+						Metadata: &computepb.Metadata{
+							Fingerprint: ptr.To("fingerprint"),
+						},
+					}, nil
+				}
+				inst.SetMetadataFunc = func(ctx context.Context, req *computepb.SetMetadataInstanceRequest) (*compute.Operation, error) {
+					return &compute.Operation{}, nil
 				}
 			},
 		},
@@ -1261,6 +1284,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeCount:            2,
 					Topology:             "2x2x1",
 					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
 				},
 				Status: tpuapi.TPUNodeGroupStatus{
 					NodeSummary: &tpuapi.NodeSummary{
@@ -1336,6 +1362,12 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			},
 			wantConditions: []metav1.Condition{
 				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "InstanceTemplate provisioned successfully",
+				},
+				{
 					Type:    "ManagedInstanceGroupReady",
 					Status:  metav1.ConditionTrue,
 					Reason:  "Ready",
@@ -1398,6 +1430,9 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					NodeCount:            1,
 					Topology:             "2x2x1",
 					TargetSizePolicyMode: "INDIVIDUAL",
+					InstanceConfig: &tpuapi.InstanceConfig{
+						MachineType: "tpu7x-standard-4t",
+					},
 				},
 			},
 			additionalObjects: []client.Object{
@@ -1444,6 +1479,12 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 			wantResult: reconcile.Result{},
 			wantErr:    true,
 			wantConditions: []metav1.Condition{
+				{
+					Type:    "InstanceTemplateReady",
+					Status:  metav1.ConditionTrue,
+					Reason:  "Ready",
+					Message: "InstanceTemplate provisioned successfully",
+				},
 				{
 					Type:    "ManagedInstanceGroupReady",
 					Status:  metav1.ConditionTrue,

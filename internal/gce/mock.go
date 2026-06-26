@@ -2,6 +2,7 @@ package gce
 
 import (
 	"context"
+	"fmt"
 
 	compute "cloud.google.com/go/compute/apiv1"
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
@@ -58,7 +59,7 @@ func (m *MockInstanceClient) Get(ctx context.Context, req *computepb.GetInstance
 	if m.GetFunc != nil {
 		return m.GetFunc(ctx, req)
 	}
-	return nil, nil
+	return nil, fmt.Errorf("mock Get called but GetFunc not configured")
 }
 
 // SetMetadata calls the mocked SetMetadataFunc.
