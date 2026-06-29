@@ -9,9 +9,11 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -415,3 +417,40 @@ func verifyGCEResourcePolicyExists(t *testing.T, project, region, name string, e
 	}
 }
 
+func verifyTeardown(t *testing.T, ctx context.Context, k8sClient client.Client, ng *tpuapi.TPUNodeGroup, children ...client.Object) {
+	t.Helper()
+	t.Log("=== Teardown Verification ===")
+	t.Logf("Deleting TPUNodeGroup CR %s...", ng.Name)
+	ngKey := types.NamespacedName{Name: ng.GetName(), Namespace: ng.GetNamespace()}
+	if err := k8sClient.Delete(ctx, ng); err != nil && !apierrors.IsNotFound(err) {
+		t.Errorf("Failed to delete TPUNodeGroup CR: %v", err)
+	}
+
+	var wg sync.WaitGroup
+	for _, child := range children {
+		if child.GetName() == "" {
+			t.Logf("Skipping cleanup for uninitialized child of type %T", child)
+			continue
+		}
+		wg.Add(1)
+		go func(c client.Object) {
+			defer wg.Done()
+			key := types.NamespacedName{Name: c.GetName(), Namespace: c.GetNamespace()}
+			t.Logf("Verifying child %T %s deletion...", c, c.GetName())
+			if err := waitForDeletion(ctx, k8sClient, key, c, 300*time.Second); err != nil {
+				t.Errorf("Failed or timed out waiting for child %T deletion: %v", c, err)
+			}
+		}(child)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		t.Logf("Waiting for TPUNodeGroup CR %s deletion...", ng.Name)
+		if err := waitForDeletion(ctx, k8sClient, ngKey, ng, 300*time.Second); err != nil {
+			t.Errorf("Failed or timed out waiting for TPUNodeGroup CR deletion: %v", err)
+		}
+	}()
+
+	wg.Wait()
+}

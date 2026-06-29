@@ -4,16 +4,20 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -35,9 +39,16 @@ func TestTPUNodeGroup(t *testing.T) {
 		t.Fatalf("Failed to apply manifest: %v", err)
 	}
 
-	t.Log("=== Waiting for child InstanceTemplate to be created ===")
 	itKey := types.NamespacedName{Name: childTemplateName, Namespace: "default"}
 	it := &tpuapi.InstanceTemplate{}
+
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cleanupCancel()
+		verifyTeardown(t, cleanupCtx, k8sClient, ng, it)
+	})
+
+	t.Log("=== Waiting for child InstanceTemplate to be created ===")
 	if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 120*time.Second, true, func(ctx context.Context) (bool, error) {
 		err := k8sClient.Get(ctx, itKey, it)
 		if err == nil {
@@ -144,17 +155,6 @@ func TestTPUNodeGroup(t *testing.T) {
 
 	t.Log("=== Verifying TPU Workload (Single-Host) ===")
 	verifyTPUWorkload(t, ctx, k8sClient, "default-test-nodegroup", 1)
-
-	t.Log("=== Teardown Verification ===")
-	t.Log("Deleting TPUNodeGroup CR...")
-	if err := k8sClient.Delete(ctx, ng); err != nil {
-		t.Fatalf("Failed to delete TPUNodeGroup CR: %v", err)
-	}
-
-	t.Log("Verifying child InstanceTemplate deletion...")
-	if err := waitForDeletion(ctx, k8sClient, itKey, it, 300*time.Second); err != nil {
-		t.Fatalf("Failed or timed out waiting for child InstanceTemplate deletion: %v", err)
-	}
 }
 
 func TestTPUNodeGroup_MultiHost(t *testing.T) {
@@ -188,27 +188,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cleanupCancel()
-
-		t.Log("=== Teardown Verification ===")
-		t.Log("Deleting TPUNodeGroup CR...")
-		if err := k8sClient.Delete(cleanupCtx, ng); err != nil {
-			t.Errorf("Failed to delete TPUNodeGroup CR: %v", err)
-		}
-
-		t.Log("Verifying child ManagedInstanceGroup deletion...")
-		if err := waitForDeletion(cleanupCtx, k8sClient, migKey, mig, 300*time.Second); err != nil {
-			t.Errorf("Failed or timed out waiting for child MIG deletion: %v", err)
-		}
-
-		t.Log("Verifying child InstanceTemplate deletion...")
-		if err := waitForDeletion(cleanupCtx, k8sClient, itKey, it, 300*time.Second); err != nil {
-			t.Errorf("Failed or timed out waiting for child InstanceTemplate deletion: %v", err)
-		}
-
-		t.Log("Verifying child WorkloadPolicy deletion...")
-		if err := waitForDeletion(cleanupCtx, k8sClient, wpKey, wp, 300*time.Second); err != nil {
-			t.Errorf("Failed or timed out waiting for child WorkloadPolicy deletion: %v", err)
-		}
+		verifyTeardown(t, cleanupCtx, k8sClient, ng, mig, it, wp)
 	})
 
 	t.Run("TPUNodeGroup_Orchestration", func(t *testing.T) {
