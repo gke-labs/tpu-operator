@@ -360,3 +360,158 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		verifyEvents(t, ctx, kubernetesClient, ng, []string{"ChildResourcesProvisioned", "NodesJoining", "Provisioned"})
 	})
 }
+
+func TestTPUNodeGroup_BYOInstanceTemplate(t *testing.T) {
+	cleanResources(t, []string{"tpunodegroups", "instancetemplates", "managedinstancegroups", "nodes", "jobs"})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	project := Config.Project
+	zone := Config.Zone
+	region := Config.Region
+
+	crName := "test-byo-nodegroup"
+	dummyNodeGroup := &tpuapi.TPUNodeGroup{ObjectMeta: metav1.ObjectMeta{Name: crName}}
+	childTemplateName := dummyNodeGroup.InstanceTemplateName()
+	templateName := "e2e-byo-template-" + strings.ToLower(rand.String(6))
+
+	ngKey := types.NamespacedName{Name: crName, Namespace: "default"}
+
+	templateURI := fmt.Sprintf("projects/%s/global/instanceTemplates/%s", project, templateName)
+	ng := &tpuapi.TPUNodeGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: "default",
+		},
+		Spec: tpuapi.TPUNodeGroupSpec{
+			Project:                   project,
+			NodeLocation:              zone,
+			NodeCount:                 1,
+			Topology:                  "2x2x1",
+			TargetSizePolicyMode:      "INDIVIDUAL",
+			AcceleratorConnectionMode: "STATIC",
+			InstanceTemplateURI:       &templateURI,
+		},
+	}
+	mig := &tpuapi.ManagedInstanceGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dummyNodeGroup.ManagedInstanceGroupName(),
+			Namespace: "default",
+		},
+	}
+
+	t.Cleanup(func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cleanupCancel()
+		verifyTeardown(t, cleanupCtx, k8sClient, ng, mig)
+		t.Logf("=== Cleaning up External Instance Template %s ===", templateName)
+		_, _ = runGcloud(t, "compute", "instance-templates", "delete", templateName, "--project", project, "--quiet")
+	})
+
+	t.Run("CreateGCEInstanceTemplate", func(t *testing.T) {
+		cpIP := Config.ControlPlaneIP
+
+		// 2. Generate Bootstrap Token and CA Hash
+		t.Log("=== Generating Bootstrap Token and CA Hash ===")
+		token, err := tpunodegroup.GenerateBootstrapToken(ctx, k8sClient)
+		if err != nil {
+			t.Fatalf("Failed to generate bootstrap token: %v", err)
+		}
+		caHash, err := tpunodegroup.FetchCAHash(ctx, k8sClient)
+		if err != nil {
+			t.Fatalf("Failed to fetch CA hash: %v", err)
+		}
+
+		// 3. Create GCE Instance Template using gcloud
+		t.Logf("=== Creating External Instance Template %s via gcloud ===", templateName)
+
+		scriptContent := tpunodegroup.RenderStartupScript("1.31", project, zone)
+
+		tmpScript, err := os.CreateTemp("", "startup-*.sh")
+		if err != nil {
+			t.Fatalf("Failed to create temp script: %v", err)
+		}
+		defer os.Remove(tmpScript.Name())
+		if _, err := tmpScript.WriteString(scriptContent); err != nil {
+			t.Fatalf("Failed to write to temp script: %v", err)
+		}
+		tmpScript.Close()
+
+		args := []string{
+			"compute", "instance-templates", "create", templateName,
+			"--project", project,
+			"--machine-type", "tpu7x-standard-4t",
+			"--image", "projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320",
+			"--boot-disk-size", "250GB",
+			"--maintenance-policy", "TERMINATE",
+			"--subnet", fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/regions/%s/subnetworks/default", project, region),
+			"--no-address",
+			fmt.Sprintf("--metadata-from-file=startup-script=%s", tmpScript.Name()),
+			fmt.Sprintf("--metadata=kubeadm-join-token=%s,kubeadm-control-plane-ip=%s,kubeadm-ca-hash=%s", token, cpIP, caHash),
+		}
+
+		reservation := Config.Reservation
+		if reservation != "" {
+			args = append(args, "--reservation-affinity=specific", fmt.Sprintf("--reservation=%s", reservation), "--provisioning-model=RESERVATION_BOUND", "--instance-termination-action=DELETE")
+		} else {
+			args = append(args, "--provisioning-model=SPOT", "--instance-termination-action=STOP")
+		}
+
+		_, err = runGcloud(t, args...)
+		if err != nil {
+			t.Fatalf("Failed to create instance template via gcloud: %v", err)
+		}
+		t.Log("External Instance Template created successfully.")
+	})
+
+	t.Run("TPUNodeGroup_Orchestration", func(t *testing.T) {
+		t.Log("=== Creating TPUNodeGroup with BYO template ===")
+		if err := k8sClient.Create(ctx, ng); err != nil {
+			t.Fatalf("Failed to create TPUNodeGroup: %v", err)
+		}
+
+		// Verify InstanceTemplateReady condition
+		t.Log("=== Waiting for TPUNodeGroup to recognize ExternalTemplate ===")
+		if err := wait.PollUntilContextTimeout(ctx, 2*time.Second, 60*time.Second, true, func(ctx context.Context) (bool, error) {
+			if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
+				return false, err
+			}
+			for _, c := range ng.Status.Conditions {
+				if c.Type == "InstanceTemplateReady" && c.Status == metav1.ConditionTrue {
+					if c.Reason == "ExternalTemplate" {
+						return true, nil
+					}
+					t.Fatalf("Expected Reason ExternalTemplate, got %s", c.Reason)
+				}
+			}
+			return false, nil
+		}); err != nil {
+			t.Fatalf("Timeout or error waiting for TPUNodeGroup InstanceTemplateReady condition: %v", err)
+		}
+
+		t.Log("=== Verifying child InstanceTemplate is NOT created ===")
+		childIt := &tpuapi.InstanceTemplate{}
+		if err := k8sClient.Get(ctx, types.NamespacedName{Name: childTemplateName, Namespace: "default"}, childIt); err == nil {
+			t.Fatalf("Child InstanceTemplate should not have been created, but found: %s", childTemplateName)
+		}
+	})
+
+	t.Run("ManagedInstanceGroup_Provisioning", func(t *testing.T) {
+		t.Log("=== Waiting for TPUNodeGroup to be Ready (Nodes joined) ===")
+		if err := wait.PollUntilContextTimeout(ctx, 10*time.Second, 10*time.Minute, true, func(ctx context.Context) (bool, error) {
+			if err := k8sClient.Get(ctx, ngKey, ng); err != nil {
+				return false, err
+			}
+			if ng.Status.NodeSummary != nil && ng.Status.NodeSummary.Ready == 1 {
+				return true, nil
+			}
+			return false, nil
+		}); err != nil {
+			t.Fatalf("Timeout waiting for node to join: %v", err)
+		}
+
+		t.Log("=== Verifying TPU Workload (BYO) ===")
+		verifyTPUWorkload(t, ctx, k8sClient, "default-test-byo-nodegroup", 1)
+	})
+}

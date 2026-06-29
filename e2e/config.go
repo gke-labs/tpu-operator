@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"flag"
+	"log"
 	"os"
 	"strings"
 )
@@ -29,8 +30,15 @@ func (c *TestConfig) BindEnv() {
 	if c.Project == "" {
 		c.Project = os.Getenv("E2E_PROJECT")
 	}
+	if c.Project == "" {
+		log.Fatalf("E2E_PROJECT must be set (via flag -e2e-project or environment variable E2E_PROJECT)")
+	}
 	if c.Zone == "" {
-		c.Zone = os.Getenv("E2E_ZONE")
+		if envZone := os.Getenv("E2E_ZONE"); envZone != "" {
+			c.Zone = envZone
+		} else {
+			c.Zone = "us-central1-c"
+		}
 	}
 	if c.Region == "" {
 		if envRegion := os.Getenv("E2E_REGION"); envRegion != "" {
@@ -44,6 +52,9 @@ func (c *TestConfig) BindEnv() {
 	}
 	if c.ControlPlaneIP == "" {
 		c.ControlPlaneIP = os.Getenv("E2E_CONTROL_PLANE_IP")
+	}
+	if c.ControlPlaneIP == "" {
+		log.Fatalf("E2E_CONTROL_PLANE_IP must be set (via flag -e2e-control-plane-ip or environment variable E2E_CONTROL_PLANE_IP)")
 	}
 }
 

@@ -23,6 +23,10 @@ patches:
       path: /spec/template/spec/imagePullSecrets
       value:
       - name: gcr-json-key
+    # Set image pull policy to Always for dev iteration.
+    - op: add
+      path: /spec/template/spec/containers/0/imagePullPolicy
+      value: Always
   target:
     kind: Deployment
     name: tpu-node-group-controller-manager
