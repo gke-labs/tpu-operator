@@ -10,7 +10,7 @@ func TestRenderStartupScript(t *testing.T) {
 	project := "my-project"
 	zone := "us-central1-a"
 
-	script := renderStartupScript(version, project, zone)
+	script := RenderStartupScript(version, project, zone)
 
 	if !strings.Contains(script, version) {
 		t.Errorf("Expected script to contain version %s", version)

@@ -1793,7 +1793,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 }
 
 func TestTPUNodeGroupReconciler_defaultInstanceTemplate(t *testing.T) {
-	expectedScript := renderStartupScript("1.31", "test-project", "us-central1-a")
+	expectedScript := RenderStartupScript("1.31", "test-project", "us-central1-a")
 
 	tests := []struct {
 		name     string

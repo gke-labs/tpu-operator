@@ -598,7 +598,7 @@ func (r *TPUNodeGroupReconciler) defaultInstanceTemplate(template *tpuapi.Instan
 			return fmt.Errorf("version must be specified when bootstrapKubernetes is enabled")
 		}
 		version := *group.Spec.BootstrapKubernetes.Version
-		script := renderStartupScript(version, group.Spec.Project, group.Spec.NodeLocation)
+		script := RenderStartupScript(version, group.Spec.Project, group.Spec.NodeLocation)
 		template.Spec.Metadata["startup-script"] = script
 	}
 	return nil

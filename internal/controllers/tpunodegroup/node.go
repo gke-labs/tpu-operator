@@ -54,10 +54,6 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		}
 	}
 
-	var machineType string
-	if group.Spec.InstanceConfig != nil {
-		machineType = group.Spec.InstanceConfig.MachineType
-	}
 
 	readyCount := 0
 	var errs []error

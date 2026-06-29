@@ -34,7 +34,7 @@ func TestGenerateBootstrapToken(t *testing.T) {
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	token, err := generateBootstrapToken(t.Context(), cl)
+	token, err := GenerateBootstrapToken(t.Context(), cl)
 	if err != nil {
 		t.Fatalf("generateBootstrapToken() error = %v", err)
 	}
@@ -82,7 +82,7 @@ func TestFetchCAHash(t *testing.T) {
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(cm).Build()
 
-	hash, err := fetchCAHash(t.Context(), cl)
+	hash, err := FetchCAHash(t.Context(), cl)
 	if err != nil {
 		t.Fatalf("fetchCAHash() error = %v", err)
 	}

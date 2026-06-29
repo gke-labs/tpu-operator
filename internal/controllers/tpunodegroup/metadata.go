@@ -47,7 +47,7 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 	if group.Spec.BootstrapKubernetes != nil {
 		cpIP = group.Spec.BootstrapKubernetes.ControlPlaneIP
 		var err error
-		caHash, err = fetchCAHash(ctx, k8sClient)
+		caHash, err = FetchCAHash(ctx, k8sClient)
 		if err != nil {
 			return fmt.Errorf("failed to get CA hash: %w", err)
 		}
@@ -86,7 +86,7 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 			if !hasToken {
 				if token == "" {
 					var err error
-					token, err = generateBootstrapToken(ctx, k8sClient)
+					token, err = GenerateBootstrapToken(ctx, k8sClient)
 					if err != nil {
 						errs = append(errs, fmt.Errorf("failed to generate bootstrap token: %w", err))
 						continue
@@ -199,8 +199,8 @@ func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance, mach
 	return updates
 }
 
-// generateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
-func generateBootstrapToken(ctx context.Context, k8sClient client.Client) (string, error) {
+// GenerateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
+func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client) (string, error) {
 	tokenID := strings.ToLower(rand.String(6))
 	tokenSecret := strings.ToLower(rand.String(16))
 
@@ -227,8 +227,8 @@ func generateBootstrapToken(ctx context.Context, k8sClient client.Client) (strin
 	return fmt.Sprintf("%s.%s", tokenID, tokenSecret), nil
 }
 
-// fetchCAHash reads the cluster's CA certificate and computes the SHA-256 hash of its public key.
-func fetchCAHash(ctx context.Context, k8sClient client.Client) (string, error) {
+// FetchCAHash reads the cluster's CA certificate and computes the SHA-256 hash of its public key.
+func FetchCAHash(ctx context.Context, k8sClient client.Client) (string, error) {
 	var cm corev1.ConfigMap
 	if err := k8sClient.Get(ctx, client.ObjectKey{Name: "kube-root-ca.crt", Namespace: "kube-system"}, &cm); err != nil {
 		return "", fmt.Errorf("failed to get kube-root-ca.crt configmap: %w", err)
