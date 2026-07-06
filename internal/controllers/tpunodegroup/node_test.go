@@ -33,6 +33,7 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 		nodes            []corev1.Node
 		managedInstances []*computepb.ManagedInstance
 		wantStatus       *tpuapi.NodeSummary
+		wantCondition    *metav1.Condition
 		wantEvents       []string
 		wantErr          bool
 	}{
@@ -319,6 +320,88 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 			wantEvents: nil,
 			wantErr:    false,
 		},
+		{
+			name: "missing_provider_id",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "inst-1"},
+					Spec:       corev1.NodeSpec{}, // Empty ProviderID
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+			},
+			managedInstances: []*computepb.ManagedInstance{
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-1")},
+			},
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       0,
+				Reconciling: 1,
+			},
+			wantCondition: &metav1.Condition{
+				Type:    tpuapi.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  tpuapi.ReasonAwaitingNodeJoin,
+				Message: "Waiting for 1 of 1 nodes to join the cluster (1 nodes joined with missing ProviderID)",
+			},
+			wantEvents: []string{
+				"Warning MissingProviderID Node inst-1 joined without a ProviderID",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing_provider_id_unmatched_name",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					Project:      "test-project",
+					NodeLocation: "us-central1-a",
+					NodeCount:    1,
+				},
+			},
+			nodes: []corev1.Node{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "unknown-inst-1"},
+					Spec:       corev1.NodeSpec{}, // Empty ProviderID
+					Status: corev1.NodeStatus{
+						Conditions: []corev1.NodeCondition{
+							{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+						},
+					},
+				},
+			},
+			managedInstances: []*computepb.ManagedInstance{
+				{Instance: proto.String("https://www.googleapis.com/compute/v1/projects/test-project/zones/us-central1-a/instances/inst-1")},
+			},
+			wantStatus: &tpuapi.NodeSummary{
+				Ready:       0,
+				Reconciling: 1,
+			},
+			wantCondition: &metav1.Condition{
+				Type:    tpuapi.ConditionTypeReady,
+				Status:  metav1.ConditionFalse,
+				Reason:  tpuapi.ReasonAwaitingNodeJoin,
+				Message: "Waiting for 1 of 1 nodes to join the cluster",
+			},
+			wantEvents: nil,
+			wantErr:    false,
+		},
 	}
 
 	for _, tc := range tests {
@@ -363,6 +446,25 @@ func TestNodeManager_ReconcileNodes(t *testing.T) {
 			}
 			if diff := cmp.Diff(tc.wantEvents, gotEvents, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("Emitted events mismatch (-want +got):\n%s", diff)
+			}
+
+			if tc.wantCondition != nil {
+				var gotCond *metav1.Condition
+				for _, c := range tc.group.Status.Conditions {
+					if c.Type == tc.wantCondition.Type {
+						cCopy := c
+						gotCond = &cCopy
+						break
+					}
+				}
+				if gotCond != nil {
+					// Ignore time for comparison
+					gotCond.LastTransitionTime = metav1.Time{}
+					tc.wantCondition.LastTransitionTime = metav1.Time{}
+				}
+				if diff := cmp.Diff(tc.wantCondition, gotCond); diff != "" {
+					t.Errorf("Condition mismatch (-want +got):\n%s", diff)
+				}
 			}
 		})
 	}

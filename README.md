@@ -239,7 +239,7 @@ EOF
 
 If you want to further customize the VM, you can bring your own pre-provisioned GCE Instance Template and bypass the controller's template creation process. You can provide its URI using the `instanceTemplateURI` field. When this field is set, the controller will skip generating an Instance Template and use yours directly to create the Managed Instance Group. The controller will perform basic validation.
 
-*Note: Because the controller skips the bootstrapping phase when using a custom Instance Template, you must configure your own bootstrapping solution. Once the nodes join, the controller will still perform node labeling and deploy the TPU device plugin DaemonSet.*
+*Note: Because the controller skips the bootstrapping phase when using a custom Instance Template, you must configure your own bootstrapping solution. When doing so, you must ensure that your K8s Node objects are bootstrapped with a `spec.providerID` that matches the standard GCE instance format (`gce://<project>/<zone>/<instance-name>`). The controller relies on this `providerID` to correctly identify, match, and label the nodes as they join the cluster. Once matched, the controller will automatically perform node labeling and deploy the TPU device plugin DaemonSet.*
 
 ## Step 3: Monitor Provisioning Status
 

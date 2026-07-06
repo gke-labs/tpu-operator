@@ -46,16 +46,20 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		return fmt.Errorf("failed to list nodes: %w", err)
 	}
 
-	// 3. Build a map of nodes in the cluster for fast lookup by ProviderID
-	nodeMap := make(map[string]*corev1.Node)
+	// 3. Build maps of nodes in the cluster for fast lookup by ProviderID and Name
+	nodeProviderIDMap := make(map[string]*corev1.Node)
+	nodeNameMap := make(map[string]*corev1.Node)
 	for i := range nodeList.Items {
 		if nodeList.Items[i].Spec.ProviderID != "" {
-			nodeMap[nodeList.Items[i].Spec.ProviderID] = &nodeList.Items[i]
+			nodeProviderIDMap[nodeList.Items[i].Spec.ProviderID] = &nodeList.Items[i]
 		}
+		nodeNameMap[nodeList.Items[i].Name] = &nodeList.Items[i]
 	}
 
 
+
 	readyCount := 0
+	missingProviderIDCount := 0
 	var errs []error
 
 	// 4. Iterate over expected instances and match with nodes
@@ -67,7 +71,7 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 
 		providerID := fmt.Sprintf("gce://%s/%s/%s", group.Spec.Project, group.Spec.NodeLocation, name)
 
-		if node, ok := nodeMap[providerID]; ok {
+		if node, ok := nodeProviderIDMap[providerID]; ok {
 			// Check if node is ready and TPU resources match the expected GKE accelerator count
 			if isNodeTPUReady(node, chipsPerNode(machineType)) {
 				readyCount++
@@ -77,6 +81,12 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 			// Ensure node has the required labels
 			if err := ensureNodeLabels(ctx, k8sClient, node, group, machineType); err != nil {
 				errs = append(errs, fmt.Errorf("failed to ensure labels for node %s: %w", node.Name, err))
+			}
+		} else if node, ok := nodeNameMap[name]; ok {
+			// Fallback: match by node name if ProviderID is missing
+			if node.Spec.ProviderID == "" {
+				missingProviderIDCount++
+				recorder.Event(node, corev1.EventTypeWarning, "MissingProviderID", fmt.Sprintf("Node %s joined without a ProviderID", node.Name))
 			}
 		}
 	}
@@ -90,7 +100,7 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		prevReady = group.Status.NodeSummary.Ready
 	}
 
-	// 4. Update TPUNodeGroup status
+	// 5. Update TPUNodeGroup status
 	if group.Status.NodeSummary == nil {
 		group.Status.NodeSummary = &tpuapi.NodeSummary{}
 	}
@@ -103,11 +113,15 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 	}
 
 	if currentReady < group.Spec.NodeCount {
+		msg := fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", group.Spec.NodeCount-currentReady, group.Spec.NodeCount)
+		if missingProviderIDCount > 0 {
+			msg = fmt.Sprintf("%s (%d nodes joined with missing ProviderID)", msg, missingProviderIDCount)
+		}
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    tpuapi.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  tpuapi.ReasonAwaitingNodeJoin,
-			Message: fmt.Sprintf("Waiting for %d of %d nodes to join the cluster", group.Spec.NodeCount-currentReady, group.Spec.NodeCount),
+			Message: msg,
 		})
 	}
 
