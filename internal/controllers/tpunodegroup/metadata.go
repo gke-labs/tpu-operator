@@ -31,6 +31,7 @@ const (
 	tpuAcceleratorCountKey   = "cloud.google.com/gke-accelerator-count"
 	tpuTopologyKey           = "cloud.google.com/gke-tpu-topology"
 	kubeLabelsKey            = "kube-labels"
+	bootstrapTokenSecretType = "bootstrap.kubernetes.io/token"
 )
 
 // injectMetadata handles injecting metadata into instances.
@@ -231,7 +232,7 @@ func getOrGenerateBootstrapTokenInternal(ctx context.Context, k8sClient client.C
 	var latestExpiration time.Time
 	for i := range secrets {
 		sec := &secrets[i]
-		if sec.Type != corev1.SecretType("bootstrap.kubernetes.io/token") {
+		if sec.Type != corev1.SecretType(bootstrapTokenSecretType) {
 			continue
 		}
 		expBytes, ok := sec.Data["expiration"]
@@ -274,7 +275,7 @@ func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client, labels
 			Namespace: "kube-system",
 			Labels:    labels,
 		},
-		Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+		Type: corev1.SecretType(bootstrapTokenSecretType),
 		StringData: map[string]string{
 			"token-id":                       tokenID,
 			"token-secret":                   tokenSecret,
