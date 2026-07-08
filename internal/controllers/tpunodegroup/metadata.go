@@ -202,36 +202,24 @@ func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance, mach
 
 // GetOrGenerateBootstrapToken retrieves an existing valid bootstrap token secret for the TPUNodeGroup, or generates a new one.
 func GetOrGenerateBootstrapToken(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (string, error) {
-	lister := func(ctx context.Context, ns string, labels map[string]string) ([]corev1.Secret, error) {
-		var secretList corev1.SecretList
-		listOpts := []client.ListOption{
-			client.InNamespace(ns),
-			client.MatchingLabels(labels),
-		}
-		if err := k8sClient.List(ctx, &secretList, listOpts...); err != nil {
-			return nil, err
-		}
-		return secretList.Items, nil
-	}
-	return getOrGenerateBootstrapTokenInternal(ctx, k8sClient, group, lister)
-}
-
-type secretLister func(ctx context.Context, namespace string, labels map[string]string) ([]corev1.Secret, error)
-
-func getOrGenerateBootstrapTokenInternal(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup, listSecrets secretLister) (string, error) {
 	labels := map[string]string{
 		labelTPUNodeGroupNamespace: group.Namespace,
 		labelTPUNodeGroupName:      group.Name,
 	}
-	secrets, err := listSecrets(ctx, "kube-system", labels)
-	if err != nil {
+
+	var secretList corev1.SecretList
+	listOpts := []client.ListOption{
+		client.InNamespace("kube-system"),
+		client.MatchingLabels(labels),
+	}
+	if err := k8sClient.List(ctx, &secretList, listOpts...); err != nil {
 		return "", fmt.Errorf("failed to list bootstrap token secrets: %w", err)
 	}
 
 	var validSecret *corev1.Secret
 	var latestExpiration time.Time
-	for i := range secrets {
-		sec := &secrets[i]
+	for i := range secretList.Items {
+		sec := &secretList.Items[i]
 		if sec.Type != corev1.SecretType(bootstrapTokenSecretType) {
 			continue
 		}
@@ -276,13 +264,13 @@ func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client, labels
 			Labels:    labels,
 		},
 		Type: corev1.SecretType(bootstrapTokenSecretType),
-		StringData: map[string]string{
-			"token-id":                       tokenID,
-			"token-secret":                   tokenSecret,
-			"usage-bootstrap-authentication": "true",
-			"usage-bootstrap-signing":        "true",
-			"auth-extra-groups":              "system:bootstrappers:kubeadm:default-node-token",
-			"expiration":                     time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+		Data: map[string][]byte{
+			"token-id":                       []byte(tokenID),
+			"token-secret":                   []byte(tokenSecret),
+			"usage-bootstrap-authentication": []byte("true"),
+			"usage-bootstrap-signing":        []byte("true"),
+			"auth-extra-groups":              []byte("system:bootstrappers:kubeadm:default-node-token"),
+			"expiration":                     []byte(time.Now().Add(1 * time.Hour).Format(time.RFC3339)),
 		},
 	}
 

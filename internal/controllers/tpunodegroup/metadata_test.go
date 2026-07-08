@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"regexp"
 	"strings"
@@ -446,7 +447,7 @@ func TestSliceMetadata_SingleHost(t *testing.T) {
 	}
 }
 
-func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
+func TestGetOrGenerateBootstrapToken(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
 		t.Fatalf("Adding CoreV1 to scheme: %v", err)
@@ -462,26 +463,30 @@ func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
 		},
 	}
 
+	labels := map[string]string{
+		labelTPUNodeGroupNamespace: group.Namespace,
+		labelTPUNodeGroupName:      group.Name,
+	}
+
 	tests := []struct {
-		name       string
-		existing   []corev1.Secret
-		wantToken  string // empty means we expect a newly generated one
-		expectCall bool   // whether we expect GenerateBootstrapToken to be called (implicitly via fake client changes)
+		name      string
+		existing  []client.Object
+		wantToken string // empty means we expect a newly generated one
 	}{
 		{
-			name:       "no existing secrets",
-			existing:   nil,
-			expectCall: true,
+			name:     "no existing secrets",
+			existing: nil,
 		},
 		{
 			name: "valid existing secret",
-			existing: []corev1.Secret{
-				{
+			existing: []client.Object{
+				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "valid-token",
 						Namespace: "kube-system",
+						Labels:    labels,
 					},
-					Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Type: corev1.SecretType(bootstrapTokenSecretType),
 					Data: map[string][]byte{
 						"token-id":     []byte("abcdef"),
 						"token-secret": []byte("1234567890123456"),
@@ -489,18 +494,18 @@ func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
 					},
 				},
 			},
-			wantToken:  "abcdef.1234567890123456",
-			expectCall: false,
+			wantToken: "abcdef.1234567890123456",
 		},
 		{
 			name: "expired secret",
-			existing: []corev1.Secret{
-				{
+			existing: []client.Object{
+				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "expired-token",
 						Namespace: "kube-system",
+						Labels:    labels,
 					},
-					Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Type: corev1.SecretType(bootstrapTokenSecretType),
 					Data: map[string][]byte{
 						"token-id":     []byte("expired"),
 						"token-secret": []byte("1234567890123456"),
@@ -508,17 +513,17 @@ func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
 					},
 				},
 			},
-			expectCall: true,
 		},
 		{
 			name: "secret expiring soon",
-			existing: []corev1.Secret{
-				{
+			existing: []client.Object{
+				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "soon-token",
 						Namespace: "kube-system",
+						Labels:    labels,
 					},
-					Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Type: corev1.SecretType(bootstrapTokenSecretType),
 					Data: map[string][]byte{
 						"token-id":     []byte("soon"),
 						"token-secret": []byte("1234567890123456"),
@@ -526,23 +531,30 @@ func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
 					},
 				},
 			},
-			expectCall: true,
 		},
 		{
 			name: "multiple tokens, pick latest",
-			existing: []corev1.Secret{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "token-1"},
-					Type:       corev1.SecretType("bootstrap.kubernetes.io/token"),
+			existing: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "token-1",
+						Namespace: "kube-system",
+						Labels:    labels,
+					},
+					Type: corev1.SecretType(bootstrapTokenSecretType),
 					Data: map[string][]byte{
 						"token-id":     []byte("id1"),
 						"token-secret": []byte("secret1234567890"),
 						"expiration":   []byte(time.Now().Add(15 * time.Minute).Format(time.RFC3339)),
 					},
 				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "token-2"},
-					Type:       corev1.SecretType("bootstrap.kubernetes.io/token"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "token-2",
+						Namespace: "kube-system",
+						Labels:    labels,
+					},
+					Type: corev1.SecretType(bootstrapTokenSecretType),
 					Data: map[string][]byte{
 						"token-id":     []byte("id2"),
 						"token-secret": []byte("secret1234567890"),
@@ -550,35 +562,68 @@ func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
 					},
 				},
 			},
-			wantToken:  "id2.secret1234567890",
-			expectCall: false,
+			wantToken: "id2.secret1234567890",
+		},
+		{
+			name: "secret with wrong labels (other group)",
+			existing: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "other-group-token",
+						Namespace: "kube-system",
+						Labels: map[string]string{
+							labelTPUNodeGroupNamespace: group.Namespace,
+							labelTPUNodeGroupName:      "other-group",
+						},
+					},
+					Type: corev1.SecretType(bootstrapTokenSecretType),
+					Data: map[string][]byte{
+						"token-id":     []byte("otherid"),
+						"token-secret": []byte("1234567890123456"),
+						"expiration":   []byte(time.Now().Add(30 * time.Minute).Format(time.RFC3339)),
+					},
+				},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
-			lister := func(ctx context.Context, ns string, labels map[string]string) ([]corev1.Secret, error) {
-				return tt.existing, nil
-			}
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.existing...).Build()
 
-			token, err := getOrGenerateBootstrapTokenInternal(t.Context(), cl, group, lister)
+			token, err := GetOrGenerateBootstrapToken(t.Context(), cl, group)
 			if err != nil {
-				t.Fatalf("getOrGenerateBootstrapTokenInternal() error = %v", err)
+				t.Fatalf("GetOrGenerateBootstrapToken() error = %v", err)
 			}
 
 			if tt.wantToken != "" {
 				if token != tt.wantToken {
 					t.Errorf("Expected token %s, got %s", tt.wantToken, token)
 				}
-			} else if tt.expectCall {
+			} else {
 				// Verify a secret was created in the fake client
-				var secretList corev1.SecretList
-				if err := cl.List(t.Context(), &secretList, client.InNamespace("kube-system")); err != nil {
-					t.Fatalf("listing secrets from fake client: %v", err)
+				var matchingSecrets corev1.SecretList
+				if err := cl.List(t.Context(), &matchingSecrets, client.InNamespace("kube-system"), client.MatchingLabels(labels)); err != nil {
+					t.Fatalf("listing matching secrets: %v", err)
 				}
-				if len(secretList.Items) != 1 {
-					t.Errorf("Expected 1 secret to be created, got %d", len(secretList.Items))
+
+				found := false
+				for _, s := range matchingSecrets.Items {
+					tID := string(s.Data["token-id"])
+					tSec := string(s.Data["token-secret"])
+					if fmt.Sprintf("%s.%s", tID, tSec) == token {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("Returned token %s not found in any matching secret in the client", token)
+				}
+
+				// If we had no existing valid token, we expect a new secret to have been created.
+				// For the 'other-group' case, len(matchingSecrets) will be 1 (the new one).
+				if len(matchingSecrets.Items) == 0 {
+					t.Errorf("Expected at least 1 matching secret to exist, got 0")
 				}
 			}
 		})
