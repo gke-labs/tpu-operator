@@ -414,7 +414,7 @@ func TestTPUNodeGroup_BYOInstanceTemplate(t *testing.T) {
 
 		// 2. Generate Bootstrap Token and CA Hash
 		t.Log("=== Generating Bootstrap Token and CA Hash ===")
-		token, err := tpunodegroup.GenerateBootstrapToken(ctx, k8sClient)
+		token, err := tpunodegroup.GenerateBootstrapToken(ctx, k8sClient, nil)
 		if err != nil {
 			t.Fatalf("Failed to generate bootstrap token: %v", err)
 		}

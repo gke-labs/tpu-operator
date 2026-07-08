@@ -275,7 +275,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test-tpu-0",
 						Labels: map[string]string{
-							"cloud.google.com/tpu-node-group": "default-test-tpu-disabled",
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu-disabled",
 						},
 					},
 					Spec: corev1.NodeSpec{
@@ -673,7 +674,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test-tpu-0",
 						Labels: map[string]string{
-							"cloud.google.com/tpu-node-group": "default-test-tpu",
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu",
 						},
 					},
 				},
@@ -720,7 +722,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test-tpu-0",
 						Labels: map[string]string{
-							"cloud.google.com/tpu-node-group": "default-test-tpu",
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu",
 						},
 					},
 				},
@@ -766,7 +769,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test-tpu-0",
 						Labels: map[string]string{
-							"cloud.google.com/tpu-node-group": "default-test-tpu",
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu",
 						},
 					},
 				},
@@ -1340,7 +1344,8 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test-tpu-0",
 						Labels: map[string]string{
-							"cloud.google.com/tpu-node-group": "default-test-tpu",
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu",
 						},
 					},
 					Spec: corev1.NodeSpec{

@@ -20,8 +20,10 @@ const (
 	labelTPUAccelerator = "cloud.google.com/gke-tpu-accelerator"
 	// labelTPUAcceleratorCount is the label identifying the number of TPU chips.
 	labelTPUAcceleratorCount = "cloud.google.com/gke-accelerator-count"
-	// labelTPUNodeGroup is the label identifying the TPUNodeGroup the node belongs to.
-	labelTPUNodeGroup = "cloud.google.com/tpu-node-group"
+	// labelTPUNodeGroupNamespace is the label identifying the namespace of the TPUNodeGroup.
+	labelTPUNodeGroupNamespace = "cloud.google.com/tpu-node-group-namespace"
+	// labelTPUNodeGroupName is the label identifying the name of the TPUNodeGroup.
+	labelTPUNodeGroupName = "cloud.google.com/tpu-node-group-name"
 	// labelTPUTopology is the label identifying the topology of the TPU slice.
 	labelTPUTopology = "cloud.google.com/gke-tpu-topology"
 
@@ -130,8 +132,6 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 
 // ensureNodeLabels adds required labels to the node if they are missing.
 func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1.Node, group *tpuapi.TPUNodeGroup, machineType string) error {
-	tpuNodeGroupLabelValue := fmt.Sprintf("%s-%s", group.Namespace, group.Name)
-
 	acceleratorType := acceleratorLabelValue(machineType, group.Spec.Topology, string(group.Spec.TargetSizePolicyMode))
 	if acceleratorType == "" {
 		return nil // Skip if we cannot determine accelerator type
@@ -148,7 +148,10 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 	if val, ok := node.Labels[labelTPUAcceleratorCount]; !ok || val != countStr {
 		needsUpdate = true
 	}
-	if val, ok := node.Labels[labelTPUNodeGroup]; !ok || val != tpuNodeGroupLabelValue {
+	if val, ok := node.Labels[labelTPUNodeGroupNamespace]; !ok || val != group.Namespace {
+		needsUpdate = true
+	}
+	if val, ok := node.Labels[labelTPUNodeGroupName]; !ok || val != group.Name {
 		needsUpdate = true
 	}
 	if group.Spec.Topology != "" {
@@ -169,7 +172,8 @@ func ensureNodeLabels(ctx context.Context, k8sClient client.Client, node *corev1
 	oldNode := node.DeepCopy()
 	node.Labels[labelTPUAccelerator] = acceleratorType
 	node.Labels[labelTPUAcceleratorCount] = countStr
-	node.Labels[labelTPUNodeGroup] = tpuNodeGroupLabelValue
+	node.Labels[labelTPUNodeGroupNamespace] = group.Namespace
+	node.Labels[labelTPUNodeGroupName] = group.Name
 	if group.Spec.Topology != "" {
 		node.Labels[labelTPUTopology] = group.Spec.Topology
 	} else {

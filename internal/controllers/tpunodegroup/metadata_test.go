@@ -34,7 +34,7 @@ func TestGenerateBootstrapToken(t *testing.T) {
 
 	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 
-	token, err := GenerateBootstrapToken(t.Context(), cl)
+	token, err := GenerateBootstrapToken(t.Context(), cl, nil)
 	if err != nil {
 		t.Fatalf("generateBootstrapToken() error = %v", err)
 	}
@@ -445,3 +445,143 @@ func TestSliceMetadata_SingleHost(t *testing.T) {
 		t.Errorf("Expected cloud.google.com/gke-tpu-topology to be 2x2x2, got %s", val)
 	}
 }
+
+func TestGetOrGenerateBootstrapTokenInternal(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding CoreV1 to scheme: %v", err)
+	}
+	if err := tpuapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding TPU API to scheme: %v", err)
+	}
+
+	group := &tpuapi.TPUNodeGroup{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-group",
+			Namespace: "test-ns",
+		},
+	}
+
+	tests := []struct {
+		name       string
+		existing   []corev1.Secret
+		wantToken  string // empty means we expect a newly generated one
+		expectCall bool   // whether we expect GenerateBootstrapToken to be called (implicitly via fake client changes)
+	}{
+		{
+			name:       "no existing secrets",
+			existing:   nil,
+			expectCall: true,
+		},
+		{
+			name: "valid existing secret",
+			existing: []corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "valid-token",
+						Namespace: "kube-system",
+					},
+					Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Data: map[string][]byte{
+						"token-id":     []byte("abcdef"),
+						"token-secret": []byte("1234567890123456"),
+						"expiration":   []byte(time.Now().Add(30 * time.Minute).Format(time.RFC3339)),
+					},
+				},
+			},
+			wantToken:  "abcdef.1234567890123456",
+			expectCall: false,
+		},
+		{
+			name: "expired secret",
+			existing: []corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "expired-token",
+						Namespace: "kube-system",
+					},
+					Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Data: map[string][]byte{
+						"token-id":     []byte("expired"),
+						"token-secret": []byte("1234567890123456"),
+						"expiration":   []byte(time.Now().Add(-1 * time.Minute).Format(time.RFC3339)),
+					},
+				},
+			},
+			expectCall: true,
+		},
+		{
+			name: "secret expiring soon",
+			existing: []corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "soon-token",
+						Namespace: "kube-system",
+					},
+					Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Data: map[string][]byte{
+						"token-id":     []byte("soon"),
+						"token-secret": []byte("1234567890123456"),
+						"expiration":   []byte(time.Now().Add(5 * time.Minute).Format(time.RFC3339)),
+					},
+				},
+			},
+			expectCall: true,
+		},
+		{
+			name: "multiple tokens, pick latest",
+			existing: []corev1.Secret{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "token-1"},
+					Type:       corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Data: map[string][]byte{
+						"token-id":     []byte("id1"),
+						"token-secret": []byte("secret1234567890"),
+						"expiration":   []byte(time.Now().Add(15 * time.Minute).Format(time.RFC3339)),
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "token-2"},
+					Type:       corev1.SecretType("bootstrap.kubernetes.io/token"),
+					Data: map[string][]byte{
+						"token-id":     []byte("id2"),
+						"token-secret": []byte("secret1234567890"),
+						"expiration":   []byte(time.Now().Add(45 * time.Minute).Format(time.RFC3339)),
+					},
+				},
+			},
+			wantToken:  "id2.secret1234567890",
+			expectCall: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+			lister := func(ctx context.Context, ns string, labels map[string]string) ([]corev1.Secret, error) {
+				return tt.existing, nil
+			}
+
+			token, err := getOrGenerateBootstrapTokenInternal(t.Context(), cl, group, lister)
+			if err != nil {
+				t.Fatalf("getOrGenerateBootstrapTokenInternal() error = %v", err)
+			}
+
+			if tt.wantToken != "" {
+				if token != tt.wantToken {
+					t.Errorf("Expected token %s, got %s", tt.wantToken, token)
+				}
+			} else if tt.expectCall {
+				// Verify a secret was created in the fake client
+				var secretList corev1.SecretList
+				if err := cl.List(t.Context(), &secretList, client.InNamespace("kube-system")); err != nil {
+					t.Fatalf("listing secrets from fake client: %v", err)
+				}
+				if len(secretList.Items) != 1 {
+					t.Errorf("Expected 1 secret to be created, got %d", len(secretList.Items))
+				}
+			}
+		})
+	}
+}
+

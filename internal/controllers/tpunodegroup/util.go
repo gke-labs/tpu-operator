@@ -6,6 +6,8 @@ import (
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 )
 
+
+
 // acceleratorLabelValue translates the GCE machine type into the
 // specific string expected by the TPU device plugin.
 func acceleratorLabelValue(machineType string, topology string, targetSizePolicyMode string) string {

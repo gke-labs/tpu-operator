@@ -19,14 +19,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-const tpuNodeGroupLabel = "cloud.google.com/tpu-node-group"
 
 // cordonNodes taints all nodes associated with the TPUNodeGroup as NoSchedule.
 func (r *TPUNodeGroupReconciler) cordonNodes(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
 	// 1. List Node objects in the cluster with matching label
 	var nodeList corev1.NodeList
 	labelSelector := client.MatchingLabels{
-		tpuNodeGroupLabel: fmt.Sprintf("%s-%s", group.Namespace, group.Name),
+		labelTPUNodeGroupNamespace: group.Namespace,
+		labelTPUNodeGroupName:      group.Name,
 	}
 	if err := r.List(ctx, &nodeList, labelSelector); err != nil {
 		return fmt.Errorf("failed to list nodes: %w", err)
@@ -134,7 +134,8 @@ func (r *TPUNodeGroupReconciler) ensureWorkloadPolicyDeleted(ctx context.Context
 func (r *TPUNodeGroupReconciler) deleteNodeObjects(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
 	var nodeList corev1.NodeList
 	labelSelector := client.MatchingLabels{
-		"cloud.google.com/tpu-node-group": fmt.Sprintf("%s-%s", group.Namespace, group.Name),
+		labelTPUNodeGroupNamespace: group.Namespace,
+		labelTPUNodeGroupName:      group.Name,
 	}
 	if err := r.List(ctx, &nodeList, labelSelector); err != nil {
 		return fmt.Errorf("failed to list nodes: %w", err)

@@ -44,6 +44,10 @@ done
 
 sudo apt-get install -y conntrack apt-transport-https curl
 sudo mkdir -p /etc/apt/keyrings
+# Delete existing Kubernetes keyring file if it exists.
+# On GCE VM reboots, the startup script re-runs. Because it is set -e, the dearmor 
+# command will fail non-interactively if the destination file already exists.
+sudo rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/Release.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 

@@ -86,7 +86,7 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 			if !hasToken {
 				if token == "" {
 					var err error
-					token, err = GenerateBootstrapToken(ctx, k8sClient)
+					token, err = GetOrGenerateBootstrapToken(ctx, k8sClient, group)
 					if err != nil {
 						errs = append(errs, fmt.Errorf("failed to generate bootstrap token: %w", err))
 						continue
@@ -199,8 +199,72 @@ func sliceMetadata(group *tpuapi.TPUNodeGroup, gceInst *computepb.Instance, mach
 	return updates
 }
 
+// GetOrGenerateBootstrapToken retrieves an existing valid bootstrap token secret for the TPUNodeGroup, or generates a new one.
+func GetOrGenerateBootstrapToken(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup) (string, error) {
+	lister := func(ctx context.Context, ns string, labels map[string]string) ([]corev1.Secret, error) {
+		var secretList corev1.SecretList
+		listOpts := []client.ListOption{
+			client.InNamespace(ns),
+			client.MatchingLabels(labels),
+		}
+		if err := k8sClient.List(ctx, &secretList, listOpts...); err != nil {
+			return nil, err
+		}
+		return secretList.Items, nil
+	}
+	return getOrGenerateBootstrapTokenInternal(ctx, k8sClient, group, lister)
+}
+
+type secretLister func(ctx context.Context, namespace string, labels map[string]string) ([]corev1.Secret, error)
+
+func getOrGenerateBootstrapTokenInternal(ctx context.Context, k8sClient client.Client, group *tpuapi.TPUNodeGroup, listSecrets secretLister) (string, error) {
+	labels := map[string]string{
+		labelTPUNodeGroupNamespace: group.Namespace,
+		labelTPUNodeGroupName:      group.Name,
+	}
+	secrets, err := listSecrets(ctx, "kube-system", labels)
+	if err != nil {
+		return "", fmt.Errorf("failed to list bootstrap token secrets: %w", err)
+	}
+
+	var validSecret *corev1.Secret
+	var latestExpiration time.Time
+	for i := range secrets {
+		sec := &secrets[i]
+		if sec.Type != corev1.SecretType("bootstrap.kubernetes.io/token") {
+			continue
+		}
+		expBytes, ok := sec.Data["expiration"]
+		if !ok {
+			continue
+		}
+		exp, err := time.Parse(time.RFC3339, string(expBytes))
+		if err != nil {
+			continue
+		}
+		// Reuse the secret if it has at least 10 minutes remaining.
+		if time.Now().Add(10 * time.Minute).Before(exp) {
+			if validSecret == nil || exp.After(latestExpiration) {
+				validSecret = sec
+				latestExpiration = exp
+			}
+		}
+	}
+
+	if validSecret != nil {
+		tokenID := string(validSecret.Data["token-id"])
+		tokenSecret := string(validSecret.Data["token-secret"])
+		if tokenID != "" && tokenSecret != "" {
+			return fmt.Sprintf("%s.%s", tokenID, tokenSecret), nil
+		}
+	}
+
+	return GenerateBootstrapToken(ctx, k8sClient, labels)
+}
+
+
 // GenerateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
-func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client) (string, error) {
+func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client, labels map[string]string) (string, error) {
 	tokenID := strings.ToLower(rand.String(6))
 	tokenSecret := strings.ToLower(rand.String(16))
 
@@ -208,6 +272,7 @@ func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client) (strin
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "bootstrap-token-" + tokenID,
 			Namespace: "kube-system",
+			Labels:    labels,
 		},
 		Type: corev1.SecretType("bootstrap.kubernetes.io/token"),
 		StringData: map[string]string{
