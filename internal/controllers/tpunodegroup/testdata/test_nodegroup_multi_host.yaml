@@ -11,7 +11,7 @@ spec:
   topology: "2x2x2"
   targetSizePolicyMode: BULK
   bootstrapKubernetes:
-    version: "1.31"
+    version: "${E2E_K8S_VERSION}"
     controlPlaneIP: "${E2E_CONTROL_PLANE_IP}"
   instanceConfig:
     machineType: tpu7x-standard-4t

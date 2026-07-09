@@ -13,6 +13,7 @@ type TestConfig struct {
 	Region         string
 	Reservation    string
 	ControlPlaneIP string
+	K8sVersion     string
 }
 
 var Config TestConfig
@@ -23,6 +24,7 @@ func init() {
 	flag.StringVar(&Config.Region, "e2e-region", "", "GCE Region for E2E tests")
 	flag.StringVar(&Config.Reservation, "e2e-reservation", "", "GCP Reservation for E2E tests")
 	flag.StringVar(&Config.ControlPlaneIP, "e2e-control-plane-ip", "", "Control plane IP for E2E tests")
+	flag.StringVar(&Config.K8sVersion, "e2e-k8s-version", "", "Kubernetes version for E2E tests")
 }
 
 // BindEnv falls back to env if flags are not set.
@@ -56,6 +58,13 @@ func (c *TestConfig) BindEnv() {
 	if c.ControlPlaneIP == "" {
 		log.Fatalf("E2E_CONTROL_PLANE_IP must be set (via flag -e2e-control-plane-ip or environment variable E2E_CONTROL_PLANE_IP)")
 	}
+	if c.K8sVersion == "" {
+		if envK8sVersion := os.Getenv("E2E_K8S_VERSION"); envK8sVersion != "" {
+			c.K8sVersion = envK8sVersion
+		} else {
+			c.K8sVersion = "1.31"
+		}
+	}
 }
 
 // expandManifest replaces the placeholders in the manifest YAML
@@ -67,6 +76,7 @@ func expandManifest(yamlBytes []byte) []byte {
 		"${E2E_REGION}", Config.Region,
 		"${E2E_RESERVATION}", Config.Reservation,
 		"${E2E_CONTROL_PLANE_IP}", Config.ControlPlaneIP,
+		"${E2E_K8S_VERSION}", Config.K8sVersion,
 	)
 	return []byte(replacer.Replace(string(yamlBytes)))
 }

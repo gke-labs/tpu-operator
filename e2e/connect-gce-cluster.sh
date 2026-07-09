@@ -74,6 +74,7 @@ export KUBECONFIG="${KUBECONFIG_PATH}"
 export E2E_PROJECT="${PROJECT}"
 export E2E_ZONE="${ZONE}"
 export E2E_REGION="${E2E_REGION:-us-central1}"
+export E2E_K8S_VERSION="${E2E_K8S_VERSION:-1.31}"
 
 
 echo "=== Connection Successful ==="
@@ -83,3 +84,4 @@ echo "  KUBECONFIG=${KUBECONFIG}"
 echo "  E2E_PROJECT=${E2E_PROJECT}"
 echo "  E2E_ZONE=${E2E_ZONE}"
 echo "  E2E_REGION=${E2E_REGION}"
+echo "  E2E_K8S_VERSION=${E2E_K8S_VERSION}"
