@@ -167,18 +167,21 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Step 3: Reconcile Managed Instance Group
-	if ready, err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup); err != nil {
+	migReady, err := r.reconcileManagedInstanceGroup(ctx, &tpuNodeGroup)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile MIG: %w", err)
-	} else if !ready {
+	}
+
+	// Step 4: Inject Metadata (Try early to unblock startup script)
+	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient, machineType); err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
+	}
+
+	if !migReady {
 		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
 			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
 		}
-		return ctrl.Result{}, nil
-	}
-
-	// Step 4: Inject Metadata
-	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient, machineType); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// Step 4.5: Reconcile Nodes (Labeling and Status)

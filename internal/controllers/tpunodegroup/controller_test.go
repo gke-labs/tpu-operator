@@ -1064,7 +1064,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					InstanceTemplateURI:  ptr.To("projects/test-project/locations/global/instanceTemplates/my-template"),
 				},
 			},
-			wantResult: reconcile.Result{},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -1251,7 +1251,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{},
+			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
