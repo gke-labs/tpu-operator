@@ -24,6 +24,7 @@ import (
 	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup/deviceplugin"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 	"k8s.io/utils/ptr"
@@ -172,7 +173,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantResult:    reconcile.Result{RequeueAfter: requeue.ShortRetryInterval},
 			wantErr:       false,
 			wantDaemonSet: true,
 			wantStatus: &tpuapi.NodeSummary{
@@ -457,7 +458,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantResult:    reconcile.Result{RequeueAfter: requeue.ShortRetryInterval},
 			wantErr:       false,
 			wantDaemonSet: true,
 			wantConditions: []metav1.Condition{
@@ -783,7 +784,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -836,7 +837,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -883,7 +884,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -925,7 +926,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -1064,7 +1065,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					InstanceTemplateURI:  ptr.To("projects/test-project/locations/global/instanceTemplates/my-template"),
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -1251,7 +1252,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:    false,
 			wantConditions: []metav1.Condition{
 				{
@@ -1358,7 +1359,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult:    reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantResult:    reconcile.Result{RequeueAfter: requeue.ShortRetryInterval},
 			wantErr:       false,
 			wantDaemonSet: true,
 			wantStatus: &tpuapi.NodeSummary{
@@ -1595,7 +1596,7 @@ func TestTPUNodeGroupReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 30 * time.Second},
+			wantResult: reconcile.Result{RequeueAfter: requeue.ShortRetryInterval},
 			wantErr:    false,
 			wantStatus: &tpuapi.NodeSummary{
 				Ready:       0,

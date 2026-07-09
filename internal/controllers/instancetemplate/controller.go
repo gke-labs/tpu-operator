@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +18,7 @@ import (
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/controllers/errorutil"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/converter"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
@@ -79,7 +79,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 		if opProto.GetStatus() != computepb.Operation_DONE {
 			logger.V(1).Info("GCE operation still pending", "operation", instanceTemplate.Status.OperationName)
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 		}
 
 		// Operation is DONE
@@ -94,7 +94,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				if errorutil.SetTerminalCondition(&instanceTemplate.Status.Conditions, tpuv1alpha1.ReasonOperationFailed, msg) {
 					r.Recorder.Event(&instanceTemplate, corev1.EventTypeWarning, tpuv1alpha1.ReasonOperationFailed, msg)
 				}
-				return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+				return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.DriftCheckInterval)}, nil
 			}
 		} else {
 			logger.Info("GCE operation completed successfully", "operation", instanceTemplate.Status.OperationName)
@@ -161,7 +161,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 				instanceTemplate.Status.OperationType = "DELETE"
 				logger.Info("GCE delete operation started", "operation", op.Name())
 				r.Recorder.Event(&instanceTemplate, corev1.EventTypeNormal, "Cleanup", fmt.Sprintf("GCE deletion operation started: %s", op.Name()))
-				return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+				return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 			}
 
 			controllerutil.RemoveFinalizer(&instanceTemplate, finalizerName)
@@ -194,7 +194,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					if errorutil.SetTerminalCondition(&instanceTemplate.Status.Conditions, tpuv1alpha1.ReasonRequestRejected, msg) {
 						r.Recorder.Event(&instanceTemplate, corev1.EventTypeWarning, tpuv1alpha1.ReasonRequestRejected, msg)
 					}
-					return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+					return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.DriftCheckInterval)}, nil
 				}
 				return ctrl.Result{}, fmt.Errorf("inserting GCE InstanceTemplate: %w", err)
 			}
@@ -204,7 +204,7 @@ func (r *InstanceTemplateReconciler) Reconcile(ctx context.Context, req ctrl.Req
 					instanceTemplate.Status.OperationType = "CREATE"
 					logger.Info("GCE insert operation started", "operation", op.Name())
 					r.Recorder.Event(&instanceTemplate, corev1.EventTypeNormal, "Provisioning", fmt.Sprintf("GCE creation operation started: %s", op.Name()))
-					return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+					return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 				}
 			}
 

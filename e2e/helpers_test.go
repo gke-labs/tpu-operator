@@ -214,6 +214,3 @@ func TestHelpers_RegionPrecedence(t *testing.T) {
 		t.Errorf("Expected Region to fall back to us-central1 default, got %s", Config.Region)
 	}
 }
-
-
-

@@ -3,7 +3,6 @@ package tpunodegroup
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
 
@@ -26,6 +25,7 @@ import (
 
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/controllers/errorutil"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup/deviceplugin"
 	"github.com/gke-labs/tpu-operator/internal/converter"
 	"github.com/gke-labs/tpu-operator/internal/gce"
@@ -141,7 +141,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile workload policy: %w", err)
 	} else if !ready {
 		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
-			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.DriftCheckInterval)}, nil
 		}
 		return ctrl.Result{}, nil
 	}
@@ -152,7 +152,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("failed to reconcile instance template: %w", err)
 	} else if !ready {
 		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
-			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.DriftCheckInterval)}, nil
 		}
 		return ctrl.Result{}, nil
 	}
@@ -179,9 +179,9 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if !migReady {
 		if errorutil.TerminalFailureCondition(tpuNodeGroup.Status.Conditions) != nil {
-			return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.DriftCheckInterval)}, nil
 		}
-		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 	}
 
 	// Step 4.5: Reconcile Nodes (Labeling and Status)
@@ -196,7 +196,7 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	if tpuNodeGroup.Status.NodeSummary != nil && tpuNodeGroup.Status.NodeSummary.Ready < tpuNodeGroup.Spec.NodeCount {
 		logger.V(1).Info("nodes are still joining or bootstrapping, requeuing", "ready", tpuNodeGroup.Status.NodeSummary.Ready, "total", tpuNodeGroup.Spec.NodeCount)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.ShortRetryInterval)}, nil
 	}
 
 	// All steps successful
@@ -342,8 +342,6 @@ func (r *TPUNodeGroupReconciler) reconcileInstanceTemplate(ctx context.Context, 
 			r.handleTemplateError(group, err, "External instance template validation failed")
 			return nil, false, fmt.Errorf("validating external template: %w", err)
 		}
-
-
 
 		meta.SetStatusCondition(&group.Status.Conditions, metav1.Condition{
 			Type:    "InstanceTemplateReady",

@@ -58,8 +58,6 @@ func ReconcileNodes(ctx context.Context, k8sClient client.Client, igmClient gce.
 		nodeNameMap[nodeList.Items[i].Name] = &nodeList.Items[i]
 	}
 
-
-
 	readyCount := 0
 	missingProviderIDCount := 0
 	var errs []error

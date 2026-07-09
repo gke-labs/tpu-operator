@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/google/go-cmp/cmp"
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )

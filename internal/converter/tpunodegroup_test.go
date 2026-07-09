@@ -3,8 +3,8 @@ package converter
 import (
 	"testing"
 
-	"github.com/google/go-cmp/cmp"
 	api "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/google/go-cmp/cmp"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 )

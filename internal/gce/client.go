@@ -74,9 +74,9 @@ type Manager struct {
 	instancesClient         *compute.InstancesClient
 	instanceTemplatesClient *compute.InstanceTemplatesClient
 	globalOperationsClient  *compute.GlobalOperationsClient
-	resourcePoliciesClient *compute.ResourcePoliciesClient
-	regionOperationsClient *compute.RegionOperationsClient
-	zoneOperationsClient   *compute.ZoneOperationsClient
+	resourcePoliciesClient  *compute.ResourcePoliciesClient
+	regionOperationsClient  *compute.RegionOperationsClient
+	zoneOperationsClient    *compute.ZoneOperationsClient
 }
 
 // NewManager creates and initializes the GCE clients.
@@ -207,9 +207,9 @@ func newManagerWithConstructors(
 		instancesClient:         instancesClient,
 		instanceTemplatesClient: instanceTemplatesClient,
 		globalOperationsClient:  globalOperationsClient,
-		resourcePoliciesClient: resourcePoliciesClient,
-		regionOperationsClient: regionOperationsClient,
-		zoneOperationsClient:   zoneOperationsClient,
+		resourcePoliciesClient:  resourcePoliciesClient,
+		regionOperationsClient:  regionOperationsClient,
+		zoneOperationsClient:    zoneOperationsClient,
 	}, nil
 }
 

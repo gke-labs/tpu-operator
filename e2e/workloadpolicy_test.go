@@ -74,4 +74,3 @@ func TestWorkloadPolicy(t *testing.T) {
 	t.Log("Verifying GCP resource deletion...")
 	verifyGCEResourcePolicyExists(t, project, region, crName, false)
 }
-

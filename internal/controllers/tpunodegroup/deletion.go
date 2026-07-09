@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/go-logr/logr"
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup/deviceplugin"
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
-
 
 // cordonNodes taints all nodes associated with the TPUNodeGroup as NoSchedule.
 func (r *TPUNodeGroupReconciler) cordonNodes(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
@@ -275,7 +274,7 @@ func (r *TPUNodeGroupReconciler) handleDeletion(ctx context.Context, logger logr
 				Reason:  tpuapi.ReasonDeletingMIG,
 				Message: "Waiting for ManagedInstanceGroup to be deleted",
 			})
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 		}
 		if err := r.removeFinalizerAndPatch(ctx, group, finalizerMIG); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove MIG finalizer: %w", err)
@@ -298,7 +297,7 @@ func (r *TPUNodeGroupReconciler) handleDeletion(ctx context.Context, logger logr
 				Reason:  tpuapi.ReasonDeletingTemplate,
 				Message: "Waiting for InstanceTemplate to be deleted",
 			})
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 		}
 		if err := r.removeFinalizerAndPatch(ctx, group, finalizerTemplate); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Template finalizer: %w", err)
@@ -321,7 +320,7 @@ func (r *TPUNodeGroupReconciler) handleDeletion(ctx context.Context, logger logr
 				Reason:  tpuapi.ReasonDeletingPolicy,
 				Message: "Waiting for WorkloadPolicy to be deleted",
 			})
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 		}
 		if err := r.removeFinalizerAndPatch(ctx, group, finalizerPolicy); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Policy finalizer: %w", err)
@@ -364,7 +363,7 @@ func (r *TPUNodeGroupReconciler) handleDeletion(ctx context.Context, logger logr
 			return ctrl.Result{}, fmt.Errorf("failed to delete TPU Device Plugin: %w", err)
 		}
 		if !done {
-			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+			return ctrl.Result{RequeueAfter: requeue.Jittered(requeue.LROPollInterval)}, nil
 		}
 		if err := r.removeFinalizerAndPatch(ctx, group, finalizerDevicePlugin); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Device Plugin finalizer: %w", err)

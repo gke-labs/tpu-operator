@@ -251,7 +251,6 @@ func GetOrGenerateBootstrapToken(ctx context.Context, k8sClient client.Client, g
 	return GenerateBootstrapToken(ctx, k8sClient, labels)
 }
 
-
 // GenerateBootstrapToken generates a random kubeadm bootstrap token and creates a K8s Secret for it.
 func GenerateBootstrapToken(ctx context.Context, k8sClient client.Client, labels map[string]string) (string, error) {
 	tokenID := strings.ToLower(rand.String(6))

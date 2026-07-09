@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
 
@@ -169,7 +170,7 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 			wantEvents: []string{
@@ -266,8 +267,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -292,8 +293,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -324,8 +325,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					OperationName: "op-123",
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCEOps: &gce.MockZoneOperationsClient{
@@ -336,8 +337,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
-			wantErr:    false,
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
+			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 		},
 		{
@@ -358,22 +359,22 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					OperationName: "op-123",
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCEOps: &gce.MockZoneOperationsClient{
 				GetFunc: func(ctx context.Context, project, zone, operation string) (*computepb.Operation, error) {
 					status := computepb.Operation_DONE
 					return &computepb.Operation{
-						Status:               &status,
+						Status:              &status,
 						HttpErrorStatusCode: ptr.To(int32(500)),
-						HttpErrorMessage:     ptr.To("internal error"),
+						HttpErrorMessage:    ptr.To("internal error"),
 					}, nil
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Minute},
-			wantErr:    false,
+			wantResult:     reconcile.Result{RequeueAfter: requeue.DriftCheckInterval},
+			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 			wantEvents: []string{
 				"Warning OperationFailed GCE operation \"op-123\" failed: internal error (code 500): <nil>",
@@ -395,8 +396,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -404,7 +405,7 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					return nil, fmt.Errorf("forced delete error")
 				},
 			},
-			wantErr: true,
+			wantErr:        true,
 			wantFinalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 		},
 		{
@@ -423,8 +424,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -456,15 +457,15 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					OperationType: "DELETE",
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCEOps: &gce.MockZoneOperationsClient{
 				GetFunc: func(ctx context.Context, project, zone, operation string) (*computepb.Operation, error) {
 					status := computepb.Operation_DONE
 					return &computepb.Operation{
-						Status:               &status,
+						Status:              &status,
 						HttpErrorStatusCode: ptr.To(int32(404)),
 					}, nil
 				},
@@ -489,8 +490,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -520,8 +521,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -549,8 +550,8 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					Finalizers:        []string{"tpu.google.com/managedinstancegroup-cleanup"},
 				},
 				Spec: tpuv1alpha1.ManagedInstanceGroupSpec{
-					Project:          "test-project",
-					Location:         "us-central1-a",
+					Project:  "test-project",
+					Location: "us-central1-a",
 				},
 			},
 			mockGCE: &gce.MockIGMClient{
@@ -561,7 +562,7 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/managedinstancegroup-cleanup"},
 			wantEvents: []string{

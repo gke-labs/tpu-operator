@@ -15,9 +15,9 @@ import (
 
 	compute "cloud.google.com/go/compute/apiv1"
 	"cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/google/go-cmp/cmp"
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/gce"
+	"github.com/google/go-cmp/cmp"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 	corev1 "k8s.io/api/core/v1"
@@ -629,4 +629,3 @@ func TestGetOrGenerateBootstrapToken(t *testing.T) {
 		})
 	}
 }
-

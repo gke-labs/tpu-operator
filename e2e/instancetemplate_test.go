@@ -70,4 +70,3 @@ func TestInstanceTemplate(t *testing.T) {
 	t.Log("Verifying GCP resource deletion...")
 	verifyGCEInstanceTemplateExists(t, project, crName, false)
 }
-

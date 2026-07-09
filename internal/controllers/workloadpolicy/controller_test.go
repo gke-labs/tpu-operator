@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
 
@@ -181,7 +182,7 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
 			wantEvents: []string{
@@ -346,8 +347,8 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Second},
-			wantErr:    false,
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
+			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
 		},
 		{
@@ -376,14 +377,14 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 				GetFunc: func(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
 					status := computepb.Operation_DONE
 					return &computepb.Operation{
-						Status:               &status,
+						Status:              &status,
 						HttpErrorStatusCode: ptr.To(int32(500)),
-						HttpErrorMessage:     ptr.To("internal error"),
+						HttpErrorMessage:    ptr.To("internal error"),
 					}, nil
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Minute},
-			wantErr:    false,
+			wantResult:     reconcile.Result{RequeueAfter: requeue.DriftCheckInterval},
+			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
 			wantEvents: []string{
 				"Warning OperationFailed GCE operation \"op-123\" failed: internal error (code 500): <nil>",
@@ -414,7 +415,7 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 					return nil, fmt.Errorf("forced delete error")
 				},
 			},
-			wantErr: true,
+			wantErr:        true,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
 		},
 		{
@@ -474,7 +475,7 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 				GetFunc: func(ctx context.Context, project, region, operation string) (*computepb.Operation, error) {
 					status := computepb.Operation_DONE
 					return &computepb.Operation{
-						Status:               &status,
+						Status:              &status,
 						HttpErrorStatusCode: ptr.To(int32(404)),
 					}, nil
 				},
@@ -571,7 +572,7 @@ func TestWorkloadPolicyReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/workloadpolicy-cleanup"},
 			wantEvents: []string{
@@ -667,7 +668,7 @@ type recordingSink struct {
 }
 
 func (s *recordingSink) Init(info logr.RuntimeInfo) {}
-func (s *recordingSink) Enabled(level int) bool { return true }
+func (s *recordingSink) Enabled(level int) bool     { return true }
 func (s *recordingSink) Info(level int, msg string, keysAndValues ...interface{}) {
 	s.logs = append(s.logs, msg)
 }
@@ -729,4 +730,3 @@ func TestWorkloadPolicyReconciler_Reconcile_UsesContextLogger(t *testing.T) {
 		t.Errorf("Expected log message %q was not recorded by the context logger. Recorded logs: %v", expectedLog, sink.logs)
 	}
 }
-

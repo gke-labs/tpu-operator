@@ -81,8 +81,8 @@ func main() {
 		Scheme: scheme,
 		Cache: cache.Options{
 			ByObject: map[client.Object]cache.ByObject{
-				&tpuv1alpha1.TPUNodeGroup{}:        {},
-				&tpuv1alpha1.InstanceTemplate{}:    {},
+				&tpuv1alpha1.TPUNodeGroup{}:         {},
+				&tpuv1alpha1.InstanceTemplate{}:     {},
 				&tpuv1alpha1.ManagedInstanceGroup{}: {},
 				&tpuv1alpha1.WorkloadPolicy{}:       {},
 				&corev1.Node{}:                      {},

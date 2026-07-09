@@ -6,9 +6,9 @@ import (
 	"time"
 
 	computepb "cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/api/googleapi"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	tpuv1alpha1 "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
+	"github.com/gke-labs/tpu-operator/internal/controllers/requeue"
 	"github.com/gke-labs/tpu-operator/internal/gce"
 )
 
@@ -182,7 +183,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
 			wantEvents: []string{
@@ -285,7 +286,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 					Project: "test-project",
 				},
 			},
-			wantResult:     reconcile.Result{RequeueAfter: 10 * time.Second},
+			wantResult:     reconcile.Result{RequeueAfter: requeue.LROPollInterval},
 			wantErr:        false,
 			wantFinalizers: []string{"tpu.google.com/instancetemplate-cleanup"},
 			mockGCE: &gce.MockInstanceTemplateClient{
@@ -331,9 +332,9 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 					errCode := int32(400)
 					errMessage := "Invalid configuration"
 					return &computepb.Operation{
-						Status:               &status,
+						Status:              &status,
 						HttpErrorStatusCode: &errCode,
-						HttpErrorMessage:     &errMessage,
+						HttpErrorMessage:    &errMessage,
 						Error: &computepb.Error{
 							Errors: []*computepb.Errors{
 								{
@@ -344,7 +345,7 @@ func TestInstanceTemplateReconciler_Reconcile(t *testing.T) {
 					}, nil
 				},
 			},
-			wantResult: reconcile.Result{RequeueAfter: 10 * time.Minute},
+			wantResult: reconcile.Result{RequeueAfter: requeue.DriftCheckInterval},
 			wantErr:    false,
 			wantEvents: []string{
 				"Warning OperationFailed GCE operation \"op-123\" failed: Invalid configuration (code 400): errors:{message:\"Invalid configuration\"}",

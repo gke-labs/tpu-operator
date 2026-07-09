@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"cloud.google.com/go/compute/apiv1/computepb"
-	"github.com/google/go-cmp/cmp"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	tpuapi "github.com/gke-labs/tpu-operator/internal/apis/tpu/v1alpha1"
 	"github.com/gke-labs/tpu-operator/internal/gce"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"google.golang.org/protobuf/proto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -495,11 +495,11 @@ func TestEnsureNodeLabel(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "test-node"},
 			},
 			wantLabels: map[string]string{
-				labelTPUAccelerator:                          "tpu-v4-podslice",
-				labelTPUNodeGroupNamespace: "default",
-				labelTPUNodeGroupName:      "test-tpu",
-				"cloud.google.com/gke-tpu-topology":          "2x2x2",
-				labelTPUAcceleratorCount:                     "4",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroupNamespace:          "default",
+				labelTPUNodeGroupName:               "test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
+				labelTPUAcceleratorCount:            "4",
 			},
 			wantErr: false,
 		},
@@ -512,20 +512,20 @@ func TestEnsureNodeLabel(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
 					Labels: map[string]string{
-						labelTPUAccelerator:                          "tpu-v4-podslice",
-						labelTPUNodeGroupNamespace: "default",
-						labelTPUNodeGroupName:      "test-tpu",
-						"cloud.google.com/gke-tpu-topology":          "2x2x2",
-						labelTPUAcceleratorCount:                     "4",
+						labelTPUAccelerator:                 "tpu-v4-podslice",
+						labelTPUNodeGroupNamespace:          "default",
+						labelTPUNodeGroupName:               "test-tpu",
+						"cloud.google.com/gke-tpu-topology": "2x2x2",
+						labelTPUAcceleratorCount:            "4",
 					},
 				},
 			},
 			wantLabels: map[string]string{
-				labelTPUAccelerator:                          "tpu-v4-podslice",
-				labelTPUNodeGroupNamespace: "default",
-				labelTPUNodeGroupName:      "test-tpu",
-				"cloud.google.com/gke-tpu-topology":          "2x2x2",
-				labelTPUAcceleratorCount:                     "4",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroupNamespace:          "default",
+				labelTPUNodeGroupName:               "test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
+				labelTPUAcceleratorCount:            "4",
 			},
 			wantErr: false,
 		},
@@ -541,11 +541,11 @@ func TestEnsureNodeLabel(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				labelTPUAccelerator:                          "tpu-v4-podslice",
-				labelTPUNodeGroupNamespace: "default",
-				labelTPUNodeGroupName:      "test-tpu",
-				"cloud.google.com/gke-tpu-topology":          "2x2x2",
-				labelTPUAcceleratorCount:                     "4",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroupNamespace:          "default",
+				labelTPUNodeGroupName:               "test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
+				labelTPUAcceleratorCount:            "4",
 			},
 			wantErr: false,
 		},
@@ -558,19 +558,19 @@ func TestEnsureNodeLabel(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-node",
 					Labels: map[string]string{
-						labelTPUAccelerator:                          "tpu-v4-podslice",
-						labelTPUNodeGroupNamespace: "wrong-value",
-						labelTPUNodeGroupName:      "wrong-value",
-						"cloud.google.com/gke-tpu-topology":          "2x2x2",
+						labelTPUAccelerator:                 "tpu-v4-podslice",
+						labelTPUNodeGroupNamespace:          "wrong-value",
+						labelTPUNodeGroupName:               "wrong-value",
+						"cloud.google.com/gke-tpu-topology": "2x2x2",
 					},
 				},
 			},
 			wantLabels: map[string]string{
-				labelTPUAccelerator:                          "tpu-v4-podslice",
-				labelTPUNodeGroupNamespace: "default",
-				labelTPUNodeGroupName:      "test-tpu",
-				"cloud.google.com/gke-tpu-topology":          "2x2x2",
-				labelTPUAcceleratorCount:                     "4",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroupNamespace:          "default",
+				labelTPUNodeGroupName:               "test-tpu",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
+				labelTPUAcceleratorCount:            "4",
 			},
 			wantErr: false,
 		},
@@ -599,11 +599,11 @@ func TestEnsureNodeLabel(t *testing.T) {
 				},
 			},
 			wantLabels: map[string]string{
-				labelTPUAccelerator:                          "tpu-v4-podslice",
-				labelTPUNodeGroupNamespace: "another-very-long-namespace-name-that-is-also-quite-excessive",
-				labelTPUNodeGroupName:      "my-very-long-kubernetes-namespace-name-that-is-quite-excessive",
-				"cloud.google.com/gke-tpu-topology":          "2x2x2",
-				labelTPUAcceleratorCount:                     "4",
+				labelTPUAccelerator:                 "tpu-v4-podslice",
+				labelTPUNodeGroupNamespace:          "another-very-long-namespace-name-that-is-also-quite-excessive",
+				labelTPUNodeGroupName:               "my-very-long-kubernetes-namespace-name-that-is-quite-excessive",
+				"cloud.google.com/gke-tpu-topology": "2x2x2",
+				labelTPUAcceleratorCount:            "4",
 			},
 			wantErr: false,
 		},

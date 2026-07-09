@@ -38,8 +38,6 @@ func BuildDevicePluginDaemonSet(group *tpuapi.TPUNodeGroup) (*appsv1.DaemonSet, 
 		return nil, fmt.Errorf("failed to unmarshal device plugin YAML: %w", err)
 	}
 
-
-
 	return ds, nil
 }
 

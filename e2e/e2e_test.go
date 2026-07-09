@@ -92,7 +92,6 @@ func setup() {
 	fmt.Println("=== Global Setup ===")
 	Config.BindEnv()
 
-
 	wd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("Failed to get working directory: %v", err)
@@ -172,7 +171,6 @@ func setup() {
 	if err := yaml.Unmarshal(expandedYAML, &ng); err != nil {
 		log.Fatalf("Safety Check Error: Failed to unmarshal test manifest: %v", err)
 	}
-
 
 	expectedIP := ""
 	if ng.Spec.BootstrapKubernetes != nil {

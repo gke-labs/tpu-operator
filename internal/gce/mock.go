@@ -11,9 +11,9 @@ import (
 // MockIGMClient is a mock implementation of the gce.IGMClient.
 type MockIGMClient struct {
 	ListManagedInstancesFunc func(ctx context.Context, project, zone, migName string) ([]*computepb.ManagedInstance, error)
-	GetFunc    func(ctx context.Context, project, zone, name string) (*computepb.InstanceGroupManager, error)
-	InsertFunc func(ctx context.Context, project, zone string, igm *computepb.InstanceGroupManager) (Operation, error)
-	DeleteFunc func(ctx context.Context, project, zone, name string) (Operation, error)
+	GetFunc                  func(ctx context.Context, project, zone, name string) (*computepb.InstanceGroupManager, error)
+	InsertFunc               func(ctx context.Context, project, zone string, igm *computepb.InstanceGroupManager) (Operation, error)
+	DeleteFunc               func(ctx context.Context, project, zone, name string) (Operation, error)
 }
 
 // ListManagedInstances calls the mocked ListManagedInstancesFunc.
