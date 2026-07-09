@@ -73,7 +73,7 @@ func injectMetadata(ctx context.Context, group *tpuapi.TPUNodeGroup, k8sClient c
 		}
 
 		tokenUpdates := make(map[string]string)
-		if group.Spec.BootstrapKubernetes != nil && gceInst.Status != nil && *gceInst.Status == "RUNNING" {
+		if group.Spec.BootstrapKubernetes != nil && isInstanceUpdateable(gceInst) {
 			hasToken := false
 			if gceInst.Metadata != nil {
 				for _, item := range gceInst.Metadata.Items {
@@ -364,3 +364,16 @@ func mergeMetadataItems(gceInst *computepb.Instance, tokenUpdates, sliceUpdates 
 	return merged, fingerprint, true
 }
 
+func isInstanceUpdateable(inst *computepb.Instance) bool {
+	if inst.Status == nil {
+		return false
+	}
+	switch *inst.Status {
+	// Only inject metadata during states where the startup script is expected to run.
+	case "PROVISIONING", "STAGING", "RUNNING":
+		return true
+	default:
+		// Skip STOPPING, SUSPENDING, SUSPENDED, TERMINATED, etc.
+		return false
+	}
+}
