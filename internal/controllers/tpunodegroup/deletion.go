@@ -154,6 +154,36 @@ func (r *TPUNodeGroupReconciler) deleteNodeObjects(ctx context.Context, logger l
 	return errors.Join(errs...)
 }
 
+// deleteBootstrapSecrets deletes the bootstrap token secrets associated with the TPUNodeGroup.
+func (r *TPUNodeGroupReconciler) deleteBootstrapSecrets(ctx context.Context, logger logr.Logger, group *tpuapi.TPUNodeGroup) error {
+	if group.Spec.BootstrapKubernetes == nil {
+		return nil
+	}
+	var secretList corev1.SecretList
+	listOpts := []client.ListOption{
+		client.InNamespace("kube-system"),
+		client.MatchingLabels{
+			labelTPUNodeGroupNamespace: group.Namespace,
+			labelTPUNodeGroupName:      group.Name,
+		},
+	}
+	if err := r.List(ctx, &secretList, listOpts...); err != nil {
+		return fmt.Errorf("failed to list bootstrap token secrets: %w", err)
+	}
+
+	var errs []error
+	for i := range secretList.Items {
+		sec := &secretList.Items[i]
+		logger.Info("deleting bootstrap token secret", "secret", sec.Name)
+		if err := r.Delete(ctx, sec); err != nil {
+			if !apierrors.IsNotFound(err) {
+				errs = append(errs, fmt.Errorf("failed to delete bootstrap token secret %s: %w", sec.Name, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // cleanupDevicePluginIfLastGroup deletes the shared TPU Device Plugin DaemonSet
 // if there are no other active TPUNodeGroups in the cluster.
 // Note: If other active groups exist, we skip deleting the DaemonSet but still
@@ -306,10 +336,13 @@ func (r *TPUNodeGroupReconciler) handleDeletion(ctx context.Context, logger logr
 			Type:    tpuapi.ConditionTypeReady,
 			Status:  metav1.ConditionFalse,
 			Reason:  tpuapi.ReasonDeletingNodes,
-			Message: "Deleting stale Node objects",
+			Message: "Deleting stale Node objects and bootstrap secrets",
 		})
 		if err := r.deleteNodeObjects(ctx, logger, group); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to delete node objects: %w", err)
+		}
+		if err := r.deleteBootstrapSecrets(ctx, logger, group); err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to delete bootstrap secrets: %w", err)
 		}
 		if err := r.removeFinalizerAndPatch(ctx, group, finalizerNodes); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to remove Nodes finalizer: %w", err)

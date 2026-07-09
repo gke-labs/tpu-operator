@@ -70,7 +70,7 @@ func (r *TPUNodeGroupReconciler) WithRecorder(recorder record.EventRecorder) *TP
 
 // +kubebuilder:rbac:groups=tpu.google.com,resources=*,verbs=*
 // +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch;patch;delete
-// +kubebuilder:rbac:groups="",resources=secrets,verbs=create
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete

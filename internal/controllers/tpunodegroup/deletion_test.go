@@ -9,6 +9,7 @@ import (
 	"github.com/gke-labs/tpu-operator/internal/controllers/tpunodegroup/deviceplugin"
 	appsv1 "k8s.io/api/apps/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -461,6 +462,103 @@ func TestCleanupDevicePluginIfLastGroup(t *testing.T) {
 
 			if tc.verify != nil {
 				tc.verify(t, cl)
+			}
+		})
+	}
+}
+
+func TestDeleteBootstrapSecrets(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding CoreV1 to scheme: %v", err)
+	}
+	if err := tpuapi.AddToScheme(scheme); err != nil {
+		t.Fatalf("Adding TPU API to scheme: %v", err)
+	}
+
+	tests := []struct {
+		name          string
+		group         *tpuapi.TPUNodeGroup
+		initialObjs   []client.Object
+		wantRemaining int
+		wantErr       bool
+	}{
+		{
+			name: "bootstrapping_disabled_no_op",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{},
+			},
+			initialObjs: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "kube-system",
+						Labels: map[string]string{
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu",
+						},
+					},
+				},
+			},
+			wantRemaining: 1, // Should NOT be deleted because bootstrapping is disabled in spec
+		},
+		{
+			name: "bootstrapping_enabled_deletes_secrets",
+			group: &tpuapi.TPUNodeGroup{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tpu",
+					Namespace: "default",
+				},
+				Spec: tpuapi.TPUNodeGroupSpec{
+					BootstrapKubernetes: &tpuapi.BootstrapConfig{},
+				},
+			},
+			initialObjs: []client.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-secret",
+						Namespace: "kube-system",
+						Labels: map[string]string{
+							labelTPUNodeGroupNamespace: "default",
+							labelTPUNodeGroupName:      "test-tpu",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "other-secret",
+						Namespace: "kube-system",
+						Labels: map[string]string{
+							labelTPUNodeGroupNamespace: "other",
+							labelTPUNodeGroupName:      "test-tpu",
+						},
+					},
+				},
+			},
+			wantRemaining: 1, // "other-secret" should remain
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tc.initialObjs...).Build()
+			r := &TPUNodeGroupReconciler{Client: cl}
+
+			err := r.deleteBootstrapSecrets(context.Background(), logr.Discard(), tc.group)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("deleteBootstrapSecrets() error = %v, wantErr %v", err, tc.wantErr)
+			}
+
+			var secrets corev1.SecretList
+			if err := cl.List(context.Background(), &secrets, client.InNamespace("kube-system")); err != nil {
+				t.Fatalf("Failed to list secrets: %v", err)
+			}
+			if len(secrets.Items) != tc.wantRemaining {
+				t.Errorf("Expected %d secrets remaining, got %d", tc.wantRemaining, len(secrets.Items))
 			}
 		})
 	}
