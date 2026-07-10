@@ -608,8 +608,17 @@ func TestManagedInstanceGroupReconciler_Reconcile(t *testing.T) {
 				t.Errorf("Reconcile(%v) = (%v, %v), want error presence = %v", tc.request, gotResult, err, tc.wantErr)
 			}
 
-			if diff := cmp.Diff(tc.wantResult, gotResult); diff != "" {
+			// Compare non-duration fields first
+			wantFixed := tc.wantResult
+			gotFixed := gotResult
+			wantFixed.RequeueAfter = 0
+			gotFixed.RequeueAfter = 0
+			if diff := cmp.Diff(wantFixed, gotFixed); diff != "" {
 				t.Errorf("Reconcile(%v) result mismatch (-want +got):\n%s", tc.request, diff)
+			}
+			// Compare RequeueAfter with jitter tolerance
+			if !requeue.InJitterRange(gotResult.RequeueAfter, tc.wantResult.RequeueAfter) {
+				t.Errorf("Reconcile(%v) RequeueAfter = %v, want (jittered) %v", tc.request, gotResult.RequeueAfter, tc.wantResult.RequeueAfter)
 			}
 
 			if tc.wantFinalizers != nil {
