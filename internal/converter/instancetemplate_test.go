@@ -18,7 +18,7 @@ func TestToGCEInstanceTemplate(t *testing.T) {
 		Spec: tpuv1alpha1.InstanceTemplateSpec{
 			InstanceConfig: tpuv1alpha1.InstanceConfig{
 				MachineType:    "tpu7x-standard-4t",
-				Image:          ptr.To("projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320"),
+				Image:          ptr.To("projects/ubuntu-os-accelerator-images/global/images/family/ubuntu-accel-2404-amd64-tpu-tpu7x"),
 				BootDiskSizeGB: ptr.To(int32(250)),
 				DiskType:       ptr.To("pd-ssd"),
 				Subnetwork:     ptr.To("default"),

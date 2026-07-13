@@ -442,7 +442,7 @@ func TestTPUNodeGroup_BYOInstanceTemplate(t *testing.T) {
 			"compute", "instance-templates", "create", templateName,
 			"--project", project,
 			"--machine-type", "tpu7x-standard-4t",
-			"--image", "projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320",
+			"--image", "projects/ubuntu-os-accelerator-images/global/images/family/ubuntu-accel-2404-amd64-tpu-tpu7x",
 			"--boot-disk-size", "250GB",
 			"--maintenance-policy", "TERMINATE",
 			"--subnet", fmt.Sprintf("https://www.googleapis.com/compute/v1/projects/%s/regions/%s/subnetworks/default", project, region),

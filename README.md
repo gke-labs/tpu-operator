@@ -196,7 +196,7 @@ Set the required environment variables:
 export PROJECT=my-gcp-project
 export ZONE=us-central1-c
 export RESERVATION_NAME=my-tpu-reservation
-export IMAGE=projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320
+export IMAGE=projects/ubuntu-os-accelerator-images/global/images/family/ubuntu-accel-2404-amd64-tpu-tpu7x
 export TOPOLOGY=2x2x2
 export NODE_COUNT=2
 export CONTROL_PLANE_IP=10.128.0.2

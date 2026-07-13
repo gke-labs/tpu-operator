@@ -15,7 +15,7 @@ spec:
     controlPlaneIP: "${E2E_CONTROL_PLANE_IP}"
   instanceConfig:
     machineType: tpu7x-standard-4t
-    image: projects/ubuntu-os-accelerator-images/global/images/ubuntu-accel-2404-amd64-tpu-tpu7x-v20260320
+    image: projects/ubuntu-os-accelerator-images/global/images/family/ubuntu-accel-2404-amd64-tpu-tpu7x
     bootDiskSizeGB: 250
     diskType: hyperdisk-balanced
     subnetwork: regions/us-central1/subnetworks/default
