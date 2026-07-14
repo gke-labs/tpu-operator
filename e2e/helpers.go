@@ -421,6 +421,11 @@ func verifyGCEResourcePolicyExists(t *testing.T, project, region, name string, e
 
 func verifyTeardown(t *testing.T, ctx context.Context, k8sClient client.Client, ng *tpuapi.TPUNodeGroup, children ...client.Object) {
 	t.Helper()
+
+	if *skipTeardown {
+		t.Log("Skipping verifyTeardown because skipTeardown is true")
+		return
+	}
 	t.Log("=== Teardown Verification ===")
 	t.Logf("Deleting TPUNodeGroup CR %s...", ng.Name)
 	ngKey := types.NamespacedName{Name: ng.GetName(), Namespace: ng.GetNamespace()}

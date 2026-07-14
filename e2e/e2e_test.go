@@ -48,11 +48,13 @@ func TestMain(m *testing.M) {
 	if code != 0 {
 		fmt.Println("=== E2E Tests Failed - Dumping Controller Logs ===")
 		dumpControllerLogs()
-		if *skipTeardown {
-			fmt.Println("=== SKIPPING TEARDOWN for manual inspection ===")
-			os.Exit(code)
-		}
 	}
+
+	if *skipTeardown {
+		fmt.Println("=== SKIPPING TEARDOWN for manual inspection ===")
+		os.Exit(code)
+	}
+
 	teardown()
 	os.Exit(code)
 }
