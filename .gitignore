@@ -1,4 +1,3 @@
-*.txt
 controller-manager
 e2e/remote-kubeconfig.yaml
 e2e/local-env.sh
