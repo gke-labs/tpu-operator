@@ -76,10 +76,11 @@ func waitForDeletion(ctx context.Context, k8sClient client.Client, key client.Ob
 	})
 }
 
-func verifyTPUWorkload(t *testing.T, ctx context.Context, k8sClient client.Client, groupLabelValue string, expectedNodes int) {
+func verifyTPUWorkload(t *testing.T, ctx context.Context, k8sClient client.Client, groupNamespace, groupName string, expectedNodes int) {
 	var nodeList corev1.NodeList
 	if err := k8sClient.List(ctx, &nodeList, client.MatchingLabels{
-		"cloud.google.com/tpu-node-group": groupLabelValue,
+		"cloud.google.com/tpu-node-group-namespace": groupNamespace,
+		"cloud.google.com/tpu-node-group-name":      groupName,
 	}); err != nil {
 		t.Fatalf("Failed to list nodes for TPU workload verification: %v", err)
 	}
@@ -108,7 +109,7 @@ func verifyTPUWorkload(t *testing.T, ctx context.Context, k8sClient client.Clien
 	}
 	t.Logf("Found TPU Node IPs: %v", nodeIPs)
 
-	jobName := "tpu-verify-" + groupLabelValue
+	jobName := "tpu-verify-" + groupNamespace + "-" + groupName
 	completions := int32(expectedNodes)
 	parallelism := int32(expectedNodes)
 
@@ -214,7 +215,8 @@ print("TPU OK")
 					HostNetwork:   true,
 					DNSPolicy:     corev1.DNSClusterFirstWithHostNet,
 					NodeSelector: map[string]string{
-						"cloud.google.com/tpu-node-group": groupLabelValue,
+						"cloud.google.com/tpu-node-group-namespace": groupNamespace,
+						"cloud.google.com/tpu-node-group-name":      groupName,
 					},
 					Tolerations: []corev1.Toleration{
 						{

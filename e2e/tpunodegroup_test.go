@@ -113,7 +113,8 @@ func TestTPUNodeGroup(t *testing.T) {
 
 	var nodeList corev1.NodeList
 	if err := k8sClient.List(ctx, &nodeList, client.MatchingLabels{
-		"cloud.google.com/tpu-node-group": "default-test-nodegroup",
+		"cloud.google.com/tpu-node-group-namespace": "default",
+		"cloud.google.com/tpu-node-group-name":      "test-nodegroup",
 	}); err != nil {
 		t.Fatalf("Failed to list nodes by TPUNodeGroup label: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestTPUNodeGroup(t *testing.T) {
 	}
 
 	t.Log("=== Verifying TPU Workload (Single-Host) ===")
-	verifyTPUWorkload(t, ctx, k8sClient, "default-test-nodegroup", 1)
+	verifyTPUWorkload(t, ctx, k8sClient, "default", "test-nodegroup", 1)
 }
 
 func TestTPUNodeGroup_MultiHost(t *testing.T) {
@@ -312,7 +313,8 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 
 		var nodeList corev1.NodeList
 		if err := k8sClient.List(ctx, &nodeList, client.MatchingLabels{
-			"cloud.google.com/tpu-node-group": "default-test-multihost",
+			"cloud.google.com/tpu-node-group-namespace": "default",
+			"cloud.google.com/tpu-node-group-name":      "test-multihost",
 		}); err != nil {
 			t.Fatalf("Failed to list nodes by TPUNodeGroup label: %v", err)
 		}
@@ -354,7 +356,7 @@ func TestTPUNodeGroup_MultiHost(t *testing.T) {
 		}
 
 		t.Log("=== Verifying TPU Workloads (Multi-Host) ===")
-		verifyTPUWorkload(t, ctx, k8sClient, "default-test-multihost", 2)
+		verifyTPUWorkload(t, ctx, k8sClient, "default", "test-multihost", 2)
 
 		t.Log("=== Verifying Controller Events ===")
 		verifyEvents(t, ctx, kubernetesClient, ng, []string{"ChildResourcesProvisioned", "NodesJoining", "Provisioned"})
@@ -512,6 +514,6 @@ func TestTPUNodeGroup_BYOInstanceTemplate(t *testing.T) {
 		}
 
 		t.Log("=== Verifying TPU Workload (BYO) ===")
-		verifyTPUWorkload(t, ctx, k8sClient, "default-test-byo-nodegroup", 1)
+		verifyTPUWorkload(t, ctx, k8sClient, "default", "test-byo-nodegroup", 1)
 	})
 }

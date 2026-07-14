@@ -349,7 +349,9 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 			var nodeList corev1.NodeList
 			if err := k8sClient.List(ctx, &nodeList); err == nil {
 				for _, node := range nodeList.Items {
-					if _, ok := node.Labels["cloud.google.com/tpu-node-group"]; ok {
+					_, hasName := node.Labels["cloud.google.com/tpu-node-group-name"]
+					_, hasNamespace := node.Labels["cloud.google.com/tpu-node-group-namespace"]
+					if hasName && hasNamespace {
 						t.Logf("Deleting stale Node object: %s", node.Name)
 						if err := k8sClient.Delete(ctx, &node); err != nil && !errors.IsNotFound(err) {
 							t.Fatalf("Failed to delete stale Node %s: %v", node.Name, err)
@@ -357,7 +359,7 @@ func cleanResources(t *testing.T, resourceTypes []string) {
 					}
 				}
 			}
-			selector, _ := labels.Parse("cloud.google.com/tpu-node-group")
+			selector, _ := labels.Parse("cloud.google.com/tpu-node-group-namespace,cloud.google.com/tpu-node-group-name")
 			if err := waitForAllDeleted(ctx, k8sClient, &corev1.NodeList{}, client.MatchingLabelsSelector{Selector: selector}); err != nil {
 				t.Fatalf("Failed waiting for Node deletion: %v", err)
 			}
