@@ -85,7 +85,7 @@ CP_IP=$(get_metadata kubeadm-control-plane-ip)
 CA_HASH=$(get_metadata kubeadm-ca-hash)
 
 if [ -z "$TOKEN" ] || [ -z "$CP_IP" ] || [ -z "$CA_HASH" ]; then
-  echo "Failed to retrieve required metadata for cluster join."
+  echo "Error: Failed to retrieve required metadata for cluster join." >&2
   exit 1
 fi
 
@@ -95,7 +95,7 @@ ZONE="{{ZONE}}"
 NAME=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name || true)
 
 if [ -z "$PROJECT" ] || [ -z "$ZONE" ] || [ -z "$NAME" ]; then
-  echo "Failed to retrieve standard instance metadata."
+  echo "Error: Failed to retrieve standard instance metadata." >&2
   exit 1
 fi
 
@@ -140,7 +140,7 @@ while true; do
   echo "Join attempt $attempt failed."
 
   if [ "$attempt" -ge "$MAX_RETRIES" ]; then
-    echo "Exhausted all join retries. Failing."
+    echo "Error: Exhausted all join retries. Failing." >&2
     exit 1
   fi
 
