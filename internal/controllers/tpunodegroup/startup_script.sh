@@ -1,6 +1,26 @@
 #!/bin/bash
 set -eo pipefail
 
+wait_for_apt() {
+  echo "Waiting for apt processes to finish..."
+  while pgrep -f "apt-get|dpkg" >/dev/null 2>&1 ; do
+    sleep 5
+  done
+}
+
+get_metadata() {
+  local attr=$1
+  local result=""
+  local max_retries=30
+  local count=0
+  while [ -z "$result" ] && [ "$count" -lt "$max_retries" ]; do
+    sleep 5
+    result=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr || true)
+    count=$((count+1))
+  done
+  echo "$result"
+}
+
 # 1. Disable Swap
 sudo swapoff -a
 sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
@@ -29,18 +49,12 @@ version = 2
   SystemdCgroup = true
 EOF
 
-echo "Waiting for other apt processes to finish..."
-while pgrep -f "apt-get|dpkg" >/dev/null 2>&1 ; do
-  sleep 5
-done
+wait_for_apt
 
 sudo apt-get update && sudo apt-get install -y containerd
 
 # 4. Install K8s prerequisites and packages
-echo "Waiting for other apt processes to finish..."
-while pgrep -f "apt-get|dpkg" >/dev/null 2>&1 ; do
-  sleep 5
-done
+wait_for_apt
 
 sudo apt-get install -y conntrack apt-transport-https curl
 sudo mkdir -p /etc/apt/keyrings
@@ -51,10 +65,7 @@ sudo rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/Release.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
-echo "Waiting for other apt processes to finish..."
-while pgrep -f "apt-get|dpkg" >/dev/null 2>&1 ; do
-  sleep 5
-done
+wait_for_apt
 
 # Mask kubelet to prevent it from starting during installation
 sudo systemctl mask kubelet
@@ -65,19 +76,6 @@ sudo apt-mark hold kubelet kubeadm kubectl
 # Additional fixes for manual testing via tunnel
 sudo mkdir -p /sys/fs/cgroup/kubelet.slice
 
-# Helper function to retrieve metadata with retries
-get_metadata() {
-  local attr=$1
-  local result=""
-  local max_retries=30
-  local count=0
-  while [ -z "$result" ] && [ "$count" -lt "$max_retries" ]; do
-    sleep 5
-    result=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr || true)
-    count=$((count+1))
-  done
-  echo "$result"
-}
 
 echo "Retrieving metadata..."
 TOKEN=$(get_metadata kubeadm-join-token)
