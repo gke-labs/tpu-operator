@@ -6,24 +6,24 @@ sudo swapoff -a
 sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
 # 2. Kernel Modules & Networking
-cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf
+cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf >/dev/null
 overlay
 br_netfilter
 EOF
 sudo modprobe overlay
 sudo modprobe br_netfilter
-cat <<'EOF' | sudo tee /etc/sysctl.d/k8s.conf
+cat <<'EOF' | sudo tee /etc/sysctl.d/k8s.conf >/dev/null
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
-sudo sysctl --system
+sudo sysctl --system >/dev/null
 
 # 3. Configure and Install Containerd
 export DEBIAN_FRONTEND=noninteractive
 
 sudo mkdir -p /etc/containerd
-cat <<'EOF' | sudo tee /etc/containerd/config.toml
+cat <<'EOF' | sudo tee /etc/containerd/config.toml >/dev/null
 version = 2
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
   SystemdCgroup = true
@@ -103,7 +103,7 @@ PROVIDER_ID="gce://$PROJECT/$ZONE/$NAME"
 echo "Constructed ProviderID: $PROVIDER_ID"
 
 sudo mkdir -p /etc/kubernetes
-cat <<'EOF' | sudo tee /etc/kubernetes/kubeadm-join.yaml
+cat <<'EOF' | sudo tee /etc/kubernetes/kubeadm-join.yaml >/dev/null
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: JoinConfiguration
 discovery:
