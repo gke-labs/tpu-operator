@@ -59,12 +59,11 @@ export DEBIAN_FRONTEND=noninteractive
 # 2. PACKAGE REPOSITORIES & UPDATES
 # =========================================================
 
+# Configure containerd for CRI
 sudo mkdir -p /etc/containerd
-cat <<'EOF' | sudo tee /etc/containerd/config.toml >/dev/null
-version = 2
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-  SystemdCgroup = true
-EOF
+containerd config default | sudo tee /etc/containerd/config.toml >/dev/null
+sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+sudo systemctl restart containerd
 
 wait_for_apt
 
