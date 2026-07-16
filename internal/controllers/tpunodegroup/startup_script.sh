@@ -123,9 +123,30 @@ fi
 PROVIDER_ID="gce://$PROJECT/$ZONE/$NAME"
 echo "Constructed ProviderID: $PROVIDER_ID"
 
+NEEDS_V1BETA2_API="false"
+NEEDS_EXPLICIT_CRI="false"
+if [ "${MINOR_VERSION:-0}" -le 22 ]; then
+  NEEDS_V1BETA2_API="true"
+fi
+if [ "${MINOR_VERSION:-0}" -le 25 ]; then
+  NEEDS_EXPLICIT_CRI="true"
+fi
+
 sudo mkdir -p /etc/kubernetes
-cat <<'EOF' | sudo tee /etc/kubernetes/kubeadm-join.yaml >/dev/null
-apiVersion: kubeadm.k8s.io/v1beta3
+KUBEADM_API_VERSION="v1beta3"
+if [ "$NEEDS_V1BETA2_API" = "true" ]; then
+  KUBEADM_API_VERSION="v1beta2"
+fi
+
+CRI_SOCKET_YAML=""
+if [ "$NEEDS_EXPLICIT_CRI" = "true" ]; then
+  CRI_SOCKET_YAML="  criSocket: \"unix:///var/run/containerd/containerd.sock\""
+fi
+
+# Generate Join Configuration
+sudo mkdir -p /etc/kubernetes
+cat <<EOF | sudo tee /etc/kubernetes/kubeadm-join.yaml >/dev/null
+apiVersion: kubeadm.k8s.io/${KUBEADM_API_VERSION}
 kind: JoinConfiguration
 discovery:
   bootstrapToken:
@@ -134,6 +155,7 @@ discovery:
     caCertHashes:
     - "$CA_HASH"
 nodeRegistration:
+${CRI_SOCKET_YAML}
   kubeletExtraArgs:
     cgroup-driver: "systemd"
     provider-id: "$PROVIDER_ID"
@@ -164,7 +186,11 @@ while true; do
   fi
 
   echo "Resetting kubeadm state before retry..."
-  sudo kubeadm reset --force
+  if [ "$NEEDS_EXPLICIT_CRI" = "true" ]; then
+    sudo kubeadm reset --force --cri-socket "unix:///var/run/containerd/containerd.sock"
+  else
+    sudo kubeadm reset --force
+  fi
 
   echo "Sleeping for ${backoff}s before next attempt..."
   sleep "$backoff"
