@@ -51,6 +51,8 @@ EOF
 sudo sysctl --system >/dev/null
 
 # 3. Configure and Install Containerd
+VERSION="{{VERSION}}"
+MINOR_VERSION=$(echo "$VERSION" | cut -d. -f2)
 export DEBIAN_FRONTEND=noninteractive
 
 # =========================================================
@@ -77,8 +79,8 @@ sudo mkdir -p /etc/apt/keyrings
 # On GCE VM reboots, the startup script re-runs. Because it is set -eo pipefail, the dearmor
 # command will fail non-interactively if the destination file already exists.
 sudo rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/Release.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+curl -fsSL https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/Release.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v${VERSION}/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
 
 wait_for_apt
 
