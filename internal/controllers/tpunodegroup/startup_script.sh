@@ -1,6 +1,11 @@
 #!/bin/bash
 set -eo pipefail
 
+# =========================================================
+# FUNCTIONS
+# =========================================================
+
+# Wait for background apt/dpkg processes to release locks
 wait_for_apt() {
   echo "Waiting for apt processes to finish..."
   while pgrep -f "apt-get|dpkg" >/dev/null 2>&1 ; do
@@ -8,11 +13,13 @@ wait_for_apt() {
   done
 }
 
+# Retrieve GCE metadata with retries
 get_metadata() {
   local attr=$1
   local result=""
   local max_retries=30
   local count=0
+
   while [ -z "$result" ] && [ "$count" -lt "$max_retries" ]; do
     sleep 5
     result=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr || true)
@@ -21,11 +28,15 @@ get_metadata() {
   echo "$result"
 }
 
-# 1. Disable Swap
+# =========================================================
+# 1. SYSTEM PREPARATION
+# =========================================================
+
+# Disable Swap
 sudo swapoff -a
 sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
-# 2. Kernel Modules & Networking
+# Kernel Modules & Networking
 cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf >/dev/null
 overlay
 br_netfilter
@@ -41,6 +52,10 @@ sudo sysctl --system >/dev/null
 
 # 3. Configure and Install Containerd
 export DEBIAN_FRONTEND=noninteractive
+
+# =========================================================
+# 2. PACKAGE REPOSITORIES & UPDATES
+# =========================================================
 
 sudo mkdir -p /etc/containerd
 cat <<'EOF' | sudo tee /etc/containerd/config.toml >/dev/null
@@ -73,11 +88,19 @@ sudo systemctl mask kubelet
 sudo apt-get update && sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 
-# Additional fixes for manual testing via tunnel
+# =========================================================
+# 4. CRI & KUBELET CONFIGURATION
+# =========================================================
+
+# Mask kubelet during configuration
 sudo mkdir -p /sys/fs/cgroup/kubelet.slice
 
+# =========================================================
+# 5. METADATA & KUBEADM CONFIG
+# =========================================================
 
-echo "Retrieving metadata..."
+
+echo "Retrieving cluster join metadata..."
 TOKEN=$(get_metadata kubeadm-join-token)
 CP_IP=$(get_metadata kubeadm-control-plane-ip)
 CA_HASH=$(get_metadata kubeadm-ca-hash)
@@ -87,7 +110,6 @@ if [ -z "$TOKEN" ] || [ -z "$CP_IP" ] || [ -z "$CA_HASH" ]; then
   exit 1
 fi
 
-echo "Using templated project and zone for providerID..."
 PROJECT="{{PROJECT}}"
 ZONE="{{ZONE}}"
 NAME=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name || true)
@@ -120,7 +142,6 @@ echo "Unmasking and enabling kubelet..."
 sudo systemctl unmask kubelet
 sudo systemctl enable --now kubelet
 
-# Retry logic for kubeadm join to handle transient network issues or control plane startup delays.
 MAX_RETRIES=2
 attempt=0
 backoff=15
@@ -129,7 +150,6 @@ while true; do
   attempt=$((attempt + 1))
   echo "Attempt $attempt of $MAX_RETRIES to join cluster..."
 
-  # Run kubeadm join. We use an if-statement so that 'set -eo pipefail' doesn't exit the script on failure.
   if sudo kubeadm join --config /etc/kubernetes/kubeadm-join.yaml; then
     echo "Successfully joined the cluster!"
     break
