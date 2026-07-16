@@ -1,33 +1,33 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
 # 1. Disable Swap
 sudo swapoff -a
 sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
 # 2. Kernel Modules & Networking
-cat <<EOF2 | sudo tee /etc/modules-load.d/k8s.conf
+cat <<'EOF' | sudo tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
-EOF2
+EOF
 sudo modprobe overlay
 sudo modprobe br_netfilter
-cat <<EOF2 | sudo tee /etc/sysctl.d/k8s.conf
+cat <<'EOF' | sudo tee /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
-EOF2
+EOF
 sudo sysctl --system
 
 # 3. Configure and Install Containerd
 export DEBIAN_FRONTEND=noninteractive
 
 sudo mkdir -p /etc/containerd
-cat <<EOF2 | sudo tee /etc/containerd/config.toml
+cat <<'EOF' | sudo tee /etc/containerd/config.toml
 version = 2
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
   SystemdCgroup = true
-EOF2
+EOF
 
 echo "Waiting for other apt processes to finish..."
 while pgrep -f "apt-get|dpkg" >/dev/null 2>&1 ; do
@@ -45,7 +45,7 @@ done
 sudo apt-get install -y conntrack apt-transport-https curl
 sudo mkdir -p /etc/apt/keyrings
 # Delete existing Kubernetes keyring file if it exists.
-# On GCE VM reboots, the startup script re-runs. Because it is set -e, the dearmor 
+# On GCE VM reboots, the startup script re-runs. Because it is set -eo pipefail, the dearmor
 # command will fail non-interactively if the destination file already exists.
 sudo rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v{{VERSION}}/deb/Release.key | sudo gpg --batch --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -71,9 +71,9 @@ get_metadata() {
   local result=""
   local max_retries=30
   local count=0
-  while [ -z "$result" ] && [ $count -lt $max_retries ]; do
+  while [ -z "$result" ] && [ "$count" -lt "$max_retries" ]; do
     sleep 5
-    result=$(curl -f -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr || true)
+    result=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/attributes/$attr || true)
     count=$((count+1))
   done
   echo "$result"
@@ -92,7 +92,7 @@ fi
 echo "Using templated project and zone for providerID..."
 PROJECT="{{PROJECT}}"
 ZONE="{{ZONE}}"
-NAME=$(curl -f -s -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name || true)
+NAME=$(curl -fs -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/name || true)
 
 if [ -z "$PROJECT" ] || [ -z "$ZONE" ] || [ -z "$NAME" ]; then
   echo "Failed to retrieve standard instance metadata."
@@ -103,7 +103,7 @@ PROVIDER_ID="gce://$PROJECT/$ZONE/$NAME"
 echo "Constructed ProviderID: $PROVIDER_ID"
 
 sudo mkdir -p /etc/kubernetes
-cat <<EOF2 | sudo tee /etc/kubernetes/kubeadm-join.yaml
+cat <<'EOF' | sudo tee /etc/kubernetes/kubeadm-join.yaml
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: JoinConfiguration
 discovery:
@@ -116,10 +116,11 @@ nodeRegistration:
   kubeletExtraArgs:
     cgroup-driver: "systemd"
     provider-id: "$PROVIDER_ID"
-EOF2
+EOF
 
-echo "Unmasking kubelet and joining cluster..."
+echo "Unmasking and enabling kubelet..."
 sudo systemctl unmask kubelet
+sudo systemctl enable --now kubelet
 
 # Retry logic for kubeadm join to handle transient network issues or control plane startup delays.
 MAX_RETRIES=2
@@ -130,26 +131,24 @@ while true; do
   attempt=$((attempt + 1))
   echo "Attempt $attempt of $MAX_RETRIES to join cluster..."
 
-  # Run kubeadm join. We use an if-statement so that 'set -e' doesn't exit the script on failure.
-  if kubeadm join --config /etc/kubernetes/kubeadm-join.yaml; then
+  # Run kubeadm join. We use an if-statement so that 'set -eo pipefail' doesn't exit the script on failure.
+  if sudo kubeadm join --config /etc/kubernetes/kubeadm-join.yaml; then
     echo "Successfully joined the cluster!"
     break
   fi
 
   echo "Join attempt $attempt failed."
 
-  if [ $attempt -ge $MAX_RETRIES ]; then
+  if [ "$attempt" -ge "$MAX_RETRIES" ]; then
     echo "Exhausted all join retries. Failing."
     exit 1
   fi
 
   echo "Resetting kubeadm state before retry..."
-  kubeadm reset --force
+  sudo kubeadm reset --force
 
   echo "Sleeping for ${backoff}s before next attempt..."
-  sleep $backoff
+  sleep "$backoff"
   backoff=$((backoff * 2))
-  if [ $backoff -gt 120 ]; then
-    backoff=120
-  fi
+  [ "$backoff" -gt 120 ] && backoff=120
 done
