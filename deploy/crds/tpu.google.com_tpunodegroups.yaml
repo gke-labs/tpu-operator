@@ -58,7 +58,9 @@ spec:
                       control plane.
                     type: string
                   version:
+                    default: "1.31"
                     description: Version is the Kubernetes version to install.
+                    pattern: ^[0-9]+\.[0-9]+$
                     type: string
                 required:
                 - controlPlaneIP
@@ -66,8 +68,6 @@ spec:
                 x-kubernetes-validations:
                 - message: BootstrapKubernetes is immutable
                   rule: self == oldSelf
-                - message: Version must be set to 1.31
-                  rule: has(self.version) && self.version == '1.31'
               instanceConfig:
                 description: |-
                   InstanceConfig allows the controller to generate an instance template.

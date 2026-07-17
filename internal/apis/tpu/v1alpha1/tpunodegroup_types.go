@@ -168,10 +168,11 @@ type InstanceConfig struct {
 }
 
 // BootstrapConfig defines settings for automated node bootstrapping.
-// +kubebuilder:validation:XValidation:rule="has(self.version) && self.version == '1.31'",message="Version must be set to 1.31"
 type BootstrapConfig struct {
 	// Version is the Kubernetes version to install.
+	// +kubebuilder:validation:Pattern=`^[0-9]+\.[0-9]+$`
 	// +optional
+	// +kubebuilder:default="1.31"
 	Version *string `json:"version,omitempty"`
 
 	// ControlPlaneIP is the IP address of the Kubernetes control plane.
