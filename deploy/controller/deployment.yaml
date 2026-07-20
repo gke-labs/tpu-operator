@@ -25,10 +25,10 @@ spec:
         resources:
           limits:
             cpu: 100m
-            memory: 30Mi
+            memory: 256Mi
           requests:
             cpu: 100m
-            memory: 20Mi
+            memory: 128Mi
         volumeMounts:
         - name: gcp-credentials
           mountPath: /etc/gcp
