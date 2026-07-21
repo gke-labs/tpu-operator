@@ -39,7 +39,7 @@ func TestToInstanceTemplateCR(t *testing.T) {
 			},
 			want: &api.InstanceTemplate{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-template",
+					Name:      "my-tpu-group-template-1ec0000c",
 					Namespace: "my-namespace",
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -140,7 +140,7 @@ func TestToWorkloadPolicyCR(t *testing.T) {
 			},
 			want: &api.WorkloadPolicy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-policy",
+					Name:      "my-tpu-group-policy-1ec0000c",
 					Namespace: "my-namespace",
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -177,7 +177,7 @@ func TestToWorkloadPolicyCR(t *testing.T) {
 			},
 			want: &api.WorkloadPolicy{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-policy",
+					Name:      "my-tpu-group-policy-1ec0000c",
 					Namespace: "my-namespace",
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -266,7 +266,7 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 			},
 			want: &api.ManagedInstanceGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-mig",
+					Name:      "my-tpu-group-mig-1ec0000c",
 					Namespace: "my-namespace",
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -312,7 +312,7 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 			policy: nil,
 			want: &api.ManagedInstanceGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-mig",
+					Name:      "my-tpu-group-mig-1ec0000c",
 					Namespace: "my-namespace",
 					OwnerReferences: []metav1.OwnerReference{
 						{
@@ -358,7 +358,7 @@ func TestToManagedInstanceGroupCR(t *testing.T) {
 			policy: nil,
 			want: &api.ManagedInstanceGroup{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-tpu-group-mig",
+					Name:      "my-tpu-group-mig-1ec0000c",
 					Namespace: "my-namespace",
 					OwnerReferences: []metav1.OwnerReference{
 						{
