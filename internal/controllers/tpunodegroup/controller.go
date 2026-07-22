@@ -174,7 +174,10 @@ func (r *TPUNodeGroupReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Step 4: Inject Metadata (Try early to unblock startup script)
 	if err := injectMetadata(ctx, &tpuNodeGroup, r.Client, r.igmClient, r.instanceClient, machineType); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
+		if migReady {
+			return ctrl.Result{}, fmt.Errorf("failed to inject metadata: %w", err)
+		}
+		logger.V(1).Info("Transient failure injecting metadata; waiting for MIG stabilization", "error", err)
 	}
 
 	if !migReady {
