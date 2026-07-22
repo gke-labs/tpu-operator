@@ -97,6 +97,13 @@ func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, templateURI string
 		wp = &policy.Status.URI
 	}
 
+	var defaultActionOnFailure string
+	if tpuNodeGroup.Spec.TargetSizePolicyMode == api.TargetSizePolicyModeIndividual {
+		defaultActionOnFailure = api.DefaultActionOnFailureRepair
+	} else {
+		defaultActionOnFailure = api.DefaultActionOnFailureDoNothing
+	}
+
 	mig := &api.ManagedInstanceGroup{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tpuNodeGroup.ManagedInstanceGroupName(),
@@ -113,12 +120,13 @@ func ToManagedInstanceGroupCR(tpuNodeGroup *api.TPUNodeGroup, templateURI string
 			},
 		},
 		Spec: api.ManagedInstanceGroupSpec{
-			Project:              tpuNodeGroup.Spec.Project,
-			Location:             tpuNodeGroup.Spec.NodeLocation,
-			InstanceTemplate:     templateURI,
-			TargetSize:           tpuNodeGroup.Spec.NodeCount,
-			WorkloadPolicy:       wp,
-			TargetSizePolicyMode: tpuNodeGroup.Spec.TargetSizePolicyMode,
+			Project:                tpuNodeGroup.Spec.Project,
+			Location:               tpuNodeGroup.Spec.NodeLocation,
+			InstanceTemplate:       templateURI,
+			TargetSize:             tpuNodeGroup.Spec.NodeCount,
+			WorkloadPolicy:         wp,
+			TargetSizePolicyMode:   tpuNodeGroup.Spec.TargetSizePolicyMode,
+			DefaultActionOnFailure: &defaultActionOnFailure,
 		},
 	}
 

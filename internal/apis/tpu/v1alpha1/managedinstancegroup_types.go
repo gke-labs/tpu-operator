@@ -13,6 +13,9 @@ const (
 
 	// DefaultActionOnFailureDoNothing specifies that the MIG should not attempt to restart failed instances.
 	DefaultActionOnFailureDoNothing = "DO_NOTHING"
+
+	// DefaultActionOnFailureRepair specifies that the MIG should attempt to repair failed instances.
+	DefaultActionOnFailureRepair = "REPAIR"
 )
 
 // ManagedInstanceGroupSpec defines the desired state of a ManagedInstanceGroup.
@@ -43,7 +46,7 @@ type ManagedInstanceGroupSpec struct {
 	TargetSizePolicyMode string `json:"targetSizePolicyMode"`
 
 	// DefaultActionOnFailure specifies the action to take on failure.
-	// +kubebuilder:validation:Enum=DO_NOTHING
+	// +kubebuilder:validation:Enum=DO_NOTHING;REPAIR
 	// +kubebuilder:default="DO_NOTHING"
 	// +optional
 	DefaultActionOnFailure *string `json:"defaultActionOnFailure,omitempty"`

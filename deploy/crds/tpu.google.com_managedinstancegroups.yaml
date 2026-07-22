@@ -46,6 +46,7 @@ spec:
                   failure.
                 enum:
                 - DO_NOTHING
+                - REPAIR
                 type: string
               instanceTemplate:
                 description: InstanceTemplate is the URL of the instance template
