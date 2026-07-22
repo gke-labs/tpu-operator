@@ -5,7 +5,10 @@ PROJECT ?= $(shell gcloud config get-value project 2>/dev/null)
 IMAGE_NAME := us-docker.pkg.dev/$(PROJECT)/gcr.io/tpu-controller
 
 # Use USER-dev as default tag for iterative development
-IMAGE_TAG ?= $(USER)-dev
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
+GIT_DIRTY := $(shell test -n "`git status --porcelain`" && echo "-dirty" || true)
+IMAGE_TAG ?= $(USER)-$(GIT_COMMIT)$(GIT_DIRTY)
+export IMAGE_TAG
 FULL_IMAGE := $(IMAGE_NAME):$(IMAGE_TAG)
 
 .PHONY: all
@@ -34,7 +37,7 @@ test:
 
 TEST_NAME ?= .
 .PHONY: e2e-test
-e2e-test:
+e2e-test: docker-build docker-push docker-clean e2e-kustomize
 	@echo "Running E2E tests..."
 	@if [ -f e2e/local-env.sh ]; then \
 		source e2e/local-env.sh && \
@@ -88,3 +91,15 @@ docker-push:
 	fi
 	@echo "Pushing image: $(FULL_IMAGE)"
 	docker push $(FULL_IMAGE)
+
+.PHONY: docker-clean
+docker-clean:
+	@if [ -z "$(PROJECT)" ]; then \
+		echo "ERROR: PROJECT variable must be set or available via gcloud config"; \
+		exit 1; \
+	fi
+	@echo "Cleaning up old images for $(USER)..."
+	@for tag in $$(gcloud artifacts docker tags list $(IMAGE_NAME) --filter="tag~^$(USER)-" --format="get(tag)" 2>/dev/null | grep -v "^$(IMAGE_TAG)$$"); do \
+		echo "Deleting tag: $$tag"; \
+		gcloud artifacts docker tags delete $(IMAGE_NAME):$$tag --quiet || true; \
+	done
